@@ -1,0 +1,15 @@
+appId: com.huan.app
+productName: huan-app
+asar: true
+directories:
+  output: release
+files:
+  - out/**/*
+  - package.json
+mac:
+  icon: build/icon.png
+  category: public.app-category.productivity
+  minimumSystemVersion: "13.0"
+  identity: null
+  target:
+    - dir

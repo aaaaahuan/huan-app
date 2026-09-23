@@ -1,0 +1,9 @@
+node_modules/
+out/
+release/
+.cache/
+.env*
+!.env.example
+.DS_Store
+*.p12
+*.mobileprovision
