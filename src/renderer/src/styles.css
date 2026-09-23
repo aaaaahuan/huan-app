@@ -1,3 +1,4 @@
+/* 全局基础样式与初始页面视觉：统一字体、浅色背景、按钮和窗口拖拽区域。 */
 :root{font-family:"PingFang SC","Hiragino Sans GB",sans-serif;color:#293d36;background:#f5f7f4;font-synthesis:none;-webkit-font-smoothing:antialiased}
 *{box-sizing:border-box}body{margin:0}button{font:inherit}button:focus-visible{outline:3px solid #86b7a2;outline-offset:4px}
 .shell{min-height:100vh;background:radial-gradient(ellipse at 75% 15%,#e1eee5 0,transparent 48%),linear-gradient(125deg,#fbfcf9,#f1f5f1)}

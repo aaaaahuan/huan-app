@@ -1,54 +1,76 @@
+// 应用外壳：协调收藏选择、原页阅读与设置弹窗，不参与远程网页内部逻辑。
 import { useEffect, useState } from 'react';
-import { appStatusSchema, type AppStatus } from '../../../shared/contracts/app';
+import type { BookmarkLibrary } from '../../../shared/contracts/bookmarks';
+import { PLATFORM_NAMES } from '../../../shared/contracts/settings';
+import { SettingsPanel } from '../features/settings/SettingsPanel';
+import { BookmarkList } from '../features/bookmarks/BookmarkList';
+import { Reader } from '../features/reader/Reader';
+import '../features/bookmarks/bookmarks.css';
 
 export function App() {
-  const [status, setStatus] = useState<AppStatus>();
+  const [library, setLibrary] = useState<BookmarkLibrary>();
   const [error, setError] = useState('');
-  const [checking, setChecking] = useState(false);
-
+  const [loading, setLoading] = useState(true);
+  const [revision, setRevision] = useState(0);
+  // 下列界面状态仅保留在本轮运行中，不写回 Obsidian 或收藏副本。
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [feedback, setFeedback] = useState('');
+  const [collapsed, setCollapsed] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   useEffect(() => {
+    // 设置保存后重新查询主进程结果；主进程负责决定哪些来源需要真正重读。
     let cancelled = false;
-    void window.huanApp.app.getStatus().then((value) => {
-      const parsed = appStatusSchema.safeParse(value);
-      if (cancelled) return;
-      if (parsed.success) setStatus(parsed.data);
-      else setError('应用状态格式异常。');
-    }, () => { if (!cancelled) setError('无法连接应用主进程。'); });
-    return () => { cancelled = true; };
-  }, []);
-
-  async function check() {
-    setChecking(true);
+    setLoading(true);
     setError('');
-    try { setStatus(appStatusSchema.parse(await window.huanApp.app.getStatus())); }
-    catch { setStatus(undefined); setError('无法验证应用连接。'); }
-    finally { setChecking(false); }
+    void window.huanApp.bookmarks.get().then((value) => {
+      if (cancelled) return;
+      setLibrary(value);
+      // 只清除已不存在的选择，不因数据更新自动切到第一条。
+      setSelectedId((id) => value.sources.some((source) => source.items.some((item) => item.id === id)) ? id : null);
+    }, () => { if (!cancelled) setError('无法取得收藏列表，请完全退出应用后重试。'); }
+    ).finally(() => { if (!cancelled) setLoading(false); });
+    // 忽略旧请求的迟到结果，避免覆盖设置更新后的列表或已卸载组件。
+    return () => { cancelled = true; };
+  }, [revision]);
+  const selected = library?.sources.flatMap((source) => source.items).find((item) => item.id === selectedId);
+  const enabled = library?.sources.some((source) => source.state !== 'disabled');
+  const hasItems = library?.sources.some((source) => source.items.length > 0);
+  const failures = library?.sources.filter((source) => source.state === 'cached' || source.state === 'error') ?? [];
+  async function openSettings() {
+    // 原生视图不受 DOM z-index 约束，确认隐藏后才能打开设置对话框。
+    try { await window.huanApp.browser.suspend(true); setFeedback(''); setSettingsOpen(true); }
+    catch { setError('无法隐藏网页容器，请重试打开设置。'); }
   }
-  
-  return (
-    <div className="shell">
-      <header className="titlebar"><span>huan-app</span><span className="stage">A0 · 工程基础调整</span></header>
-      <main>
-        <div className="eyebrow">HUAN-APP</div>
-        <section className="intro">
-          <div className="book" aria-hidden="true"><span /><span /></div>
-          <p className="kicker">从阅读开始，不止于阅读</p>
-          <h1>你的桌面工作空间。</h1>
-          <p className="description">基础阅读与 AI 能力独立建设。<br />先验证应用连接，再接入你的本地收藏。</p>
-        </section>
-        <section className="status-panel" aria-label="运行检查">
-          <div className="status-heading"><span className={status ? 'dot ready' : 'dot'} /><h2 aria-live="polite">{error ? '应用连接异常' : status ? '应用连接正常' : '正在检查应用连接…'}</h2><span className="local">仅在本机运行</span></div>
-          {error ? <p role="alert">{error}</p> : null}
-          <dl>
-            <div><dt>独立桌面窗口</dt><dd>已启动</dd></div>
-            <div><dt>安全通信</dt><dd>{status ? '验证通过' : '等待检查'}</dd></div>
-            <div><dt>Obsidian 收藏读取</dt><dd>尚未接入</dd></div>
-            <div><dt>AI 对话能力</dt><dd>尚未接入</dd></div>
-          </dl>
-          <div className="panel-footer"><span>{status ? 'huan-app ' + status.version : '本步不读取收藏，也不创建数据库'}</span><button disabled={checking} onClick={() => void check()}>{checking ? '检查中…' : '重新检查连接'}</button></div>
-        </section>
-        <footer><span>设置、收藏、原页与 AI 将分步实现，每步单独 Review。</span><span className="review">等待 A0 REVIEW</span></footer>
-      </main>
+  function closeSettings() {
+    setSettingsOpen(false);
+    void window.huanApp.browser.suspend(false).catch(() => setError('无法恢复网页容器，请重启应用。'));
+  }
+  return <div className="workspace-shell">
+    <header className="titlebar"><span>huan-app</span><div className="titlebar-actions"><span className="stage">A4 · 原页阅读</span>
+      <button className="settings-trigger" onClick={openSettings}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m9 3 6 0 1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1Z"/><circle cx="12" cy="12" r="3"/></svg>设置</button></div></header>
+    {error || library?.warning || failures.length ? <div className="library-alert" role="alert">
+      {error ? <p>{error}</p> : null}{library?.warning ? <p>{library.warning}</p> : null}
+      {failures.map((source) => <p key={source.platform}>{PLATFORM_NAMES[source.platform]}：{source.message}</p>)}
+      <button type="button" onClick={openSettings}>检查来源设置</button>
+    </div> : null}
+    {feedback ? <div className="settings-feedback" role="status">{feedback}</div> : null}
+    <div className="workspace">
+      <BookmarkList library={library} loading={loading} collapsed={collapsed} selectedId={selectedId}
+        onSelect={(item) => setSelectedId(item.id)} onCollapse={() => setCollapsed((value) => !value)} />
+      <Reader selected={selected} suspended={settingsOpen} layoutKey={`${collapsed}:${feedback}:${error}:${library?.warning}:${failures.length}`}>
+        <div className="reading-placeholder">
+          <>
+            <div className="empty-mark" aria-hidden="true">▤</div>
+            <h2>{loading ? '正在连接你的笔记' : !enabled ? '从收藏笔记开始' : hasItems ? '留一点空间，开始阅读' : '这里等待你的下一条收藏'}</h2>
+            <p>{loading ? '读取本地 Markdown，并检查最近成功读取的副本。' : !enabled ? '在右上角设置中，为平台选择 Markdown 文件并启用来源。' : hasItems ? '从左侧选择一条收藏。应用不会自动替你打开第一条。' : failures.length || library?.warning ? '当前没有可用条目，请检查来源状态与文件路径。' : '来源文件已读取，当前表格为空。下次启动将按笔记内容重新读取。'}</p>
+            {!enabled && !loading ? <button type="button" onClick={openSettings}>配置收藏来源</button> : null}
+          </>
+        </div>
+      </Reader>
     </div>
-  );
+    {settingsOpen ? <SettingsPanel onClose={closeSettings} onSaved={() => {
+      closeSettings(); setRevision((value) => value + 1);
+    }} /> : null}
+  </div>;
 }

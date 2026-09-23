@@ -1,7 +1,9 @@
+// 无副作用的安全校验函数：限制本地资源路径与可信页面地址。
 import { isAbsolute, relative, resolve } from 'node:path';
 
 export const UI_URL = 'app://ui/index.html';
 
+// 将 app://ui URL 映射到构建目录，解码后再次检查，避免编码路径绕过目录边界。
 export function assetPath(root: string, rawUrl: string): string | undefined {
   try {
     const url = new URL(rawUrl);
@@ -16,6 +18,7 @@ export function assetPath(root: string, rawUrl: string): string | undefined {
   } catch { return undefined; }
 }
 
+// 开发时匹配指定服务的 origin 与路径；生产时只信任唯一的本地入口。
 export function trustedDocument(url: string, developmentUrl?: string): boolean {
   try {
     if (developmentUrl) {
@@ -28,6 +31,7 @@ export function trustedDocument(url: string, developmentUrl?: string): boolean {
   } catch { return false; }
 }
 
+// 开发地址只允许回环网络，禁止通过环境变量把特权界面指向远程网站。
 export function developmentOrigin(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
   const url = new URL(raw);

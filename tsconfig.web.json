@@ -1,5 +1,11 @@
 {
   "compilerOptions": {
+    "composite": true,
+    "tsBuildInfoFile": "./.cache/tsconfig.web.tsbuildinfo",
+    "paths": {
+      "@shared/*": ["./src/shared/*"],
+      "@renderer/*": ["./src/renderer/src/*"]
+    },
     "target": "ES2022",
     "lib": [
       "ES2022",

@@ -1,15 +1,20 @@
+# 桌面打包配置：将编译代码与 Electron 运行环境组装为 .app，而非重新编译源码。
 appId: com.huan.app
 productName: huan-app
 asar: true
 directories:
+  # 最终应用产物目录，与源码编译输出 out 分开。
   output: release
 files:
   - out/**/*
   - package.json
 mac:
+  # 已确认的原始图标由打包工具转换为 macOS 图标资源。
   icon: build/icon.png
   category: public.app-category.productivity
   minimumSystemVersion: "13.0"
+  # 当前仅供本机 Review，尚未配置开发者签名与公证。
   identity: null
   target:
+    # 只生成应用包，不生成 DMG/ZIP，也不会自动复制到桌面。
     - dir

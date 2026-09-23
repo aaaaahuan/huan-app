@@ -1,3 +1,4 @@
+// 静态代码规范检查：排除依赖、编译产物和缓存，不引入测试框架。
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 

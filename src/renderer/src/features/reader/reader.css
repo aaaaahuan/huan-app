@@ -1,0 +1,11 @@
+/* 原生网页严格对齐 viewport；工具栏和提示留在 React 层，避免互相遮挡。 */
+.reader{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;background:#fafcf9;overflow:hidden}
+.reader-heading{padding:18px 24px 8px;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.reader-toolbar{display:flex;align-items:center;gap:8px;padding:4px 24px 10px}
+.reader-toolbar button{flex-shrink:0}.reader-toolbar button:disabled{cursor:default}
+.reader-toolbar input{flex:1;min-width:0;padding:9px 12px;border:1px solid #dfe7df;border-radius:7px;color:#73847a;background:#fff;font-size:12px}
+.reader-status{padding:0 24px 10px;font-size:11px;line-height:1.6;color:#73847a;overflow-wrap:anywhere}
+.reader-status span{display:block;color:#94683e}
+.reader-viewport{position:relative;flex:1;min-height:0;background:#fff;overflow:auto}
+.reader-fallback{padding:60px 36px;text-align:center;color:#73847a;font-size:13px;line-height:1.8}
+.reader-viewport>.reading-placeholder{padding:80px 42px}

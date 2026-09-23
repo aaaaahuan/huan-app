@@ -1,0 +1,38 @@
+/* 双栏工作区：侧栏固定宽度，中间区域随折叠扩展；长列表仅在自身区域滚动。 */
+.workspace-shell{height:100vh;display:flex;flex-direction:column;background:radial-gradient(ellipse at 85% 12%,#e7f0e9,transparent 55%),#f6f8f4}
+.workspace{display:flex;flex:1;min-height:0}
+.bookmark-sidebar{width:350px;flex-shrink:0;display:flex;flex-direction:column;min-height:0;border-right:1px solid #dfe7df;background:#fcfdf9d9}
+.bookmark-sidebar.is-collapsed{width:66px}
+.library-heading{display:flex;align-items:center;justify-content:space-between;padding:24px 22px 18px;gap:12px}
+.is-collapsed .library-heading{padding:24px 14px}
+.library-heading h1{font-size:26px;margin:0}.library-heading h1 span{font:12px "PingFang SC",sans-serif;color:#8c9c8e;margin-left:7px}
+.collapse-button{padding:7px;display:grid;place-items:center;background:transparent;border-color:#e0e8df;flex-shrink:0}.collapse-button svg{width:19px;height:19px}
+.library-content{display:flex;flex:1;flex-direction:column;min-height:0}.library-content[hidden]{display:none}
+.library-controls{padding:0 22px 18px;display:grid;grid-template-columns:minmax(0,1fr) 100px;gap:8px}
+.library-controls input,.library-controls select{font:12px "PingFang SC",sans-serif;color:#3e5847;background:#fff;border:1px solid #dde6dc;border-radius:7px;padding:10px;width:100%;min-width:0}
+.library-controls input:focus-visible,.library-controls select:focus-visible{outline:2px solid #86b7a2;outline-offset:2px}
+.bookmark-scroll{flex:1;overflow:auto;min-height:100px;padding:0 10px}
+.bookmark-items{list-style:none;padding:0;margin:0}.bookmark-items li{margin:0 0 4px}
+.bookmark-item{display:block;text-align:left;width:100%;border:1px solid transparent;background:transparent;padding:15px 12px;border-radius:9px;color:#344b3c;overflow:hidden}
+.bookmark-item:hover{background:#edf3ec}.bookmark-item.selected{background:#e7f0e6;border-color:#c8dcc9}
+.bookmark-platform{display:flex;gap:10px;align-items:center;font-size:10px;color:#628068;margin-bottom:9px}.bookmark-platform>span{color:#93a08e;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.bookmark-title{font-size:13px;line-height:1.7;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;white-space:pre-line}
+.bookmark-url{display:block;font-size:10px;color:#93a08e;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.library-empty{padding:28px 14px;color:#687c69;font-size:13px;line-height:1.8}
+/* 延续浅绿纸张与书签视觉，空列表不增加说明文字或操作按钮。 */
+.library-empty-icon{display:flex;justify-content:center;padding:64px 0;color:#a1b69d}
+.library-empty-icon svg{width:96px;height:96px}
+.reading-space{flex:1;min-width:0;overflow:auto;display:flex;flex-direction:column;padding:30px 42px}
+.reading-topline{display:flex;justify-content:space-between;gap:16px;font-size:10px;color:#889a87;letter-spacing:.1em}
+.reading-placeholder{max-width:680px;width:100%;margin:auto; padding:50px 0}
+.reading-placeholder h2{font-family:"Songti SC","STSong",serif;font-size:32px;line-height:1.5;font-weight:500;overflow-wrap:anywhere;white-space:pre-line}
+.reading-placeholder .empty-mark{font-size:42px;color:#94b29a;margin-bottom:25px}
+.reading-placeholder>p{font-size:13px;color:#7e907e;line-height:1.9}
+.selected-platform{font-size:11px;letter-spacing:.12em;color:#6e8b70;margin:0 0 18px}
+.selected-link{display:block;width:100%;resize:vertical;min-height:80px;border:1px solid #d8e3d6;background:#ffffffa3;border-radius:9px;padding:14px;font:12px/1.7 "PingFang SC",sans-serif;color:#58745e;overflow-wrap:anywhere;margin:20px 0}
+.selected-meta{font-size:11px!important;color:#8a9b87!important}
+.reading-footer{border-top:1px solid #e0e7dc;padding-top:18px;font-size:10px;color:#91a08c;line-height:1.7}
+.library-alert{padding:10px 22px;background:#faf0df;color:#906340;font-size:12px;line-height:1.7;overflow-wrap:anywhere}.library-alert p{margin:3px 0}.library-alert button{margin-left:10px;padding:3px 9px}
+/* 视觉隐藏但保留辅助技术可读的表单标签，不能用 display:none 替代。 */
+.visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media(max-width:1000px){.bookmark-sidebar{width:300px}.reading-space{padding:24px}.reading-placeholder h2{font-size:26px}}
