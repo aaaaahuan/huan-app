@@ -5,9 +5,16 @@ import { z } from 'zod';
 export const PLATFORMS = ['x', 'reddit', 'youtube'] as const;
 export const PLATFORM_NAMES = { x: 'X', reddit: 'Reddit', youtube: 'YouTube' };
 const sourceSchema = z.object({ enabled: z.boolean(), path: z.string().max(4096) }).strict();
+export const sessionModeSchema = z.enum(['memory', 'persistent']);
+export const sessionModesSchema = z.object({ x: sessionModeSchema, reddit: sessionModeSchema, youtube: sessionModeSchema }).strict();
+export type SessionModes = z.infer<typeof sessionModesSchema>;
+export type SessionMode = z.infer<typeof sessionModeSchema>;
+export const defaultSessionModes = (): SessionModes => ({ x: 'memory', reddit: 'memory', youtube: 'memory' });
 export const settingsSchema = z.object({
   version: z.literal(1),
-  sources: z.object({ x: sourceSchema, reddit: sourceSchema, youtube: sourceSchema }).strict()
+  sources: z.object({ x: sourceSchema, reddit: sourceSchema, youtube: sourceSchema }).strict(),
+  // 兼容 A1-A4 的配置；缺少会话设置时沿用内存模式，不自动持久化登录态。
+  sessions: sessionModesSchema.default(defaultSessionModes)
 }).strict();
 export type Settings = z.infer<typeof settingsSchema>;
 export type Platform = typeof PLATFORMS[number];
@@ -16,7 +23,7 @@ export function defaultSettings(): Settings {
   return { version: 1, sources: {
     x: { enabled: false, path: '' }, reddit: { enabled: false, path: '' },
     youtube: { enabled: false, path: '' }
-  } };
+  }, sessions: defaultSessionModes() };
 }
 // revision 为磁盘内容摘要；null 表示尚无配置文件，不是配置读取失败。
 export type SettingsResult =

@@ -1,5 +1,6 @@
 // 原页容器的跨进程契约：只允许选择已有收藏和固定导航动作，不提供任意脚本执行接口。
 import { z } from 'zod';
+import type { Platform, SessionModes } from './settings';
 
 export const readerStateSchema = z.object({
   revision: z.number().int().nonnegative(),
@@ -18,6 +19,8 @@ export type ReaderLayout = z.infer<typeof readerLayoutSchema>;
 export const readerActionSchema = z.enum(['back', 'forward', 'reload', 'stop']);
 export type ReaderAction = z.infer<typeof readerActionSchema>;
 export interface BrowserAPI {
+  sessionModes(): Promise<SessionModes>;
+  clearSession(platform: Platform): Promise<{ ok: true; cancelled: boolean } | { ok: false; message: string }>;
   select(bookmarkId: string | null): Promise<ReaderState>;
   get(): Promise<ReaderState>;
   action(bookmarkId: string, action: ReaderAction): Promise<ReaderState>;

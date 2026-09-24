@@ -1,6 +1,6 @@
 // 设置编辑器：草稿与已保存值分离，只有点击保存才请求主进程持久化。
 import { useEffect, useRef, useState } from 'react';
-import { PLATFORMS, PLATFORM_NAMES, type Platform, type Settings, type SettingsResult } from '@shared/contracts/settings';
+import { PLATFORMS, PLATFORM_NAMES, type Platform, type SessionModes, type SessionMode, type Settings, type SettingsResult } from '@shared/contracts/settings';
 import './settings.css';
 
 export function SettingsPanel({ onClose, onSaved }: { onClose(): void; onSaved(): void }) {
@@ -14,6 +14,9 @@ export function SettingsPanel({ onClose, onSaved }: { onClose(): void; onSaved()
   const [message, setMessage] = useState('');
   const [fields, setFields] = useState<Partial<Record<Platform, string>>>({});
   const [confirmClose, setConfirmClose] = useState(false);
+  const [tab, setTab] = useState<'sources' | 'sessions'>('sources');
+  const [activeModes, setActiveModes] = useState<SessionModes>();
+  const [sessionMessage, setSessionMessage] = useState('');
   const dirty = !!draft && JSON.stringify(draft) !== baseline;
 
   function accept(result: SettingsResult) {
@@ -32,6 +35,10 @@ export function SettingsPanel({ onClose, onSaved }: { onClose(): void; onSaved()
       (result) => { if (!cancelled) accept(result); },
       () => { if (!cancelled) setMessage('无法连接设置服务，请重试。'); }
     ).finally(() => { if (!cancelled) setLoading(false); });
+    void window.huanApp.browser.sessionModes().then(
+      (value) => { if (!cancelled) setActiveModes(value); },
+      () => { if (!cancelled) setSessionMessage('无法读取本轮会话策略，请重新打开设置。'); }
+    );
     return () => { cancelled = true; element.close(); };
   }, []);
   useEffect(() => {
@@ -85,16 +92,43 @@ export function SettingsPanel({ onClose, onSaved }: { onClose(): void; onSaved()
     } catch { setMessage('未能确认保存结果，请保留输入并重试；如提示配置已变更，请重新打开设置核对。'); }
     finally { setBusy(false); }
   }
+  function updateMode(platform: Platform, mode: SessionMode) {
+    setDraft((previous) => previous ? { ...previous, sessions: { ...previous.sessions, [platform]: mode } } : previous);
+  }
+  async function clearSession(platform: Platform) {
+    if (busy || dirty) return;
+    setBusy(true);
+    setSessionMessage('');
+    try {
+      // 主进程再显示原生确认框；取消不会关闭页面或清除任何数据。
+      const result = await window.huanApp.browser.clearSession(platform);
+      if (!result.ok) setSessionMessage(result.message);
+      else if (!result.cancelled) setSessionMessage(`${PLATFORM_NAMES[platform]} 的本地会话已清除，收藏保持不变。`);
+    } catch { setSessionMessage('未能确认清除结果，请重试。'); }
+    finally { setBusy(false); }
+  }
   return (
     <dialog ref={dialog} className="settings-dialog" aria-labelledby="settings-title"
       onCancel={(event) => { event.preventDefault(); requestClose(); }}>
       <div className="settings-header">
-        <div><p className="settings-eyebrow">HUAN-APP / PREFERENCES</p><h2 id="settings-title">设置</h2></div>
+        <div><h2 id="settings-title">设置</h2></div>
         <button type="button" aria-label="关闭设置" disabled={busy} onClick={requestClose}>关闭</button>
       </div>
       <form onSubmit={(event) => { event.preventDefault(); void save(); }}>
+        <div className="settings-tabs" role="tablist" aria-label="设置分类" onKeyDown={(event) => {
+          if (busy || confirmClose || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+          event.preventDefault();
+          const next = event.key === 'Home' ? 'sources' : event.key === 'End' ? 'sessions' : tab === 'sources' ? 'sessions' : 'sources';
+          setTab(next);
+          event.currentTarget.querySelector<HTMLButtonElement>(`#${next}-tab`)?.focus();
+        }}>
+          <button id="sources-tab" type="button" role="tab" aria-selected={tab === 'sources'} aria-controls="sources-panel"
+            tabIndex={tab === 'sources' ? 0 : -1} disabled={busy || confirmClose} onClick={() => setTab('sources')}>收藏来源</button>
+          <button id="sessions-tab" type="button" role="tab" aria-selected={tab === 'sessions'} aria-controls="sessions-panel"
+            tabIndex={tab === 'sessions' ? 0 : -1} disabled={busy || confirmClose} onClick={() => setTab('sessions')}>登录与隐私</button>
+        </div>
         <div className="settings-body">
-          <h3>收藏来源</h3>
+          <div id="sources-panel" role="tabpanel" aria-labelledby="sources-tab" hidden={tab !== 'sources'}>
           <p className="settings-description">选择 Obsidian 中各平台的 Markdown 文件。应用只读，不修改原始笔记。</p>
           <p className="settings-note">启动时读取一次；保存后只重读发生变更的来源。各文件按原文顺序展示，不定时刷新。</p>
           {loading ? <p role="status">正在读取设置…</p> : null}
@@ -116,6 +150,30 @@ export function SettingsPanel({ onClose, onSaved }: { onClose(): void; onSaved()
               </section>;
             })}
           </fieldset> : null}
+          </div>
+          <div id="sessions-panel" role="tabpanel" aria-labelledby="sessions-tab" hidden={tab !== 'sessions'}>
+            <p className="settings-description">在原始网页中登录，同一平台的收藏复用会话，不同平台相互隔离。</p>
+            <p className="settings-note">策略保存后需 Cmd+Q 完全退出并重启才生效，不迁移现有会话。改为仅本次运行不会删除之前保存的数据，如需移除请清除会话。</p>
+            {draft ? <fieldset disabled={busy || confirmClose} className="settings-sources">
+              {PLATFORMS.map((platform) => <section className="source-card session-card" key={platform}>
+                <div className="source-heading"><h4>{PLATFORM_NAMES[platform]}</h4>
+                  <span className="session-current">本轮：{!activeModes ? '读取中' : activeModes[platform] === 'persistent' ? '重启后保留' : '仅本次运行'}</span></div>
+                <div className="session-options" role="group" aria-label={`${PLATFORM_NAMES[platform]} 登录态保存策略`}>
+                  {(['memory', 'persistent'] as const).map((mode) => <label key={mode}>
+                    <input type="radio" name={`${platform}-session`} value={mode} checked={draft.sessions[platform] === mode}
+                      onChange={() => updateMode(platform, mode)} />
+                    <span>{mode === 'memory' ? '仅本次运行' : '重启后保留'}</span>
+                  </label>)}
+                </div>
+                <div className="session-actions"><span>{activeModes && draft.sessions[platform] !== activeModes[platform] ? '保存后，完全退出并重启生效' : '登录有效期由平台决定'}</span>
+                  <button type="button" className="text-button" disabled={dirty || !activeModes} onClick={() => void clearSession(platform)}
+                    aria-label={`清除 ${PLATFORM_NAMES[platform]} 会话`}>清除会话</button></div>
+              </section>)}
+            </fieldset> : <p>请先在收藏来源页加载设置。</p>}
+            {dirty ? <p className="settings-note">有未保存修改，请先保存或取消，再清除会话。</p> : null}
+            <p className="settings-note">会话数据仅存本机 ~/.huan-app，不上传、不读取密码。清除会话同时移除 Cookie、网站存储及缓存，不影响笔记和收藏。</p>
+            {sessionMessage ? <p className="session-feedback" role="status">{sessionMessage}</p> : null}
+          </div>
           {message ? <p role="alert" className="settings-error">{message}</p> : null}
           {confirmClose ? <div className="discard-prompt" role="alert">
             <p>有未保存的修改，确定放弃吗？</p><div>
@@ -123,7 +181,7 @@ export function SettingsPanel({ onClose, onSaved }: { onClose(): void; onSaved()
               <button type="button" onClick={onClose}>放弃修改</button>
             </div></div> : null}
         </div>
-        <div className="settings-footer"><span>配置仅保存在本机 · ~/.huan-app/settings.json</span><div>
+        <div className="settings-footer"><span>huan-app · 基础版 A6 · 配置仅存本机</span><div>
           <button type="button" disabled={busy || confirmClose} onClick={requestClose}>取消</button>
           <button type="submit" className="primary-button" disabled={!draft || loading || busy || confirmClose}>
             {busy ? '处理中…' : '保存设置'}</button>

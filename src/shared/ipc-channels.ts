@@ -12,6 +12,8 @@ export const IPC_CHANNELS = {
   bookmarks: { get: 'huan-app:bookmarks:get' },
   // 浏览器模块
   browser: {
+    sessionModes: 'huan-app:browser:session-modes',
+    clearSession: 'huan-app:browser:clear-session',
     get: 'huan-app:browser:get',
     select: 'huan-app:browser:select',
     action: 'huan-app:browser:action',

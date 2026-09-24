@@ -9,14 +9,17 @@ import { createSettingsStore } from '@main/settings/store';
 import { createBookmarkLibrary } from '@main/bookmarks/library';
 import { createPageHost } from '@main/browser/page-host';
 import { registerBrowser } from '@main/browser/ipc';
+import { createPlatformSessions } from '@main/browser/sessions';
+import { defaultSessionModes } from '@shared/contracts/settings';
 
 // 协议权限必须在 app ready 前声明；生产界面通过 app:// 加载，不依赖开发服务器。
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } }
 ]);
 app.setName('huan-app');
-// 用户数据独立于安装包保存，替换 .app 不会覆盖配置和收藏副本。
+// 用户数据独立于安装包保存，相关的数据存放到.huan-app下面
 app.setPath('userData', join(app.getPath('home'), '.huan-app'));
+app.setPath('sessionData', app.getPath('userData'));
 let window: BrowserWindow | undefined;
 let quitting = false;
 
@@ -80,7 +83,10 @@ if (!app.requestSingleInstanceLock()) {
     // 注册设置模块和浏览器模块的 IPC 事件处理函数。
     const settings = createSettingsStore(app.getPath('userData'));
     const bookmarks = createBookmarkLibrary(app.getPath('userData'), settings.load);
-    registerBrowser(createPageHost(window, bookmarks.get), assertTrusted);
+    const initialSettings = await settings.load();
+    // 配置损坏时只使用内存会话，不猜测用户是否同意保存登录态。
+    const sessions = createPlatformSessions(initialSettings.ok ? initialSettings.settings.sessions : defaultSessionModes());
+    registerBrowser(window, createPageHost(window, bookmarks.get, sessions), assertTrusted);
     registerSettings(window, settings, assertTrusted, bookmarks.update);
 
     ipcMain.handle(IPC_CHANNELS.bookmarks.get, (event) => {

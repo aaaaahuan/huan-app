@@ -46,7 +46,7 @@ export function App() {
     void window.huanApp.browser.suspend(false).catch(() => setError('无法恢复网页容器，请重启应用。'));
   }
   return <div className="workspace-shell">
-    <header className="titlebar"><span>huan-app</span><div className="titlebar-actions"><span className="stage">A4 · 原页阅读</span>
+    <header className="titlebar"><span>huan-app</span><div className="titlebar-actions"><span className="stage">阅读空间</span>
       <button className="settings-trigger" onClick={openSettings}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m9 3 6 0 1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1Z"/><circle cx="12" cy="12" r="3"/></svg>设置</button></div></header>
     {error || library?.warning || failures.length ? <div className="library-alert" role="alert">
@@ -61,9 +61,9 @@ export function App() {
       <Reader selected={selected} suspended={settingsOpen} layoutKey={`${collapsed}:${feedback}:${error}:${library?.warning}:${failures.length}`}>
         <div className="reading-placeholder">
           <>
-            <div className="empty-mark" aria-hidden="true">▤</div>
+            <div className="empty-mark" aria-hidden="true"><svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M24 12c-5-4-12-5-19-3v28c7-2 14-1 19 3 5-4 12-5 19-3V9c-7-2-14-1-19 3Zm0 0v28"/><path d="M11 17c3 0 5 .5 7 1.5M30 18.5c2-1 4-1.5 7-1.5"/></svg></div>
             <h2>{loading ? '正在连接你的笔记' : !enabled ? '从收藏笔记开始' : hasItems ? '留一点空间，开始阅读' : '这里等待你的下一条收藏'}</h2>
-            <p>{loading ? '读取本地 Markdown，并检查最近成功读取的副本。' : !enabled ? '在右上角设置中，为平台选择 Markdown 文件并启用来源。' : hasItems ? '从左侧选择一条收藏。应用不会自动替你打开第一条。' : failures.length || library?.warning ? '当前没有可用条目，请检查来源状态与文件路径。' : '来源文件已读取，当前表格为空。下次启动将按笔记内容重新读取。'}</p>
+            <p>{loading ? '读取本地 Markdown，并检查最近成功读取的副本。' : !enabled ? '在右上角设置中，为平台选择 Markdown 文件并启用来源。' : hasItems ? '从左侧选择一条收藏，继续阅读。' : failures.length || library?.warning ? '当前没有可用条目，请检查来源设置与文件路径。' : '来源文件已读取，当前表格为空。下次启动将按笔记内容重新读取。'}</p>
             {!enabled && !loading ? <button type="button" onClick={openSettings}>配置收藏来源</button> : null}
           </>
         </div>

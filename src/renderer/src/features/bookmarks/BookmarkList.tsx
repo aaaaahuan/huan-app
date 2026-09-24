@@ -31,12 +31,13 @@ export function BookmarkList({ library, loading, collapsed, selectedId, onSelect
     <div id="bookmark-list-content" className="library-content" hidden={collapsed}>
       <div className="library-controls">
         <label className="visually-hidden" htmlFor="bookmark-search">搜索标题或链接</label>
-        <input id="bookmark-search" type="search" placeholder="搜索标题或链接" value={query}
-          onChange={(event) => setQuery(event.target.value)} />
+        <div className="search-control"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg>
+          <input id="bookmark-search" type="search" placeholder="搜索收藏" value={query}
+            onChange={(event) => setQuery(event.target.value)} /></div>
         <label className="visually-hidden" htmlFor="platform-filter">筛选平台</label>
-        <select id="platform-filter" value={platform} onChange={(event) => setPlatform(event.target.value as Platform | 'all')}>
+        <div className="platform-control"><select id="platform-filter" value={platform} onChange={(event) => setPlatform(event.target.value as Platform | 'all')}>
           <option value="all">全部平台</option>{PLATFORMS.map((id) => <option key={id} value={id}>{PLATFORM_NAMES[id]}</option>)}
-        </select>
+        </select><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></div>
       </div>
       <div className="bookmark-scroll" aria-busy={loading}>
         {loading && !library ? <p className="library-empty" role="status">正在读取本地收藏…</p> : null}

@@ -13,6 +13,8 @@ const api: HuanAppAPI = {
   } satisfies HuanAppAPI['settings']),
   bookmarks: Object.freeze({ get: () => ipcRenderer.invoke(IPC_CHANNELS.bookmarks.get) }),
   browser: Object.freeze({
+    sessionModes: () => ipcRenderer.invoke(IPC_CHANNELS.browser.sessionModes),
+    clearSession: (platform) => ipcRenderer.invoke(IPC_CHANNELS.browser.clearSession, platform),
     get: () => ipcRenderer.invoke(IPC_CHANNELS.browser.get),
     select: (id) => ipcRenderer.invoke(IPC_CHANNELS.browser.select, id),
     action: (id, action) => ipcRenderer.invoke(IPC_CHANNELS.browser.action, id, action),

@@ -1,12 +1,14 @@
 // 管理唯一的原页容器；切换收藏销毁旧容器，旧事件不得回填新收藏状态。
 import { IPC_CHANNELS } from '@shared/ipc-channels';
-import { session, WebContentsView, type BrowserWindow } from 'electron';
+import { WebContentsView, type BrowserWindow } from 'electron';
 import type { BookmarkLibrary, Bookmark } from '@shared/contracts/bookmarks';
 import type { ReaderAction, ReaderLayout, ReaderState } from '@shared/contracts/browser';
 import { validBookmarkUrl } from '@main/bookmarks/markdown';
+import type { createPlatformSessions } from './sessions';
+import type { Platform } from '@shared/contracts/settings';
 
 /** 创建原页容器的主机对象。 */
-export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<BookmarkLibrary>) {
+export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<BookmarkLibrary>, sessions: ReturnType<typeof createPlatformSessions>) {
   let view: WebContentsView | undefined;
   let bookmark: Bookmark | undefined;
   let selection = 0;
@@ -70,8 +72,8 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
 
   /** 创建新容器，加载收藏链接。 */
   function create(item: Bookmark) {
-    const partition = `huan-app-reader-${item.platform}`;
-    const remoteSession = session.fromPartition(partition);
+    const partition = item.platform;
+    const remoteSession = sessions.get(item.platform);
     
     if (!configured.has(partition)) {
       configured.add(partition);
@@ -210,6 +212,25 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
   });
   return {
     get: () => state, select, action,
+    sessionModes: sessions.modes,
+    async clearSession(platform: Platform) {
+      const affected = bookmark?.platform === platform;
+      // 先销毁当前网页，避免网页脚本在清理期间重新写入 Cookie 或存储。
+      if (affected) {
+        selection++;
+        disposeView();
+        publish({ phase: 'error', message: '正在清除平台会话…' });
+      }
+      try {
+        await sessions.clear(platform);
+        if (affected) publish({ phase: 'error', message: '平台会话已清除，点击刷新后按原站流程重新登录。' });
+        return { ok: true, cancelled: false } as const;
+      } catch (error) {
+        console.error('Session clearing failed', error);
+        if (affected) publish({ phase: 'error', message: '会话未完全清除，请在设置中重试。' });
+        return { ok: false, message: '会话未完全清除，请重试。收藏与笔记未修改。' } as const;
+      }
+    },
     suspend(value: boolean) { suspended = value; applyLayout(); },
     layout(value: ReaderLayout) { layout = value; applyLayout(); }
   };

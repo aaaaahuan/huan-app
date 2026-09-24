@@ -11,6 +11,13 @@
 .library-controls{padding:0 22px 18px;display:grid;grid-template-columns:minmax(0,1fr) 100px;gap:8px}
 .library-controls input,.library-controls select{font:12px "PingFang SC",sans-serif;color:#3e5847;background:#fff;border:1px solid #dde6dc;border-radius:7px;padding:10px;width:100%;min-width:0}
 .library-controls input:focus-visible,.library-controls select:focus-visible{outline:2px solid #86b7a2;outline-offset:2px}
+/* 保留原生选择器的键盘和系统菜单行为，只统一关闭状态的视觉。 */
+.search-control,.platform-control{position:relative;min-width:0}
+.search-control>svg{position:absolute;left:11px;top:11px;width:16px;height:16px;color:#8b9c8e;pointer-events:none}
+.library-controls .search-control input{padding-left:33px;height:38px;background:#f5f8f2}
+.library-controls .platform-control select{appearance:none;-webkit-appearance:none;height:38px;padding:0 28px 0 11px;background:#f5f8f2;cursor:pointer}
+.platform-control>svg{position:absolute;right:10px;top:12px;width:14px;height:14px;color:#7b907e;pointer-events:none}
+.bookmark-items li{content-visibility:auto;contain-intrinsic-size:auto 132px}
 .bookmark-scroll{flex:1;overflow:auto;min-height:100px;padding:0 10px}
 .bookmark-items{list-style:none;padding:0;margin:0}.bookmark-items li{margin:0 0 4px}
 .bookmark-item{display:block;text-align:left;width:100%;border:1px solid transparent;background:transparent;padding:15px 12px;border-radius:9px;color:#344b3c;overflow:hidden}
