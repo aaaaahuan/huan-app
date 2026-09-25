@@ -21,6 +21,7 @@
   },
   "include": [
     "src/main/**/*.ts",
+    "src/workers/**/*.ts",
     "src/preload/**/*.ts",
     "src/shared/**/*.ts",
     "electron.vite.config.ts"

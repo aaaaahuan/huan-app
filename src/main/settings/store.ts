@@ -4,6 +4,7 @@ import { access, mkdir, open, readFile, rename, stat, unlink } from 'node:fs/pro
 import { constants } from 'node:fs';
 import { extname, isAbsolute, join } from 'node:path';
 import { defaultSettings, PLATFORMS, settingsSchema, type Platform, type SettingsResult } from '@shared/contracts/settings';
+import { createCredentials } from './credentials';
 
 // 文件内容摘要作为修订标识，用于发现读取之后、保存之前已发生的外部修改。
 const digest = (text: string) => createHash('sha256').update(text).digest('hex');
@@ -11,6 +12,7 @@ const missing = (error: unknown) => (error as NodeJS.ErrnoException)?.code === '
 
 export function createSettingsStore(directory: string) {
   const path = join(directory, 'settings.json');
+  const credentials = createCredentials(directory);
   let saving = false;
   // 只有文件不存在时返回默认值；损坏或未知版本必须报错，不能自动覆盖。
   async function load(): Promise<SettingsResult> {
@@ -27,13 +29,18 @@ export function createSettingsStore(directory: string) {
     }
   }
   
-  async function save(input: unknown, revision: unknown): Promise<SettingsResult> {
+  async function save(input: unknown, revision: unknown, keyChange?: unknown, consent = false): Promise<SettingsResult> {
     // IPC 参数在运行时并不可信，不能只依靠 TypeScript 类型声明。
     if (saving) return { ok: false, message: '正在保存设置，请稍后重试。' };
     const parsed = settingsSchema.safeParse(input);
     if (!parsed.success || !(revision === null || typeof revision === 'string'))
       return { ok: false, message: '设置格式不正确，请重新打开设置。' };
+    if (keyChange !== undefined && keyChange !== null &&
+      (typeof keyChange !== 'string' || !/^[\x21-\x7e]{8,512}$/.test(keyChange)))
+      return { ok: false, message: 'API Key 格式不正确，请检查是否包含空格或换行。' };
     saving = true;
+    let createdKey: string | undefined;
+    let committed = false;
     const temporary = join(directory, `.settings-${randomUUID()}.tmp`);
     try {
       const fields: Partial<Record<Platform, string>> = {};
@@ -57,20 +64,40 @@ export function createSettingsStore(directory: string) {
       if (!current.ok) return current;
       if (current.revision !== revision) return { ok: false, message: '设置文件已被其他操作修改。请取消当前编辑并重新打开设置，避免覆盖新配置。' };
       await mkdir(directory, { recursive: true, mode: 0o700 });
+      // 凭据先写新文件，再原子切换引用；UI 不能指定其他密钥或伪造授权记录。
+      if (typeof keyChange === 'string') createdKey = await credentials.write(keyChange);
+      parsed.data.ai = { credentialId: keyChange === null ? null : createdKey ?? current.settings.ai.credentialId,
+        consentVersion: consent ? 2 : current.settings.ai.consentVersion };
       const text = JSON.stringify(parsed.data, null, 2) + '\n';
       const file = await open(temporary, 'wx', 0o600);
       try { await file.writeFile(text, 'utf8'); await file.sync(); }
       finally { await file.close(); }
       // 临时文件完全写入并 sync 后才替换正式文件，写入失败不会发布半份配置。
       await rename(temporary, path);
+      committed = true;
+      const oldKey = current.settings.ai.credentialId;
+      if (oldKey && oldKey !== parsed.data.ai.credentialId) await credentials.remove(oldKey);
       return { ok: true, settings: parsed.data, revision: digest(text) };
     } catch (error) {
       console.error('Settings save failed', error);
       return { ok: false, message: '保存失败，请检查磁盘空间和 ~/.huan-app 的写入权限。原配置保留，可重试。' };
     } finally {
       await unlink(temporary).catch(() => undefined);
+      if (createdKey && !committed) await credentials.remove(createdKey);
       saving = false;
     }
   }
-  return { load, save };
+  return { load, save,
+    async getKey() {
+      const result = await load();
+      if (!result.ok) throw new Error(result.message);
+      return credentials.read(result.settings.ai.credentialId);
+    },
+    async allowMaterials() {
+      const result = await load();
+      if (!result.ok) throw new Error(result.message);
+      const saved = await save(result.settings, result.revision, undefined, true);
+      if (!saved.ok) throw new Error(saved.message);
+    }
+  };
 }

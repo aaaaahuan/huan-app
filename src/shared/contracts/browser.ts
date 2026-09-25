@@ -7,7 +7,8 @@ export const readerStateSchema = z.object({
   bookmarkId: z.string().nullable(),
   phase: z.enum(['empty', 'loading', 'ready', 'stopped', 'error']),
   url: z.string(), title: z.string(), message: z.string(), notice: z.string(),
-  canGoBack: z.boolean(), canGoForward: z.boolean()
+  canGoBack: z.boolean(), canGoForward: z.boolean(),
+  contentStatus: z.enum(['empty', 'loading', 'ready', 'unavailable', 'unsupported'])
 });
 export type ReaderState = z.infer<typeof readerStateSchema>;
 export const readerLayoutSchema = z.object({

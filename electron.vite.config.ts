@@ -9,11 +9,21 @@ export default defineConfig({
     resolve: { alias: { '@shared': resolve('src/shared'), '@main': resolve('src/main') } },
     // 固定主进程文件名，和 package.json 的 main 字段保持一致。
     build: {
+      // 让 Readability 经过 Vite 处理，将 ?raw 转换为源码字符串。
+      externalizeDeps: {
+        exclude: ['@mozilla/readability'],
+      },
       rollupOptions: {
-        input: { index: resolve('src/main/index.ts') },
-        output: { format: 'cjs', entryFileNames: '[name].js' }
-      }
-    }
+        input: {
+          index: resolve('src/main/index.ts'),
+          'ai-worker': resolve('src/workers/ai/index.ts'),
+        },
+        output: {
+          format: 'cjs',
+          entryFileNames: '[name].js',
+        },
+      },
+    },
   },
   preload: {
     resolve: { alias: { '@shared': resolve('src/shared') } },
@@ -28,6 +38,8 @@ export default defineConfig({
   // 仅页面侧启用 React 插件；它不参与 Electron 窗口或文件系统管理。
   renderer: {
     resolve: { alias: { '@shared': resolve('src/shared'), '@renderer': resolve('src/renderer/src') } },
+    // 图片保留为同源文件，兼容生产页面仅允许 img-src 'self' 的安全策略。
+    build: { assetsInlineLimit: 0 },
     plugins: [react()]
   }
 });

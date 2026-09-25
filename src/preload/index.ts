@@ -8,10 +8,23 @@ const api: HuanAppAPI = {
   app: Object.freeze({ getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.app.status) }),
   settings: Object.freeze({
     load: () => ipcRenderer.invoke(IPC_CHANNELS.settings.load),
-    save: (settings, revision) => ipcRenderer.invoke(IPC_CHANNELS.settings.save, settings, revision),
+    save: (settings, revision, keyChange) => ipcRenderer.invoke(IPC_CHANNELS.settings.save, settings, revision, keyChange),
     chooseFile: () => ipcRenderer.invoke(IPC_CHANNELS.settings.chooseFile)
   } satisfies HuanAppAPI['settings']),
   bookmarks: Object.freeze({ get: () => ipcRenderer.invoke(IPC_CHANNELS.bookmarks.get) }),
+  ai: Object.freeze({
+    get: (id) => ipcRenderer.invoke(IPC_CHANNELS.ai.get, id),
+    draft: (owner, text) => ipcRenderer.invoke(IPC_CHANNELS.ai.draft, owner, text),
+    send: (input) => ipcRenderer.invoke(IPC_CHANNELS.ai.send, input),
+    stop: (owner) => ipcRenderer.invoke(IPC_CHANNELS.ai.stop, owner),
+    restart: (owner) => ipcRenderer.invoke(IPC_CHANNELS.ai.restart, owner),
+    testKey: (key) => ipcRenderer.invoke(IPC_CHANNELS.ai.testKey, key),
+    onState: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, state: Parameters<typeof listener>[0]) => listener(state);
+      ipcRenderer.on(IPC_CHANNELS.ai.state, handler);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.ai.state, handler);
+    }
+  } satisfies HuanAppAPI['ai']),
   browser: Object.freeze({
     sessionModes: () => ipcRenderer.invoke(IPC_CHANNELS.browser.sessionModes),
     clearSession: (platform) => ipcRenderer.invoke(IPC_CHANNELS.browser.clearSession, platform),

@@ -2,6 +2,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { Bookmark } from '@shared/contracts/bookmarks';
 import { readerStateSchema, type ReaderAction, type ReaderState } from '@shared/contracts/browser';
+import { Button, IconButton } from '@renderer/components/Button';
+import { Input } from '@renderer/components/Input';
 import './reader.css';
 
 export function Reader({ selected, suspended, layoutKey, children }: {
@@ -57,16 +59,16 @@ export function Reader({ selected, suspended, layoutKey, children }: {
     {selected ? <>
       <div className="reader-heading" title={selected.title}>{selected.title}</div>
       <div className="reader-toolbar">
-        <button title="后退" aria-label="后退" disabled={!current?.canGoBack} onClick={() => navigate('back')}>←</button>
-        <button title="前进" aria-label="前进" disabled={!current?.canGoForward} onClick={() => navigate('forward')}>→</button>
-        <button onClick={() => navigate(current?.phase === 'loading' ? 'stop' : 'reload')}>{current?.phase === 'loading' ? '停止' : '刷新'}</button>
-        <input aria-label="当前网页地址（只读）" readOnly value={current?.url || selected.url} />
+        <IconButton icon="back" label="后退" disabled={!current?.canGoBack} onClick={() => navigate('back')} />
+        <IconButton icon="forward" label="前进" disabled={!current?.canGoForward} onClick={() => navigate('forward')} />
+        <Button onClick={() => navigate(current?.phase === 'loading' ? 'stop' : 'reload')}>{current?.phase === 'loading' ? '停止' : '刷新'}</Button>
+        <Input aria-label="当前网页地址（只读）" readOnly value={current?.url || selected.url} />
       </div>
       <div className="reader-status" role="status">{error || current?.message || (current?.phase === 'loading' ? '正在加载原始网页…' : '原始网页 · 页面跳转不改变左侧收藏选择')}
         {current?.notice ? <span>{current.notice}</span> : null}</div>
     </> : null}
     <div ref={host} className="reader-viewport">
-      {!selected ? children : current?.phase === 'error' ? <div className="reader-fallback"><h2>暂时无法展示页面</h2><p>{current.message}</p><button onClick={() => navigate('reload')}>重新加载</button></div> : null}
+      {!selected ? children : current?.phase === 'error' ? <div className="reader-fallback"><h2>暂时无法展示页面</h2><p>{current.message}</p><Button onClick={() => navigate('reload')}>重新加载</Button></div> : null}
     </div>
   </section>;
 }

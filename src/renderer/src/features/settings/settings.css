@@ -1,7 +1,8 @@
 /* 设置面板样式；标题栏按钮必须关闭拖拽命中，否则点击会被窗口拖动拦截。 */
-.titlebar-actions{display:flex;align-items:center;gap:18px}
-.settings-trigger{-webkit-app-region:no-drag;display:flex;align-items:center;gap:7px;letter-spacing:0}
-.settings-trigger svg{width:16px;height:16px}
+.titlebar-actions{display:flex;align-items:center;gap:10px}
+.titlebar .ui-icon-button{-webkit-app-region:no-drag;background:transparent;border-color:transparent}
+.titlebar .ui-icon-button:hover{background:#e3eee5}
+.right-panel-toggle svg{transform:scaleX(-1)}
 .settings-dialog{width:min(760px,calc(100vw - 48px));max-height:calc(100vh - 64px);padding:0;border:1px solid #d4e0d7;border-radius:18px;background:#f8faf6;color:#293d36;box-shadow:0 24px 100px #1f382d30}
 /* 使用 dialog 的原生遮罩，不靠普通层级覆盖模拟模态窗口。 */
 .settings-dialog::backdrop{background:#20372c42;backdrop-filter:blur(3px)}
@@ -20,15 +21,12 @@
 .source-toggle input{accent-color:#497a60;width:15px;height:15px}
 .source-path-label{display:block;font-size:11px;color:#7b8c7e;margin-bottom:6px}
 .source-path-row{display:flex;gap:8px}
-.source-path-row input{min-width:0;flex:1;border:1px solid #d5e0d6;border-radius:6px;padding:9px 10px;background:#fafcf9;color:#344d3d;font:12px "PingFang SC",sans-serif}
-.source-path-row input:focus-visible{outline:2px solid #86b7a2;outline-offset:2px}
-.source-path-row input[aria-invalid=true]{border-color:#b26853}
+.source-path-row input{flex:1}
 .source-path-row button{white-space:nowrap}
 .settings-error{font-size:12px;line-height:1.7;color:#9f4d36;margin:10px 0 0;overflow-wrap:anywhere}
 .settings-footer{display:flex;align-items:center;justify-content:space-between;gap:16px;border-top:1px solid #e0e8df;padding:18px 28px;background:#f0f5ef}
 .settings-footer>span{font-size:10px;color:#7a8d7d;overflow-wrap:anywhere}
 .settings-footer>div,.discard-prompt>div{display:flex;gap:8px;flex-shrink:0}
-.primary-button{background:#496f56;color:#fff;border-color:#496f56}.primary-button:hover{background:#3b6047}
 .discard-prompt{padding:14px;background:#f5eee1;border:1px solid #dfd1b7;border-radius:9px;margin-top:16px;font-size:13px}
 .discard-prompt p{margin:0 0 12px}
 .settings-feedback{font-size:12px;color:#496f56;margin:12px 0}
@@ -47,7 +45,5 @@
 .session-options input:disabled+span{opacity:.6;cursor:default}
 .session-actions{display:flex;align-items:center;justify-content:space-between;margin-top:12px;gap:10px}
 .session-actions>span{font-size:11px;color:#8b9785}
-.text-button{background:transparent;border-color:transparent;color:#8a7161;padding:4px 0}
-.text-button:hover{background:transparent;color:#9e5943}
 .session-feedback{font-size:12px;line-height:1.8;padding:12px 14px;background:#edf3e9;border-radius:8px;color:#45684c}
 @media(max-width:600px){.settings-footer{align-items:flex-start;flex-direction:column}.settings-header,.settings-body,.settings-footer{padding-left:18px;padding-right:18px}.stage{display:none}}

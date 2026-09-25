@@ -6,17 +6,21 @@ import type { ReaderAction, ReaderLayout, ReaderState } from '@shared/contracts/
 import { validBookmarkUrl } from '@main/bookmarks/markdown';
 import type { createPlatformSessions } from './sessions';
 import type { Platform } from '@shared/contracts/settings';
+import { extractReadablePage } from './readability';
+import { createPageStore } from './page-store';
 
 /** 创建原页容器的主机对象。 */
 export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<BookmarkLibrary>, sessions: ReturnType<typeof createPlatformSessions>) {
+  const pages = createPageStore();
   let view: WebContentsView | undefined;
   let bookmark: Bookmark | undefined;
   let selection = 0;
+  let navigationEpoch = 0;
   let suspended = false;
   let deadline: ReturnType<typeof setTimeout> | undefined;
   let layout: ReaderLayout = { x: 0, y: 0, width: 0, height: 0, visible: false };
   let state: ReaderState = { revision: 0, bookmarkId: null, phase: 'empty', url: '', title: '',
-    message: '', notice: '', canGoBack: false, canGoForward: false };
+    message: '', notice: '', canGoBack: false, canGoForward: false, contentStatus: 'empty' };
   const configured = new Set<string>();
 
   function applyLayout() {
@@ -35,7 +39,7 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
 
   function publish(change: Partial<ReaderState> = {}) {
     const contents = view?.webContents;
-    state = { ...state, ...change, revision: state.revision + 1,
+    state = { ...state, ...change, revision: state.revision + 1, contentStatus: pages.current()?.status ?? 'empty',
       canGoBack: !!contents && !contents.isDestroyed() && contents.navigationHistory.canGoBack(),
       canGoForward: !!contents && !contents.isDestroyed() && contents.navigationHistory.canGoForward() };
     applyLayout();
@@ -45,6 +49,8 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
 
   function clearDeadline() { clearTimeout(deadline); deadline = undefined; }
   function disposeView() {
+    pages.clearCurrent();
+    navigationEpoch++;
     clearDeadline();
     const old = view;
     view = undefined;
@@ -57,6 +63,9 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
     clearDeadline();
     deadline = setTimeout(() => {
       if (view !== target) return;
+      navigationEpoch++;
+      const page = pages.current();
+      if (page) pages.fail(page.id);
       publish({ phase: 'error', message: '页面加载超过 30 秒，请检查网络后重试。' });
       target.webContents.stop();
     }, 30_000);
@@ -86,6 +95,8 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
     }
     const target = new WebContentsView({ webPreferences: {
       session: remoteSession, sandbox: true, contextIsolation: true,
+      // 切到其他窗口后仍允许原页正常调度，避免动态正文因后台节流延迟渲染。
+      backgroundThrottling: false,
       nodeIntegration: false, nodeIntegrationInSubFrames: false, webSecurity: true,
       allowRunningInsecureContent: false, navigateOnDragDrop: false
     } });
@@ -95,6 +106,40 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
     window.contentView.addChildView(target);
     const contents = target.webContents;
     const active = () => view === target && !contents.isDestroyed();
+    let navigationUrl = '';
+
+    let extractionTimer: ReturnType<typeof setTimeout> | undefined;
+    let extractionRequest = 0;
+    function cancelExtraction() {
+      clearTimeout(extractionTimer);
+      extractionRequest++;
+    }
+    function scheduleExtraction() {
+      cancelExtraction();
+      const page = pages.current();
+      if (!active() || page?.status !== 'loading') return;
+      const pageId = page.id;
+      const epoch = navigationEpoch;
+      const request = extractionRequest;
+      const isCurrent = () => active() && navigationEpoch === epoch && extractionRequest === request;
+      let attempts = 0;
+      async function attempt() {
+        if (!isCurrent()) return;
+        attempts++;
+        try {
+          const content = await extractReadablePage(contents);
+          if (!isCurrent()) return;
+          if (content) { pages.complete(pageId, content); publish(); return; }
+          if (attempts < 4) extractionTimer = setTimeout(() => void attempt(), 1500);
+          else { pages.fail(pageId); publish(); console.warn('[Readability] 未识别到文章正文，已停止重试'); }
+        } catch (error) {
+          if (isCurrent()) { pages.fail(pageId); publish(); console.warn('[Readability] 提取失败', error); }
+        }
+      }
+      // load 完成时动态正文可能尚未渲染；延迟首次提取，只对空结果有限重试。
+      extractionTimer = setTimeout(() => void attempt(), 1500);
+    }
+    contents.once('destroyed', cancelExtraction);
 
     contents.setWindowOpenHandler((details) => {
       if (!active()) return { action: 'deny' };
@@ -117,12 +162,26 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
       }
     });
     contents.on('did-start-navigation', (event) => {
-      if (!active() || !event.isMainFrame || event.isSameDocument) return;
+      if (!active() || !event.isMainFrame) return;
+      if (event.isSameDocument && event.url.split('#')[0] === navigationUrl.split('#')[0]) return;
+      navigationEpoch++;
+      cancelExtraction();
+      navigationUrl = event.url;
+      pages.begin(event.url);
+      publish();
+      if (event.isSameDocument) return;
       publish({ phase: 'loading', url: event.url, message: '', notice: '' });
       armDeadline(target);
     });
+
+    contents.on('did-finish-load', () => {
+      scheduleExtraction();
+    });
+
     contents.on('did-navigate', (_event, url, responseCode) => {
       if (!active()) return;
+      // 重定向后的真实页面拥有独立快照，不沿用重定向前的身份。
+      if (navigationUrl !== url) { navigationUrl = url; pages.begin(url); }
       // HTTP 错误页仍展示原站内容，避免隐藏网站自己的登录或验证提示。
       publish({ url, notice: responseCode >= 400 ? `原站返回 HTTP ${responseCode}，正在展示网站响应。` : '' });
     });
@@ -130,6 +189,7 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
       if (active() && isMainFrame) {
         clearDeadline();
         publish({ url, phase: 'ready', message: '' });
+        scheduleExtraction();
       }
     });
     contents.on('page-title-updated', (_event, title) => { if (active()) publish({ title }); });
@@ -141,10 +201,15 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
     contents.on('did-fail-load', (_event, code, description, url, isMainFrame) => {
       if (!active() || !isMainFrame || code === -3) return;
       clearDeadline();
+      const page = pages.current();
+      if (page) pages.fail(page.id);
       publish({ phase: 'error', url, message: `页面加载失败（${description} / ${code}），可重试或选择其他收藏。` });
     });
     contents.on('render-process-gone', (_event, details) => {
       if (!active()) return;
+      cancelExtraction();
+      const page = pages.current();
+      if (page) pages.fail(page.id);
       clearDeadline();
       publish({ phase: 'error', message: `页面进程已停止（${details.reason}），请重试。` });
     });
@@ -152,6 +217,7 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
       if (view !== target) return;
       clearDeadline();
       view = undefined;
+      pages.clearCurrent();
       if (!window.isDestroyed()) window.contentView.removeChildView(target);
       publish({ phase: 'error', message: '页面已关闭，请重新加载。' });
     });
@@ -189,14 +255,17 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
     const contents = view?.webContents;
     if (!contents || contents.isDestroyed()) return state;
     if (command === 'stop') {
+      navigationEpoch++;
+      const page = pages.current();
+      if (page) pages.fail(page.id);
       clearDeadline();
       publish({ phase: 'stopped', message: '已停止加载，可刷新页面继续。' });
       contents.stop();
     } else if (command === 'back' && contents.navigationHistory.canGoBack()) contents.navigationHistory.goBack();
     else if (command === 'forward' && contents.navigationHistory.canGoForward()) contents.navigationHistory.goForward();
     else if (command === 'reload') {
-      // 网络失败时重试实际目标，但不销毁容器，以保留可后退的浏览历史。
-      if (state.phase === 'error') load(view!, validBookmarkUrl(state.url) ? state.url : bookmark.url);
+      // 停止的导航可能尚未提交，reload 会重载旧页甚至空白页；按目标地址重试。
+      if (state.phase === 'error' || state.phase === 'stopped') load(view!, validBookmarkUrl(state.url) ? state.url : bookmark.url);
       else contents.reload();
     }
     return state;
@@ -205,15 +274,18 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
   window.on('show', applyLayout);
   // 缩放期间先隐藏旧矩形，等 React 上报新布局，避免暂时覆盖侧栏或标题栏。
   window.on('resize', () => view?.setVisible(false));
-  window.on('closed', () => { selection++; disposeView(); });
+  window.on('closed', () => { selection++; disposeView(); pages.clear(); });
   window.webContents.on('render-process-gone', () => { selection++; disposeView(); });
   window.webContents.on('did-start-navigation', (event) => {
     if (event.isMainFrame && !event.isSameDocument) { selection++; disposeView(); suspended = false; }
   });
+
   return {
     get: () => state, select, action,
+    snapshot: () => suspended ? { pages: [] } : pages.snapshot(),
     sessionModes: sessions.modes,
     async clearSession(platform: Platform) {
+      pages.clear();
       const affected = bookmark?.platform === platform;
       // 先销毁当前网页，避免网页脚本在清理期间重新写入 Cookie 或存储。
       if (affected) {

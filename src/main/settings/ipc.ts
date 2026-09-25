@@ -11,9 +11,9 @@ export function registerSettings(window: BrowserWindow, store: ReturnType<typeof
     assertTrusted(event);
     return store.load();
   });
-  ipcMain.handle(IPC_CHANNELS.settings.save, async (event, input: unknown, revision: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.settings.save, async (event, input: unknown, revision: unknown, keyChange: unknown) => {
     assertTrusted(event);
-    const result = await store.save(input, revision);
+    const result = await store.save(input, revision, keyChange);
     // 等待受影响来源处理完再返回，使界面重新查询时拿到本次保存对应的列表。
     if (result.ok) await onSaved(result.settings);
     return result;

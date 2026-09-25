@@ -1,11 +1,15 @@
 // 应用外壳：协调收藏选择、原页阅读与设置弹窗，不参与远程网页内部逻辑。
 import { useEffect, useState } from 'react';
-import type { BookmarkLibrary } from '../../../shared/contracts/bookmarks';
-import { PLATFORM_NAMES } from '../../../shared/contracts/settings';
-import { SettingsPanel } from '../features/settings/SettingsPanel';
-import { BookmarkList } from '../features/bookmarks/BookmarkList';
-import { Reader } from '../features/reader/Reader';
-import '../features/bookmarks/bookmarks.css';
+import type { BookmarkLibrary } from '@shared/contracts/bookmarks';
+import { PLATFORM_NAMES } from '@shared/contracts/settings';
+import { SettingsPanel } from '@renderer/features/settings/SettingsPanel';
+import { BookmarkList } from '@renderer/features/bookmarks/BookmarkList';
+import { Reader } from '@renderer/features/reader/Reader';
+import { ReadingPlaceholder } from '@renderer/features/reader/ReadingPlaceholder';
+import { Button, IconButton } from '@renderer/components/Button';
+import { AIChat } from '@renderer/features/ai-chat/AIChat';
+import '@renderer/components/controls.css';
+import '@renderer/features/bookmarks/bookmarks.css';
 
 export function App() {
   const [library, setLibrary] = useState<BookmarkLibrary>();
@@ -14,8 +18,10 @@ export function App() {
   const [revision, setRevision] = useState(0);
   // 下列界面状态仅保留在本轮运行中，不写回 Obsidian 或收藏副本。
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<'sources' | 'ai'>('sources');
   const [feedback, setFeedback] = useState('');
   const [collapsed, setCollapsed] = useState(false);
+  const [aiCollapsed, setAICollapsed] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   useEffect(() => {
     // 设置保存后重新查询主进程结果；主进程负责决定哪些来源需要真正重读。
@@ -36,9 +42,9 @@ export function App() {
   const enabled = library?.sources.some((source) => source.state !== 'disabled');
   const hasItems = library?.sources.some((source) => source.items.length > 0);
   const failures = library?.sources.filter((source) => source.state === 'cached' || source.state === 'error') ?? [];
-  async function openSettings() {
+  async function openSettings(tab: 'sources' | 'ai' = 'sources') {
     // 原生视图不受 DOM z-index 约束，确认隐藏后才能打开设置对话框。
-    try { await window.huanApp.browser.suspend(true); setFeedback(''); setSettingsOpen(true); }
+    try { await window.huanApp.browser.suspend(true); setFeedback(''); setSettingsTab(tab); setSettingsOpen(true); }
     catch { setError('无法隐藏网页容器，请重试打开设置。'); }
   }
   function closeSettings() {
@@ -46,30 +52,31 @@ export function App() {
     void window.huanApp.browser.suspend(false).catch(() => setError('无法恢复网页容器，请重启应用。'));
   }
   return <div className="workspace-shell">
-    <header className="titlebar"><span>huan-app</span><div className="titlebar-actions"><span className="stage">阅读空间</span>
-      <button className="settings-trigger" onClick={openSettings}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m9 3 6 0 1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1Z"/><circle cx="12" cy="12" r="3"/></svg>设置</button></div></header>
+    <div className="titlebar">
+      <IconButton icon={collapsed ? 'expand' : 'collapse'} label={collapsed ? '展开收藏列表' : '收起收藏列表'}
+        aria-expanded={!collapsed} aria-controls="bookmark-sidebar" onClick={() => setCollapsed(value => !value)} />
+      <div className="titlebar-actions">
+        <IconButton icon="settings" label="设置" onClick={() => void openSettings()} />
+        <IconButton className="right-panel-toggle" icon={aiCollapsed ? 'expand' : 'collapse'} label={aiCollapsed ? '展开 AI 伴读' : '收起 AI 伴读'}
+          aria-expanded={!aiCollapsed} aria-controls="ai-chat" onClick={() => setAICollapsed(value => !value)} />
+      </div>
+    </div>
     {error || library?.warning || failures.length ? <div className="library-alert" role="alert">
       {error ? <p>{error}</p> : null}{library?.warning ? <p>{library.warning}</p> : null}
       {failures.map((source) => <p key={source.platform}>{PLATFORM_NAMES[source.platform]}：{source.message}</p>)}
-      <button type="button" onClick={openSettings}>检查来源设置</button>
+      <Button onClick={() => void openSettings()}>检查来源设置</Button>
     </div> : null}
     {feedback ? <div className="settings-feedback" role="status">{feedback}</div> : null}
     <div className="workspace">
       <BookmarkList library={library} loading={loading} collapsed={collapsed} selectedId={selectedId}
-        onSelect={(item) => setSelectedId(item.id)} onCollapse={() => setCollapsed((value) => !value)} />
-      <Reader selected={selected} suspended={settingsOpen} layoutKey={`${collapsed}:${feedback}:${error}:${library?.warning}:${failures.length}`}>
-        <div className="reading-placeholder">
-          <>
-            <div className="empty-mark" aria-hidden="true"><svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M24 12c-5-4-12-5-19-3v28c7-2 14-1 19 3 5-4 12-5 19-3V9c-7-2-14-1-19 3Zm0 0v28"/><path d="M11 17c3 0 5 .5 7 1.5M30 18.5c2-1 4-1.5 7-1.5"/></svg></div>
-            <h2>{loading ? '正在连接你的笔记' : !enabled ? '从收藏笔记开始' : hasItems ? '留一点空间，开始阅读' : '这里等待你的下一条收藏'}</h2>
-            <p>{loading ? '读取本地 Markdown，并检查最近成功读取的副本。' : !enabled ? '在右上角设置中，为平台选择 Markdown 文件并启用来源。' : hasItems ? '从左侧选择一条收藏，继续阅读。' : failures.length || library?.warning ? '当前没有可用条目，请检查来源设置与文件路径。' : '来源文件已读取，当前表格为空。下次启动将按笔记内容重新读取。'}</p>
-            {!enabled && !loading ? <button type="button" onClick={openSettings}>配置收藏来源</button> : null}
-          </>
-        </div>
+        onSelect={(item) => setSelectedId(item.id)} />
+      <Reader selected={selected} suspended={settingsOpen} layoutKey={`${collapsed}:${aiCollapsed}:${feedback}:${error}:${library?.warning}:${failures.length}`}>
+        <ReadingPlaceholder loading={loading} enabled={!!enabled} hasItems={!!hasItems}
+          failed={!!(error || failures.length || library?.warning)} onConfigure={() => void openSettings()} />
       </Reader>
+      <AIChat collapsed={aiCollapsed} settingsRevision={revision} onConfigure={() => void openSettings('ai')} />
     </div>
-    {settingsOpen ? <SettingsPanel onClose={closeSettings} onSaved={() => {
+    {settingsOpen ? <SettingsPanel initialTab={settingsTab} onClose={closeSettings} onSaved={() => {
       closeSettings(); setRevision((value) => value + 1);
     }} /> : null}
   </div>;

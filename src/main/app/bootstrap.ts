@@ -11,6 +11,7 @@ import { createPageHost } from '@main/browser/page-host';
 import { registerBrowser } from '@main/browser/ipc';
 import { createPlatformSessions } from '@main/browser/sessions';
 import { defaultSessionModes } from '@shared/contracts/settings';
+import { registerAI } from '@main/ai/ipc';
 
 // 协议权限必须在 app ready 前声明；生产界面通过 app:// 加载，不依赖开发服务器。
 protocol.registerSchemesAsPrivileged([
@@ -86,8 +87,18 @@ if (!app.requestSingleInstanceLock()) {
     const initialSettings = await settings.load();
     // 配置损坏时只使用内存会话，不猜测用户是否同意保存登录态。
     const sessions = createPlatformSessions(initialSettings.ok ? initialSettings.settings.sessions : defaultSessionModes());
-    registerBrowser(window, createPageHost(window, bookmarks.get, sessions), assertTrusted);
+    const pageHost = createPageHost(window, bookmarks.get, sessions);
+    registerBrowser(window, pageHost, assertTrusted);
+    const ai = registerAI(window, pageHost, settings, assertTrusted);
     registerSettings(window, settings, assertTrusted, bookmarks.update);
+
+    app.on('before-quit', (event) => {
+      if (ai.hasWork() && dialog.showMessageBoxSync(window!, { type: 'question', buttons: ['继续使用', '退出'],
+        defaultId: 0, cancelId: 0, message: 'AI 任务仍在进行，确定退出？', detail: '退出会中断任务，临时聊天不会保存。' }) !== 1) {
+        event.preventDefault(); quitting = false;
+      }
+    });
+    app.on('will-quit', () => ai.close());
 
     ipcMain.handle(IPC_CHANNELS.bookmarks.get, (event) => {
       assertTrusted(event);

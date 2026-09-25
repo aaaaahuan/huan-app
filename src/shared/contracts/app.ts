@@ -3,9 +3,10 @@ import { z } from 'zod';
 import type { SettingsAPI } from './settings';
 import type { BookmarksAPI } from './bookmarks';
 import type { BrowserAPI } from './browser';
+import type { AIAPI } from './ai';
 
 export const appStatusSchema = z.object({
   state: z.literal('ready'), appName: z.literal('huan-app'), version: z.string().min(1)
 });
 export type AppStatus = z.infer<typeof appStatusSchema>;
-export interface HuanAppAPI { app: { getStatus(): Promise<AppStatus> }; settings: SettingsAPI; bookmarks: BookmarksAPI; browser: BrowserAPI }
+export interface HuanAppAPI { app: { getStatus(): Promise<AppStatus> }; settings: SettingsAPI; bookmarks: BookmarksAPI; browser: BrowserAPI; ai: AIAPI }
