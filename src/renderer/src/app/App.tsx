@@ -1,5 +1,5 @@
 // 应用外壳：协调收藏选择、原页阅读与设置弹窗，不参与远程网页内部逻辑。
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import type { BookmarkLibrary } from '@shared/contracts/bookmarks';
 import { PLATFORM_NAMES } from '@shared/contracts/settings';
 import { SettingsPanel } from '@renderer/features/settings/SettingsPanel';
@@ -8,6 +8,8 @@ import { Reader } from '@renderer/features/reader/Reader';
 import { ReadingPlaceholder } from '@renderer/features/reader/ReadingPlaceholder';
 import { Button, IconButton } from '@renderer/components/Button';
 import { AIChat } from '@renderer/features/ai-chat/AIChat';
+import { PanelDivider } from '@renderer/components/PanelDivider';
+import { usePanelWidths } from './usePanelWidths';
 import '@renderer/components/controls.css';
 import '@renderer/features/bookmarks/bookmarks.css';
 
@@ -22,6 +24,7 @@ export function App() {
   const [feedback, setFeedback] = useState('');
   const [collapsed, setCollapsed] = useState(false);
   const [aiCollapsed, setAICollapsed] = useState(false);
+  const panels = usePanelWidths(collapsed, aiCollapsed);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   useEffect(() => {
     // 设置保存后重新查询主进程结果；主进程负责决定哪些来源需要真正重读。
@@ -67,13 +70,20 @@ export function App() {
       <Button onClick={() => void openSettings()}>检查来源设置</Button>
     </div> : null}
     {feedback ? <div className="settings-feedback" role="status">{feedback}</div> : null}
-    <div className="workspace">
+    <div ref={panels.workspace} className={`workspace${panels.dragging ? ' workspace-resizing' : ''}`}
+      style={{ '--left-panel-width': `${panels.left}px`, '--right-panel-width': `${panels.right}px` } as CSSProperties}>
       <BookmarkList library={library} loading={loading} collapsed={collapsed} selectedId={selectedId}
         onSelect={(item) => setSelectedId(item.id)} />
-      <Reader selected={selected} suspended={settingsOpen} layoutKey={`${collapsed}:${aiCollapsed}:${feedback}:${error}:${library?.warning}:${failures.length}`}>
+      {!collapsed ? <PanelDivider label="调整收藏列表宽度" controls="bookmark-sidebar" value={panels.left}
+        {...panels.limits.left} direction={1} onStart={x => panels.start('left', x)} onMove={panels.move}
+        onEnd={panels.end} onChange={value => panels.change('left', value)} /> : null}
+      <Reader selected={selected} suspended={settingsOpen || panels.dragging} layoutKey={`${collapsed}:${aiCollapsed}:${panels.left}:${panels.right}:${feedback}:${error}:${library?.warning}:${failures.length}`}>
         <ReadingPlaceholder loading={loading} enabled={!!enabled} hasItems={!!hasItems}
           failed={!!(error || failures.length || library?.warning)} onConfigure={() => void openSettings()} />
       </Reader>
+      {!aiCollapsed ? <PanelDivider label="调整 AI 对话宽度" controls="ai-chat" value={panels.right}
+        {...panels.limits.right} direction={-1} onStart={x => panels.start('right', x)} onMove={panels.move}
+        onEnd={panels.end} onChange={value => panels.change('right', value)} /> : null}
       <AIChat collapsed={aiCollapsed} settingsRevision={revision} onConfigure={() => void openSettings('ai')} />
     </div>
     {settingsOpen ? <SettingsPanel initialTab={settingsTab} onClose={closeSettings} onSaved={() => {

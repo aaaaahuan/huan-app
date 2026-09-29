@@ -15,3 +15,8 @@
 .ui-icon-input>svg{left:11px}.ui-icon-input>.ui-input{padding-left:34px}
 .ui-select>svg{right:9px}.ui-select>select{appearance:none;padding-right:28px;cursor:pointer}
 .ui-truncated{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.panel-divider{width:6px;flex-shrink:0;cursor:col-resize;touch-action:none;background:#eef3eb;position:relative;outline:none}
+.panel-divider::after{content:"";position:absolute;inset:0 2px;background:transparent;transition:background .15s}
+.panel-divider:hover::after,.panel-divider:focus-visible::after{background:#86a88a}
+.panel-divider:focus-visible{box-shadow:inset 0 0 0 1px #86a88a}
+.workspace-resizing,.workspace-resizing *{cursor:col-resize!important;user-select:none}

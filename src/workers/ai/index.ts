@@ -3,6 +3,7 @@ import type { AssistantMessage, UserMessage } from '@earendil-works/pi-ai';
 import type { WorkerCommand, WorkerEvent } from '@shared/contracts/ai';
 import type { PageContext } from '@shared/contracts/page-context';
 import { createReadPageTool } from './read-page-tool';
+import { createReadSkillTool, skillInstructions } from './read-skill-tool';
 
 const port = process.parentPort;
 if (!port) throw new Error('AI worker requires a parent port');
@@ -26,7 +27,7 @@ async function initialize() {
     });
     const slot: Slot = { key: '', retired: false, toolCalls: 0, turns: 0, limitReached: false, agent: new PiAgent({
       sessionId: instanceId,
-      initialState: { model, tools: [tool], systemPrompt: SYSTEM, thinkingLevel: 'off' },
+      initialState: { model, tools: [tool, createReadSkillTool(Type)], systemPrompt: SYSTEM + skillInstructions, thinkingLevel: 'off' },
       getApiKey: () => { if (!slot.key) throw new Error('KEY_UNAVAILABLE'); return slot.key; },
       streamFn: (selected, context, options) => models.streamSimple(selected, context, {
         ...options, maxTokens: 8192, maxRetries: 0,
@@ -43,7 +44,7 @@ async function initialize() {
       }),
       // 既限制工具次数，也限制模型轮数；工具错误也不能形成无限循环。
       beforeToolCall: async () => {
-        if (++slot.toolCalls > 8) { slot.limitReached = true; return { block: true, reason: '本轮读取次数已达上限', terminate: true }; }
+        if (++slot.toolCalls > 8) { slot.limitReached = true; return { block: true, reason: '本轮工具调用次数已达上限', terminate: true }; }
       },
       finishTurn: ({ context }) => {
         if (++slot.turns >= 10 || JSON.stringify(context.messages).length > 240000) {

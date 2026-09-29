@@ -126,7 +126,7 @@ export function AIChat({ settingsRevision, collapsed, onConfigure }: {
     <div className="ai-heading">
       <IconButton className="ai-new-chat" icon="plus" label="新开对话" disabled={!current || commandBusy} onClick={() => setConfirmRestart(true)} /></div>
     <div className="ai-messages">
-      {!current?.entries.length ? <p className="ai-empty">可以直接提问，也可以让 AI 按需读取已缓存的帖子。切换帖子不会清空对话。</p> : null}
+      {!current?.entries.length ? <div className="ai-empty"><Icon name="book" width="56" height="56" /><p>开始阅读吧～</p></div> : null}
       {current?.entries.map(entry => <article className="ai-turn" key={entry.id}>
         <p className="ai-question">{entry.question}</p>
         {entry.contextNotice ? <p className="ai-hint">{entry.contextNotice}</p> : null}
