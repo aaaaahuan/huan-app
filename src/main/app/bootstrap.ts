@@ -12,6 +12,7 @@ import { registerBrowser } from '@main/browser/ipc';
 import { createPlatformSessions } from '@main/browser/sessions';
 import { defaultSessionModes } from '@shared/contracts/settings';
 import { registerAI } from '@main/ai/ipc';
+import { setReadSchema } from '@shared/contracts/bookmarks';
 
 // 协议权限必须在 app ready 前声明；生产界面通过 app:// 加载，不依赖开发服务器。
 protocol.registerSchemesAsPrivileged([
@@ -103,6 +104,10 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.handle(IPC_CHANNELS.bookmarks.get, (event) => {
       assertTrusted(event);
       return bookmarks.get();
+    });
+    ipcMain.handle(IPC_CHANNELS.bookmarks.setRead, (event, input: unknown) => {
+      assertTrusted(event);
+      return bookmarks.setRead(setReadSchema.parse(input));
     });
     ipcMain.handle(IPC_CHANNELS.app.status, async (event) => {
       assertTrusted(event);

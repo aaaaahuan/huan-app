@@ -1,27 +1,27 @@
 // 收藏数据协调层：源文件为准，本地副本仅在同路径读取失败时兜底。
 import { randomUUID } from 'node:crypto';
-import { mkdir, open, rename, unlink } from 'node:fs/promises';
-import { extname, isAbsolute, join } from 'node:path';
+import { lstat, mkdir, open, rename, unlink } from 'node:fs/promises';
+import { dirname, extname, isAbsolute, join } from 'node:path';
 import { z } from 'zod';
 import { PLATFORMS, type Platform, type Settings, type SettingsResult } from '@shared/contracts/settings';
-import type { BookmarkLibrary, BookmarkSource } from '@shared/contracts/bookmarks';
-import { bookmarkId, parseBookmarks, validBookmarkUrl } from './markdown';
+import type { BookmarkLibrary, BookmarkSource, SetReadInput, SetReadResult } from '@shared/contracts/bookmarks';
+import { bookmarkId, parseBookmarks, updateBookmarkRead, validBookmarkUrl } from './markdown';
 
 // 副本也可能被外部修改；读取时校验结构，不能把本地 JSON 直接当可信数据。
 const itemSchema = z.object({
   id: z.string(), platform: z.enum(PLATFORMS), url: z.string().refine(validBookmarkUrl),
-  title: z.string(), collectedAt: z.string(), source: z.string()
+  title: z.string(), collectedAt: z.string(), source: z.string(), read: z.boolean().default(false)
 });
 const snapshotSchema = z.object({
   path: z.string(), readAt: z.string().datetime(), duplicates: z.number().int().nonnegative(), items: z.array(itemSchema)
 });
 const cacheSchema = z.object({ version: z.literal(1), sources: z.object({
-  x: snapshotSchema.optional(), reddit: snapshotSchema.optional(), youtube: snapshotSchema.optional()
+  x: snapshotSchema.optional(), reddit: snapshotSchema.optional(), youtube: snapshotSchema.optional(), wechat: snapshotSchema.optional()
 }) });
 type Cache = z.infer<typeof cacheSchema>;
 
 // 限制读取大小，并对比前后元信息；尽量避免将编辑中的文件作为完整结果发布。
-async function readBounded(path: string, limit: number): Promise<string> {
+async function readBounded(path: string, limit: number, preserveBOM = false): Promise<string> {
   const file = await open(path, 'r');
   try {
     const before = await file.stat();
@@ -38,7 +38,7 @@ async function readBounded(path: string, limit: number): Promise<string> {
     if (before.mtimeMs !== after.mtimeMs || before.size !== after.size || length !== before.size)
       throw new Error('读取期间文件发生变化，本轮未更新。');
     // 非法编码直接报错，避免用替换字符生成错误链接或标题。
-    return new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, length));
+    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: preserveBOM }).decode(bytes.subarray(0, length));
   } finally { await file.close(); }
 }
 
@@ -48,7 +48,7 @@ async function readSource(path: string): Promise<string> {
   try {
     // 超时只结束本轮等待，不取消底层 I/O；迟到结果不会再写入列表或副本。
     return await Promise.race([
-      readBounded(path, 8 * 1024 * 1024),
+      readBounded(path, 8 * 1024 * 1024, true),
       new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(new Error('读取超时，请确认 iCloud 文件已下载到本机。')), 10_000); })
     ]);
   } finally { clearTimeout(timeout); }
@@ -155,6 +155,50 @@ export function createBookmarkLibrary(directory: string, loadSettings: () => Pro
     update(settings: Settings) {
       pending = pending.then(() => apply(settings));
       return pending;
+    },
+    setRead(input: SetReadInput): Promise<SetReadResult> {
+      const operation = pending.then(async () => {
+        const source = state.sources.find(source => source.items.some(item => item.id === input.id));
+        if (!source || source.state !== 'ready') throw new Error('仅原始笔记正常读取时可修改已读状态，不能写回缓存副本。');
+        const settings = await loadSettings();
+        if (!settings.ok) throw new Error(settings.message);
+        const config = settings.settings.sources[source.platform];
+        if (!config.enabled || config.path !== source.path) throw new Error('收藏来源配置已改变，请重新加载后重试。');
+        const before = await lstat(source.path);
+        if (!before.isFile()) throw new Error('只允许修改普通 Markdown 文件，不写入目录或符号链接。');
+        const original = await readSource(source.path);
+        const updated = updateBookmarkRead(original, source.platform, input.id, input.read);
+        if (Buffer.byteLength(updated) > 8 * 1024 * 1024) throw new Error('更新后的笔记超过 8 MB，未写入。');
+        const parsed = parseBookmarks(updated, source.platform);
+        if (updated !== original) {
+          const temporary = join(dirname(source.path), `.huan-read-${randomUUID()}.tmp`);
+          try {
+            const file = await open(temporary, 'wx', before.mode & 0o777);
+            try { await file.writeFile(updated, 'utf8'); await file.sync(); }
+            finally { await file.close(); }
+            // 乐观冲突检查：重读源文件后再原子替换；不把内存旧副本覆盖回 Obsidian。
+            const latest = await lstat(source.path);
+            if (latest.ino !== before.ino || latest.mtimeMs !== before.mtimeMs || await readSource(source.path) !== original)
+              throw new Error('写入前笔记已被其他操作修改，请重试。');
+            await rename(temporary, source.path);
+          } finally { await unlink(temporary).catch(() => undefined); }
+        }
+        const snapshot = { path: source.path, readAt: new Date().toISOString(), ...parsed };
+        const next: Cache = { version: 1, sources: { ...cache.sources, [source.platform]: snapshot } };
+        let warning = '';
+        try { await persist(next); cache = next; cacheWarning = ''; }
+        catch {
+          // 原笔记已经提交，副本失败不能谎报“未保存”或把界面回退成旧状态。
+          warning = '已读状态已写入 Obsidian，但本地副本更新失败，请检查磁盘权限。';
+          cacheWarning = warning;
+        }
+        state = { sources: state.sources.map(item => item.platform === source.platform ? { ...source, ...snapshot } : item), warning };
+        return state;
+      });
+      // 状态写入与设置刷新串行；失败不阻塞后续查询或重试。
+      pending = operation.catch(() => state);
+      return operation.then(library => ({ ok: true, library }), error => ({ ok: false,
+        message: error instanceof Error ? error.message : '已读状态保存失败，请重试。' }));
     }
   };
 }

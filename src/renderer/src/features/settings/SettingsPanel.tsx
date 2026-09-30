@@ -140,8 +140,8 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
           options={[{ value: 'sources', label: '收藏来源' }, { value: 'sessions', label: '登录与隐私' }, { value: 'ai', label: 'AI 伴读' }]} />
         <div className="settings-body">
           <div id="sources-panel" role="tabpanel" aria-labelledby="sources-tab" hidden={tab !== 'sources'}>
-          <p className="settings-description">选择 Obsidian 中各平台的 Markdown 文件。应用只读，不修改原始笔记。</p>
-          <p className="settings-note">启动时读取一次；保存后只重读发生变更的来源。各文件按原文顺序展示，不定时刷新。</p>
+          <p className="settings-description">选择 Obsidian 中各平台的 Markdown 文件。仅手动标记已读/未读时写回“是否已读”列，打开帖子不会改动笔记。</p>
+          <p className="settings-note">启动时读取一次；保存后只重读发生变更的来源。帖子按采集日期从新到旧展示，不定时刷新。</p>
           {loading ? <p role="status">正在读取设置…</p> : null}
           {!draft && !loading ? <Button onClick={() => void retry()}>重新读取设置</Button> : null}
           {draft ? <fieldset disabled={busy || confirmClose} className="settings-sources">

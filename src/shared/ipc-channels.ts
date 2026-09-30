@@ -14,7 +14,7 @@ export const IPC_CHANNELS = {
     chooseFile: 'huan-app:settings:choose-file'
   },
   // 收藏帖子模块
-  bookmarks: { get: 'huan-app:bookmarks:get' },
+  bookmarks: { get: 'huan-app:bookmarks:get', setRead: 'huan-app:bookmarks:set-read' },
   // 浏览器模块
   browser: {
     sessionModes: 'huan-app:browser:session-modes',

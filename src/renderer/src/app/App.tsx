@@ -1,6 +1,6 @@
 // 应用外壳：协调收藏选择、原页阅读与设置弹窗，不参与远程网页内部逻辑。
-import { useEffect, useState, type CSSProperties } from 'react';
-import type { BookmarkLibrary } from '@shared/contracts/bookmarks';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import type { Bookmark, BookmarkLibrary } from '@shared/contracts/bookmarks';
 import { PLATFORM_NAMES } from '@shared/contracts/settings';
 import { SettingsPanel } from '@renderer/features/settings/SettingsPanel';
 import { BookmarkList } from '@renderer/features/bookmarks/BookmarkList';
@@ -26,12 +26,16 @@ export function App() {
   const [aiCollapsed, setAICollapsed] = useState(false);
   const panels = usePanelWidths(collapsed, aiCollapsed);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [readBusy, setReadBusy] = useState(false);
+  const readPending = useRef(false);
+
   useEffect(() => {
     // 设置保存后重新查询主进程结果；主进程负责决定哪些来源需要真正重读。
     let cancelled = false;
     setLoading(true);
     setError('');
     void window.huanApp.bookmarks.get().then((value) => {
+      console.log('zhhhhhhh-value', value);
       if (cancelled) return;
       setLibrary(value);
       // 只清除已不存在的选择，不因数据更新自动切到第一条。
@@ -41,6 +45,7 @@ export function App() {
     // 忽略旧请求的迟到结果，避免覆盖设置更新后的列表或已卸载组件。
     return () => { cancelled = true; };
   }, [revision]);
+
   const selected = library?.sources.flatMap((source) => source.items).find((item) => item.id === selectedId);
   const enabled = library?.sources.some((source) => source.state !== 'disabled');
   const hasItems = library?.sources.some((source) => source.items.length > 0);
@@ -54,12 +59,22 @@ export function App() {
     setSettingsOpen(false);
     void window.huanApp.browser.suspend(false).catch(() => setError('无法恢复网页容器，请重启应用。'));
   }
+  async function toggleRead(item: Bookmark) {
+    if (readPending.current) return;
+    readPending.current = true; setReadBusy(true); setFeedback('');
+    try {
+      const result = await window.huanApp.bookmarks.setRead({ id: item.id, read: !item.read });
+      if (result.ok) setLibrary(result.library);
+      else setFeedback(result.message);
+    } catch { setFeedback('未能确认已读状态写入结果，请重新加载后核对。'); }
+    finally { readPending.current = false; setReadBusy(false); }
+  }
   return <div className="workspace-shell">
     <div className="titlebar">
       <IconButton icon={collapsed ? 'expand' : 'collapse'} label={collapsed ? '展开收藏列表' : '收起收藏列表'}
         aria-expanded={!collapsed} aria-controls="bookmark-sidebar" onClick={() => setCollapsed(value => !value)} />
       <div className="titlebar-actions">
-        <IconButton icon="settings" label="设置" onClick={() => void openSettings()} />
+        <IconButton icon="settings" label="设置" disabled={readBusy} onClick={() => void openSettings()} />
         <IconButton className="right-panel-toggle" icon={aiCollapsed ? 'expand' : 'collapse'} label={aiCollapsed ? '展开 AI 伴读' : '收起 AI 伴读'}
           aria-expanded={!aiCollapsed} aria-controls="ai-chat" onClick={() => setAICollapsed(value => !value)} />
       </div>
@@ -73,6 +88,7 @@ export function App() {
     <div ref={panels.workspace} className={`workspace${panels.dragging ? ' workspace-resizing' : ''}`}
       style={{ '--left-panel-width': `${panels.left}px`, '--right-panel-width': `${panels.right}px` } as CSSProperties}>
       <BookmarkList library={library} loading={loading} collapsed={collapsed} selectedId={selectedId}
+        readBusy={readBusy} onToggleRead={item => void toggleRead(item)}
         onSelect={(item) => setSelectedId(item.id)} />
       {!collapsed ? <PanelDivider label="调整收藏列表宽度" controls="bookmark-sidebar" value={panels.left}
         {...panels.limits.left} direction={1} onStart={x => panels.start('left', x)} onMove={panels.move}

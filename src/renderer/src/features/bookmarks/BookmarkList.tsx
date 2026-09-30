@@ -1,4 +1,4 @@
-// 收藏列表的纯界面层：按原顺序展示全部筛选结果，不自行读取文件。
+// 收藏列表的纯界面层：按采集日期倒序展示筛选结果，不自行读取文件。
 import { useState } from 'react';
 import type { Bookmark, BookmarkLibrary } from '@shared/contracts/bookmarks';
 import { PLATFORMS, PLATFORM_NAMES, type Platform } from '@shared/contracts/settings';
@@ -11,15 +11,21 @@ const platformOptions: { value: Platform | 'all'; label: string }[] = [
   { value: 'all', label: '全部平台' }, ...PLATFORMS.map((value) => ({ value, label: PLATFORM_NAMES[value] }))
 ];
 
-/**
- * 收藏列表的纯界面层：按原顺序展示全部筛选结果
- */
-export function BookmarkList({ library, loading, collapsed, selectedId, onSelect }: {
+function collectionDate(value: string): string {
+  const date = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return '';
+  const timestamp = Date.parse(date);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === date ? date : '';
+}
+
+export function BookmarkList({ library, loading, collapsed, selectedId, readBusy, onSelect, onToggleRead }: {
   library: BookmarkLibrary | undefined;
   loading: boolean;
   collapsed: boolean;
   selectedId: string | null;
+  readBusy: boolean;
   onSelect(bookmark: Bookmark): void;
+  onToggleRead(bookmark: Bookmark): void;
 }) {
   const [query, setQuery] = useState('');
   const [platform, setPlatform] = useState<Platform | 'all'>('all');
@@ -27,7 +33,10 @@ export function BookmarkList({ library, loading, collapsed, selectedId, onSelect
   const all = library?.sources.flatMap((source) => source.items) ?? [];
   const search = query.trim().toLocaleLowerCase();
   const filtered = all.filter((item) => (platform === 'all' || item.platform === platform)
-    && (!search || item.title.toLocaleLowerCase().includes(search) || item.url.toLocaleLowerCase().includes(search)));
+    && (!search || item.title.toLocaleLowerCase().includes(search) || item.url.toLocaleLowerCase().includes(search)))
+    .map((item) => ({ item, date: collectionDate(item.collectedAt) }))
+    // ISO 日期可直接比较；空日期排末尾，同日依靠稳定排序保留原顺序。
+    .sort((a, b) => b.date.localeCompare(a.date));
 
   return <aside id="bookmark-sidebar" className="bookmark-sidebar" hidden={collapsed} aria-label="收藏列表">
     {/* 折叠只隐藏内容，不卸载整个列表，保留搜索和筛选状态。 */}
@@ -47,8 +56,13 @@ export function BookmarkList({ library, loading, collapsed, selectedId, onSelect
           <Icon name="bookmarks" />
         </div> : null}
         {/* 标题与链接按纯文本渲染，不执行笔记中的 HTML。 */}
-        <ul className="bookmark-items">{filtered.map((item) => <li key={item.id}>
-          <BookmarkCard item={item} selected={selectedId === item.id} onSelect={onSelect} />
+        <ul className="bookmark-items">{filtered.map(({ item, date }, index) => <li key={item.id}>
+          {index === 0 || date !== filtered[index - 1].date ? <div className="bookmark-date-divider">
+            {date ? <time dateTime={date}>{date}</time> : <span>日期未知</span>}
+          </div> : null}
+          <BookmarkCard item={item} selected={selectedId === item.id} onSelect={onSelect}
+            readDisabled={readBusy || !library?.sources.some(source => source.platform === item.platform && source.state === 'ready')}
+            onToggleRead={onToggleRead} />
         </li>)}</ul>
       </div>
     </div>
