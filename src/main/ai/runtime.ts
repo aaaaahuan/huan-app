@@ -2,7 +2,10 @@ import { utilityProcess, type UtilityProcess } from 'electron';
 import { join } from 'node:path';
 import type { WorkerCommand, WorkerEvent } from '@shared/contracts/ai';
 
-export function createAIRuntime(onCrash: () => void) {
+export type NoteProposal = Extract<WorkerEvent, { type: 'note-proposal' }>;
+export type ApproveNote = (proposal: NoteProposal, signal: AbortSignal) => Promise<boolean>;
+
+export function createAIRuntime(onCrash: () => void, approveNote: ApproveNote) {
   let worker: UtilityProcess | undefined;
   let ready: Promise<void> | undefined;
   const pending = new Map<string, { receive(event: WorkerEvent): void; reject(error: Error): void }>();
@@ -41,13 +44,23 @@ export function createAIRuntime(onCrash: () => void) {
       await ensure();
       signal.throwIfAborted();
       return new Promise<void>((resolve, reject) => {
+        const approvals = new AbortController();
         // 取消只通知 Worker；收到 settled 或进程退出才结束等待，避免假装已停止。
         const cancel = () => worker?.postMessage({ type: 'cancel', instanceId: command.instanceId, requestId: command.requestId } satisfies WorkerCommand);
-        const finish = () => { pending.delete(command.requestId); signal.removeEventListener('abort', cancel); };
+        const finish = () => { approvals.abort(); pending.delete(command.requestId); signal.removeEventListener('abort', cancel); };
         pending.set(command.requestId, {
           receive(event) {
             // requestId 路由请求，instanceId 再隔离同一会话重开前后的消息。
             if (event.instanceId !== command.instanceId) return;
+            if (event.type === 'note-proposal') {
+              const child = worker;
+              void approveNote(event, AbortSignal.any([signal, approvals.signal])).catch(() => false).then(allowed => {
+                if (child !== worker || !pending.has(command.requestId)) return;
+                child?.postMessage({ type: 'note-approval', instanceId: command.instanceId, requestId: command.requestId,
+                  approvalId: event.approvalId, allowed: allowed && !signal.aborted } satisfies WorkerCommand);
+              });
+              return;
+            }
             onEvent(event);
             if (event.type === 'settled') { finish(); resolve(); }
           },

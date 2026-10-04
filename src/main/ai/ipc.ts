@@ -1,5 +1,6 @@
 import { dialog, ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron';
 import { z } from 'zod';
+import { realpath } from 'node:fs/promises';
 import { IPC_CHANNELS } from '@shared/ipc-channels';
 import { ownerSchema, sendSchema, type AIResult } from '@shared/contracts/ai';
 import type { PageContext } from '@shared/contracts/page-context';
@@ -12,6 +13,22 @@ export function registerAI(window: BrowserWindow, host: ReturnType<typeof create
 
   const chat = createConversations(settings.getKey, state => {
     if (!window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send(IPC_CHANNELS.ai.state, state);
+  }, async () => {
+    const result = await settings.load();
+    return result.ok && result.settings.notesPath ? realpath(result.settings.notesPath).catch(() => '') : '';
+  }, async (proposal, signal) => {
+    signal.throwIfAborted();
+    const result = await settings.load();
+    if (!result.ok || !result.settings.notesPath || await realpath(result.settings.notesPath) !== proposal.root) return false;
+    // 原生弹窗没有正文滚动区：只显示限长路径，不让笔记长度撑出屏幕。
+    const path = proposal.path.replace(/[\r\n\t]/g, ' ');
+    const displayPath = path.length > 160 ? `${path.slice(0, 64)}…${path.slice(-95)}` : path;
+    const answer = await dialog.showMessageBox(window, { type: 'question', signal, buttons: ['取消', '确认保存'], defaultId: 0, cancelId: 0,
+      message: proposal.operation === 'write' ? '允许在目标路径新建笔记？' : '允许修改目标路径的笔记？',
+      detail: `目标路径（相对于已授权笔记库）：\n${displayPath}${path.length > 160 ? '\n（路径过长，已省略中间部分）' : ''}` });
+    signal.throwIfAborted();
+    const latest = await settings.load();
+    return answer.response === 1 && latest.ok && latest.settings.notesPath === result.settings.notesPath;
   });
 
   // 发送时冻结快照；授权期间切页不改变本轮上下文，也不等待页面提取。

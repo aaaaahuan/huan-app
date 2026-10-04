@@ -1,9 +1,10 @@
 import { Button } from '@renderer/components/Button';
 import { Input } from '@renderer/components/Input';
 
-export function AICard({ hasKey, value, onChange, onTest, message }: {
+export function AICard({ hasKey, value, onChange, onTest, message, notesPath, onNotesPathChange }: {
   hasKey: boolean; value: string | null | undefined; onChange(value: string | null | undefined): void;
   onTest(): void; message: string;
+  notesPath: string; onNotesPathChange(value: string): void;
 }) {
   return <section className="source-card">
     <h3>DeepSeek Flash</h3>
@@ -19,5 +20,9 @@ export function AICard({ hasKey, value, onChange, onTest, message }: {
     </div>
     <p className="settings-note">点击下方“保存设置”后生效。Key 加密存储于本机，不写入笔记；聊天只保留到退出应用。连接测试需确认，可能产生少量费用。</p>
     {message ? <p className="session-feedback" role="status">{message}</p> : null}
+    <label className="source-path-label" htmlFor="notes-path">Obsidian 笔记库目录</label>
+    <Input id="notes-path" value={notesPath} placeholder="填写笔记库绝对路径；留空关闭文件工具"
+      onChange={event => onNotesPathChange(event.target.value)} />
+    <p className="settings-note">允许 AI 读取目录内 Markdown，内容会发送给 DeepSeek；每次写入均需确认。清空并保存后，下次提问不再提供文件工具；已经发送的内容仍在本次对话中。</p>
   </section>;
 }

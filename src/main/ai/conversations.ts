@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ConversationState, Owner, SendInput, ChatEntry } from '@shared/contracts/ai';
 import type { PageContext } from '@shared/contracts/page-context';
-import { createAIRuntime } from './runtime';
+import { createAIRuntime, type ApproveNote } from './runtime';
 
 // Run 只管理在途操作；结束后释放，模型历史由 Worker 内的 Agent 保存。
 type Run = { id: string; controller: AbortController; done?: Promise<void> };
@@ -10,7 +10,8 @@ type Conversation = { state: ConversationState; submitted: boolean; run?: Run;
 type ContextProvider = (signal: AbortSignal) => Promise<PageContext | undefined>;
 const message = (error: unknown) => error instanceof Error ? error.message : '操作失败，请重试。';
 
-export function createConversations(getKey: () => Promise<string>, publish: (state: ConversationState) => void) {
+export function createConversations(getKey: () => Promise<string>, publish: (state: ConversationState) => void,
+  getNotesPath: () => Promise<string>, approveNote: ApproveNote) {
   const sessions = new Map<string, Conversation>();
   const running = new Set<Run>();
   let revision = 0;
@@ -21,7 +22,8 @@ export function createConversations(getKey: () => Promise<string>, publish: (sta
       owner.state.error = 'AI 进程已退出。聊天仍可查看，请重新开始后继续。';
       notify(owner);
     }
-  });
+  }, approveNote);
+
   function notify(owner: Conversation, debounce = false) {
     if (sessions.get(owner.state.key) !== owner) return;
     if (debounce) {
@@ -32,17 +34,20 @@ export function createConversations(getKey: () => Promise<string>, publish: (sta
     owner.state.revision = ++revision;
     publish(owner.state);
   }
+
   function create(key: string) {
     const owner: Conversation = { submitted: false, requests: new Map(), broken: false, draftRevision: 0,
       state: { key, instanceId: randomUUID(), revision: ++revision, phase: 'idle', draft: '', entries: [], error: '' } };
     sessions.set(key, owner);
     return owner;
   }
+
   function requireOwner(input: Owner) {
     const owner = sessions.get(input.key);
     if (!owner || owner.state.instanceId !== input.instanceId) throw new Error('对话已重新开始，请刷新当前状态。');
     return owner;
   }
+
   function stopRun(owner: Conversation, run: Run) {
     run.controller.abort(); owner.state.phase = 'stopping'; notify(owner);
     const timer = setTimeout(() => {
@@ -50,6 +55,7 @@ export function createConversations(getKey: () => Promise<string>, publish: (sta
     }, 10000);
     void run.done?.finally(() => clearTimeout(timer));
   }
+  
   return {
     get(key: string) {
       if (!sessions.has(key) && sessions.size >= 64) throw new Error('临时会话已达上限，请退出应用后重试。');
@@ -77,6 +83,7 @@ export function createConversations(getKey: () => Promise<string>, publish: (sta
       let entry: ChatEntry | undefined;
       run.done = (async () => {
         const key = await getKey();
+        const notesPath = await getNotesPath();
         run.controller.signal.throwIfAborted();
         let context: PageContext | undefined;
         let contextNotice: string | undefined;
@@ -86,14 +93,14 @@ export function createConversations(getKey: () => Promise<string>, publish: (sta
           contextNotice = `未提供页面上下文，已继续发送问题：${message(error)}`;
         }
         run.controller.signal.throwIfAborted();
-        await runtime.start({ type: 'start', instanceId: owner.state.instanceId, requestId: run.id, key, text: input.text, context },
+        await runtime.start({ type: 'start', instanceId: owner.state.instanceId, requestId: run.id, key, text: input.text, context, notesPath },
           run.controller.signal, event => {
             if (sessions.get(input.key) !== owner || owner.run !== run) return;
             if (event.type === 'accepted') {
               owner.submitted = true;
               const last = owner.state.entries.at(-1);
-              if (last?.status === 'failed' && last.question === input.text) owner.state.entries.pop();
-              entry = { id: run.id, question: input.text, answer: '', status: 'generating', sources: [], contextNotice };
+              if (last?.status === 'failed' && !last.writes.length && last.question === input.text) owner.state.entries.pop();
+              entry = { id: run.id, question: input.text, answer: '', status: 'generating', sources: [], writes: [], contextNotice };
               owner.state.entries.push(entry);
               if (owner.draftRevision === draftRevision) owner.state.draft = '';
               if (!run.controller.signal.aborted) owner.state.phase = 'generating';
@@ -101,6 +108,11 @@ export function createConversations(getKey: () => Promise<string>, publish: (sta
               entry.answer = event.reset ? event.text : entry.answer + event.text;
             } else if (event.type === 'page-read' && entry) {
               if (!entry.sources.some(source => source.id === event.source.id)) entry.sources.push(event.source);
+            } else if (event.type === 'note-written' && entry) {
+              entry.writes.push(event.write);
+            } else if (event.type === 'tools-ready' && entry) {
+              entry.tools = event.tools;
+              entry.toolError = event.error;
             } else if (event.type === 'settled') {
               if (entry) { entry.answer = event.text; entry.status = event.status; entry.error = event.error; }
               if (event.error) owner.state.error = event.error;

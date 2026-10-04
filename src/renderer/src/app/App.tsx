@@ -35,7 +35,6 @@ export function App() {
     setLoading(true);
     setError('');
     void window.huanApp.bookmarks.get().then((value) => {
-      console.log('zhhhhhhh-value', value);
       if (cancelled) return;
       setLibrary(value);
       // 只清除已不存在的选择，不因数据更新自动切到第一条。
@@ -93,7 +92,7 @@ export function App() {
       {!collapsed ? <PanelDivider label="调整收藏列表宽度" controls="bookmark-sidebar" value={panels.left}
         {...panels.limits.left} direction={1} onStart={x => panels.start('left', x)} onMove={panels.move}
         onEnd={panels.end} onChange={value => panels.change('left', value)} /> : null}
-      <Reader selected={selected} suspended={settingsOpen || panels.dragging} layoutKey={`${collapsed}:${aiCollapsed}:${panels.left}:${panels.right}:${feedback}:${error}:${library?.warning}:${failures.length}`}>
+      <Reader selected={selected} suspended={settingsOpen} layoutKey={`${collapsed}:${aiCollapsed}:${panels.left}:${panels.right}:${feedback}:${error}:${library?.warning}:${failures.length}`}>
         <ReadingPlaceholder loading={loading} enabled={!!enabled} hasItems={!!hasItems}
           failed={!!(error || failures.length || library?.warning)} onConfigure={() => void openSettings()} />
       </Reader>

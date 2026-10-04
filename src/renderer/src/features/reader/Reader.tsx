@@ -47,9 +47,12 @@ export function Reader({ selected, suspended, layoutKey, children }: {
     return () => {
       observer.disconnect();
       window.removeEventListener('resize', report);
-      void window.huanApp.browser.layout({ x: 0, y: 0, width: 0, height: 0, visible: false }).catch(() => undefined);
     };
   }, [id, suspended, layoutKey, current?.notice, current?.message, error]);
+  // 仅卸载时隐藏原生视图；尺寸变化的 effect 清理不能导致网页反复闪白。
+  useLayoutEffect(() => () => {
+    void window.huanApp.browser.layout({ x: 0, y: 0, width: 0, height: 0, visible: false }).catch(() => undefined);
+  }, []);
   function navigate(action: ReaderAction) {
     if (!id) return;
     setError('');

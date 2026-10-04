@@ -59,6 +59,12 @@ export function createSettingsStore(directory: string) {
         } catch { fields[platform] = '文件不存在或不可读，请重新选择，或停用此来源。'; }
       }
       if (Object.keys(fields).length) return { ok: false, message: '请修正标出的来源后再保存。', fields };
+      if (parsed.data.notesPath) {
+        try {
+          if (!isAbsolute(parsed.data.notesPath) || !(await stat(parsed.data.notesPath)).isDirectory()) throw new Error('Invalid directory');
+          await access(parsed.data.notesPath, constants.R_OK | constants.W_OK);
+        } catch { return { ok: false, message: '笔记库必须是本机可读写目录的绝对路径。' }; }
+      }
       const current = await load();
       // 这是乐观冲突检查，不是对任意外部编辑器加文件锁。
       if (!current.ok) return current;

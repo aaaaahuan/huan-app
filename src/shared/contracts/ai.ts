@@ -7,10 +7,14 @@ export const sendSchema = ownerSchema.extend({ requestId: z.uuid(), text: z.stri
 export type Owner = z.infer<typeof ownerSchema>;
 export type SendInput = z.infer<typeof sendSchema>;
 export type AIResult<T = undefined> = { ok: true; value: T } | { ok: false; message: string };
+export type NoteWrite = { path: string; operation: 'write' | 'edit' };
 export interface ChatEntry {
   id: string; question: string; answer: string;
   status: 'generating' | 'complete' | 'stopped' | 'failed' | 'truncated';
   error?: string; sources: PageSource[]; contextNotice?: string;
+  writes: NoteWrite[];
+  tools?: string[];
+  toolError?: string;
 }
 export interface ConversationState extends Owner {
   revision: number; phase: 'idle' | 'preparing' | 'generating' | 'stopping' | 'blocked';
@@ -27,14 +31,18 @@ export interface AIAPI {
   onState(listener: (state: ConversationState) => void): () => void;
 }
 
-// Worker 协议不包含窗口句柄、文件路径或任意工具调用。
+// 文件工具只获得已授权的笔记根目录；写入提案交回主进程确认。
 export type WorkerCommand =
-  | { type: 'start'; instanceId: string; requestId: string; key: string; text: string; context?: PageContext }
+  | { type: 'start'; instanceId: string; requestId: string; key: string; text: string; context?: PageContext; notesPath: string }
+  | { type: 'note-approval'; instanceId: string; requestId: string; approvalId: string; allowed: boolean }
   | { type: 'cancel'; instanceId: string; requestId: string }
   | { type: 'dispose'; instanceId: string };
 export type WorkerEvent = { instanceId: string; requestId: string } & (
   | { type: 'delta'; text: string; reset?: boolean }
   | { type: 'page-read'; source: PageSource }
+  | { type: 'note-proposal'; approvalId: string; root: string; path: string; content: string; operation: 'write' | 'edit' }
+  | { type: 'note-written'; write: NoteWrite }
+  | { type: 'tools-ready'; tools: string[]; error?: string }
   | { type: 'accepted' }
   | { type: 'settled'; status: ChatEntry['status']; text: string; error?: string }
 );

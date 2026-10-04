@@ -16,6 +16,7 @@ export const settingsSchema = z.object({
     wechat: sourceSchema.default({ enabled: false, path: '' }) }).strict(),
   // 兼容 A1-A4 的配置；缺少会话设置时沿用内存模式，不自动持久化登录态。
   sessions: sessionModesSchema.default(defaultSessionModes),
+  notesPath: z.string().trim().max(4096).default(''),
   ai: z.object({ credentialId: z.uuid().nullable(), consentVersion: z.number().int().min(0).max(2) })
     .default({ credentialId: null, consentVersion: 0 })
 }).strict();
@@ -26,7 +27,7 @@ export function defaultSettings(): Settings {
   return { version: 1, sources: {
     x: { enabled: false, path: '' }, reddit: { enabled: false, path: '' },
     youtube: { enabled: false, path: '' }, wechat: { enabled: false, path: '' }
-  }, sessions: defaultSessionModes(), ai: { credentialId: null, consentVersion: 0 } };
+  }, sessions: defaultSessionModes(), notesPath: '', ai: { credentialId: null, consentVersion: 0 } };
 }
 // revision 为磁盘内容摘要；null 表示尚无配置文件，不是配置读取失败。
 export type SettingsResult =

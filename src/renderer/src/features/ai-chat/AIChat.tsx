@@ -130,12 +130,15 @@ export function AIChat({ settingsRevision, collapsed, onConfigure }: {
       {current?.entries.map(entry => <article className="ai-turn" key={entry.id}>
         <p className="ai-question">{entry.question}</p>
         {entry.contextNotice ? <p className="ai-hint">{entry.contextNotice}</p> : null}
+        {entry.tools ? <p className="ai-hint">本轮工具：{entry.tools.join(' / ')}</p> : null}
+        {entry.toolError ? <p className="ai-error">{entry.toolError}</p> : null}
         {entry.sources.map(source => <details className="ai-material" key={source.id}>
           <summary>已读取：{source.title || '页面正文'}</summary>
           <p>{source.url}</p>
           <p>读取了缓存正文片段，不包含图片或视频内容。{source.truncated ? '缓存正文已截断。' : ''}</p>
         </details>)}
         <div className="ai-answer">{entry.answer || (entry.status === 'generating' ? '正在等待回复…' : '')}</div>
+        {entry.writes.map((write, index) => <p className="ai-hint" key={index}>已保存到本机：{write.path}</p>)}
         {statuses[entry.status] ? <small>{statuses[entry.status]}</small> : null}
         {entry.error ? <p className="ai-error">{entry.error}</p> : null}
       </article>)}

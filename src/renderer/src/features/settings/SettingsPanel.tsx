@@ -164,6 +164,7 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
           <div role="tabpanel" id="ai-panel" aria-labelledby="ai-tab" hidden={tab !== 'ai'}>
             {draft ? <fieldset className="settings-sources" disabled={busy || confirmClose}>
               <AICard hasKey={!!draft.ai.credentialId} value={keyChange} onChange={setKeyChange}
+                notesPath={draft.notesPath} onNotesPathChange={notesPath => setDraft({ ...draft, notesPath })}
                 onTest={() => void testKey()} message={aiMessage} />
             </fieldset> : <p>正在读取设置…</p>}
           </div>

@@ -2,7 +2,7 @@
 import { IPC_CHANNELS } from '@shared/ipc-channels';
 import { dialog, ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron';
 import type { createSettingsStore } from './store';
-import type { Settings } from '@shared/contracts/settings';
+import { settingsSchema, type Settings } from '@shared/contracts/settings';
 
 export function registerSettings(window: BrowserWindow, store: ReturnType<typeof createSettingsStore>,
   assertTrusted: (event: IpcMainInvokeEvent) => void, onSaved: (settings: Settings) => Promise<unknown>) {
@@ -13,6 +13,13 @@ export function registerSettings(window: BrowserWindow, store: ReturnType<typeof
   });
   ipcMain.handle(IPC_CHANNELS.settings.save, async (event, input: unknown, revision: unknown, keyChange: unknown) => {
     assertTrusted(event);
+    const parsed = settingsSchema.safeParse(input);
+    const current = await store.load();
+    if (parsed.success && parsed.data.notesPath && current.ok && parsed.data.notesPath !== current.settings.notesPath) {
+      const answer = await dialog.showMessageBox(window, { type: 'question', buttons: ['取消', '允许访问'], defaultId: 0, cancelId: 0,
+        message: '允许 AI 访问此笔记目录？', detail: `${parsed.data.notesPath}\n\nAI 可读取目录内 Markdown，读取内容会发送到 DeepSeek。每次写入或修改仍需单独确认。不开启命令执行，不允许访问目录外文件。` });
+      if (answer.response !== 1) return { ok: false, message: '未授权笔记目录，设置未保存。' };
+    }
     const result = await store.save(input, revision, keyChange);
     // 等待受影响来源处理完再返回，使界面重新查询时拿到本次保存对应的列表。
     if (result.ok) await onSaved(result.settings);
