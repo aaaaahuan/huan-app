@@ -16,7 +16,7 @@ const snapshotSchema = z.object({
   path: z.string(), readAt: z.string().datetime(), duplicates: z.number().int().nonnegative(), items: z.array(itemSchema)
 });
 const cacheSchema = z.object({ version: z.literal(1), sources: z.object({
-  x: snapshotSchema.optional(), reddit: snapshotSchema.optional(), youtube: snapshotSchema.optional(), wechat: snapshotSchema.optional()
+  x: snapshotSchema.optional(), reddit: snapshotSchema.optional(), youtube: snapshotSchema.optional(), wechat: snapshotSchema.optional(), other: snapshotSchema.optional()
 }) });
 type Cache = z.infer<typeof cacheSchema>;
 

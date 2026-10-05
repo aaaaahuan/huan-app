@@ -9,7 +9,7 @@ import type { createSettingsStore } from '@main/settings/store';
 import { createConversations } from './conversations';
 
 export function registerAI(window: BrowserWindow, host: ReturnType<typeof createPageHost>, settings: ReturnType<typeof createSettingsStore>,
-  assertTrusted: (event: IpcMainInvokeEvent) => void) {
+  assertTrusted: (event: IpcMainInvokeEvent) => void, subtitleSnapshot: () => PageContext['subtitles']) {
 
   const chat = createConversations(settings.getKey, state => {
     if (!window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send(IPC_CHANNELS.ai.state, state);
@@ -31,22 +31,27 @@ export function registerAI(window: BrowserWindow, host: ReturnType<typeof create
     return answer.response === 1 && latest.ok && latest.settings.notesPath === result.settings.notesPath;
   });
 
-  // 发送时冻结快照；授权期间切页不改变本轮上下文，也不等待页面提取。
+  // 授权期间切页不改变已冻结的本轮上下文。
   const pageContext = (snapshot: PageContext) => async (signal: AbortSignal) => {
-    if (!snapshot.pages.length) return undefined;
+    if (!snapshot.pages.length && !snapshot.subtitles) return undefined;
     signal.throwIfAborted();
     const result = await settings.load();
-    if (!result.ok) throw new Error(result.message);
-    if (result.settings.ai.consentVersion !== 2) {
-      const answer = await dialog.showMessageBox(window, { type: 'question', signal, buttons: ['不附带页面', '允许附带'],
-        defaultId: 0, cancelId: 0, message: '允许向 DeepSeek 发送阅读材料？',
-        detail: '将向 DeepSeek 提供本次应用运行中缓存的页面目录，并允许 AI 按需读取这些页面的正文。可能计费和留存；不允许时仍可仅发送问题。' });
-      if (answer.response !== 1) throw new Error('未授权发送页面材料。');
-      signal.throwIfAborted();
-      await settings.allowMaterials();
+    if (!result.ok) return undefined;
+    let consent = result.settings.ai.consentVersion;
+    const required = snapshot.subtitles ? 3 : 2;
+    if (consent < required) {
+      try {
+        const answer = await dialog.showMessageBox(window, { type: 'question', signal, buttons: ['不附带新材料', '允许附带'],
+          defaultId: 0, cancelId: 0, message: '允许向 DeepSeek 发送阅读材料？',
+          detail: '将向 DeepSeek 提供本轮页面目录、视频信息及提问时播放位置，并允许 AI 按需读取已有页面正文和完整字幕。可能计费和留存；拒绝时保留此前已授权的文章材料，普通聊天继续。不会自动获取字幕或发送音频。' });
+        signal.throwIfAborted();
+        if (answer.response === 1) { await settings.allowMaterials(required); consent = Math.max(consent, required); }
+      } catch { /* 弹窗或保存失败按原授权过滤；停止仍由下方 signal 检查传播。 */ }
     }
     signal.throwIfAborted();
-    return snapshot;
+    const filtered: PageContext = { pages: consent >= 2 ? snapshot.pages : [],
+      currentPageId: consent >= 2 ? snapshot.currentPageId : undefined, subtitles: consent >= 3 ? snapshot.subtitles : undefined };
+    return filtered.pages.length || filtered.subtitles ? filtered : undefined;
   };
   async function result<T>(operation: () => T | Promise<T>): Promise<AIResult<T>> {
     try { return { ok: true, value: await operation() }; }
@@ -67,7 +72,15 @@ export function registerAI(window: BrowserWindow, host: ReturnType<typeof create
   ipcMain.handle(IPC_CHANNELS.ai.send, (event, input: unknown) => {
     assertTrusted(event);
     return result(() => {
-      return chat.send(sendSchema.parse(input), pageContext(host.snapshot()));
+      const request = sendSchema.parse(input);
+      const subtitles = host.isSuspended() ? undefined : subtitleSnapshot();
+      const capture = host.freezeSnapshot();
+      return chat.send(request, async signal => {
+        const snapshot: PageContext = structuredClone(await capture(signal));
+        signal.throwIfAborted();
+        snapshot.subtitles = subtitles;
+        return pageContext(snapshot)(signal);
+      });
     });
   });
   let testing = false;

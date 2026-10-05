@@ -2,22 +2,25 @@
 import { z } from 'zod';
 
 // 顺序同时用于设置展示与跨平台收藏拼接；不改变各来源内部的行顺序。
-export const PLATFORMS = ['x', 'reddit', 'youtube', 'wechat'] as const;
-export const PLATFORM_NAMES = { x: 'X', reddit: 'Reddit', youtube: 'YouTube', wechat: '微信文章' };
+export const PLATFORMS = ['x', 'reddit', 'youtube', 'wechat', 'other'] as const;
+export const PLATFORM_NAMES = { x: 'X', reddit: 'Reddit', youtube: 'YouTube', wechat: '微信文章', other: 'Other' };
 const sourceSchema = z.object({ enabled: z.boolean(), path: z.string().max(4096) }).strict();
 export const sessionModeSchema = z.enum(['memory', 'persistent']);
-export const sessionModesSchema = z.object({ x: sessionModeSchema, reddit: sessionModeSchema, youtube: sessionModeSchema, wechat: sessionModeSchema.default('memory') }).strict();
+export const sessionModesSchema = z.object({ x: sessionModeSchema, reddit: sessionModeSchema, youtube: sessionModeSchema,
+  wechat: sessionModeSchema.default('memory'), other: sessionModeSchema.default('memory') }).strict();
 export type SessionModes = z.infer<typeof sessionModesSchema>;
 export type SessionMode = z.infer<typeof sessionModeSchema>;
-export const defaultSessionModes = (): SessionModes => ({ x: 'memory', reddit: 'memory', youtube: 'memory', wechat: 'memory' });
+export const defaultSessionModes = (): SessionModes => ({ x: 'memory', reddit: 'memory', youtube: 'memory', wechat: 'memory', other: 'memory' });
 export const settingsSchema = z.object({
   version: z.literal(1),
   sources: z.object({ x: sourceSchema, reddit: sourceSchema, youtube: sourceSchema,
-    wechat: sourceSchema.default({ enabled: false, path: '' }) }).strict(),
+    wechat: sourceSchema.default({ enabled: false, path: '' }), other: sourceSchema.default({ enabled: false, path: '' }) }).strict(),
   // 兼容 A1-A4 的配置；缺少会话设置时沿用内存模式，不自动持久化登录态。
   sessions: sessionModesSchema.default(defaultSessionModes),
   notesPath: z.string().trim().max(4096).default(''),
-  ai: z.object({ credentialId: z.uuid().nullable(), consentVersion: z.number().int().min(0).max(2) })
+  ai: z.object({ credentialId: z.uuid().nullable(), consentVersion: z.number().int().min(0).max(3) })
+    .default({ credentialId: null, consentVersion: 0 }),
+  subtitles: z.object({ credentialId: z.uuid().nullable(), consentVersion: z.number().int().min(0).max(1) })
     .default({ credentialId: null, consentVersion: 0 })
 }).strict();
 export type Settings = z.infer<typeof settingsSchema>;
@@ -26,8 +29,9 @@ export type Platform = typeof PLATFORMS[number];
 export function defaultSettings(): Settings {
   return { version: 1, sources: {
     x: { enabled: false, path: '' }, reddit: { enabled: false, path: '' },
-    youtube: { enabled: false, path: '' }, wechat: { enabled: false, path: '' }
-  }, sessions: defaultSessionModes(), notesPath: '', ai: { credentialId: null, consentVersion: 0 } };
+    youtube: { enabled: false, path: '' }, wechat: { enabled: false, path: '' }, other: { enabled: false, path: '' }
+  }, sessions: defaultSessionModes(), notesPath: '', ai: { credentialId: null, consentVersion: 0 },
+  subtitles: { credentialId: null, consentVersion: 0 } };
 }
 // revision 为磁盘内容摘要；null 表示尚无配置文件，不是配置读取失败。
 export type SettingsResult =
@@ -35,6 +39,17 @@ export type SettingsResult =
   | { ok: false; message: string; fields?: Partial<Record<Platform, string>> };
 export interface SettingsAPI {
   load(): Promise<SettingsResult>;
-  save(settings: Settings, revision: string | null, keyChange?: string | null): Promise<SettingsResult>;
+  save(settings: Settings, revision: string | null, keyChange?: string | null, subtitleKeyChange?: string | null): Promise<SettingsResult>;
   chooseFile(): Promise<{ ok: true; path: string | null } | { ok: false; message: string }>;
+  subtitleUsage(): Promise<SubtitleUsage>;
+  revealSubtitleKey(credentialId: string): Promise<SubtitleKeyResult>;
+  openSubtitleAccount(): Promise<void>;
 }
+export type SubtitleKeyResult =
+  | { ok: true; credentialId: string; key: string }
+  | { ok: false; message: string };
+export type SubtitleUsage = {
+  credentialId: string | null; phase: 'unavailable' | 'ready' | 'error'; stale?: boolean; message?: string;
+  data?: { updatedAt: number; credits: number; reservedCredits: number; monthlyAllowance: number;
+    resetsAt?: number; rolling30CreditsUsed?: number };
+};

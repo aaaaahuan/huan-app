@@ -40,6 +40,7 @@ export type WorkerCommand =
 export type WorkerEvent = { instanceId: string; requestId: string } & (
   | { type: 'delta'; text: string; reset?: boolean }
   | { type: 'page-read'; source: PageSource }
+  | { type: 'subtitles-read'; source: PageSource }
   | { type: 'note-proposal'; approvalId: string; root: string; path: string; content: string; operation: 'write' | 'edit' }
   | { type: 'note-written'; write: NoteWrite }
   | { type: 'tools-ready'; tools: string[]; error?: string }

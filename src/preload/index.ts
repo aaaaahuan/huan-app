@@ -8,9 +8,22 @@ const api: HuanAppAPI = {
   app: Object.freeze({ getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.app.status) }),
   settings: Object.freeze({
     load: () => ipcRenderer.invoke(IPC_CHANNELS.settings.load),
-    save: (settings, revision, keyChange) => ipcRenderer.invoke(IPC_CHANNELS.settings.save, settings, revision, keyChange),
+    save: (settings, revision, keyChange, subtitleKeyChange) => ipcRenderer.invoke(IPC_CHANNELS.settings.save, settings, revision, keyChange, subtitleKeyChange),
+    subtitleUsage: () => ipcRenderer.invoke(IPC_CHANNELS.settings.subtitleUsage),
+    revealSubtitleKey: credentialId => ipcRenderer.invoke(IPC_CHANNELS.settings.revealSubtitleKey, credentialId),
+    openSubtitleAccount: () => ipcRenderer.invoke(IPC_CHANNELS.settings.openSubtitleAccount),
     chooseFile: () => ipcRenderer.invoke(IPC_CHANNELS.settings.chooseFile)
   } satisfies HuanAppAPI['settings']),
+  subtitles: Object.freeze({
+    get: () => ipcRenderer.invoke(IPC_CHANNELS.subtitles.get),
+    ensure: input => ipcRenderer.invoke(IPC_CHANNELS.subtitles.ensure, input),
+    seek: input => ipcRenderer.invoke(IPC_CHANNELS.subtitles.seek, input),
+    onState: listener => {
+      const handler = (_event: Electron.IpcRendererEvent, state: Parameters<typeof listener>[0]) => listener(state);
+      ipcRenderer.on(IPC_CHANNELS.subtitles.state, handler);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.subtitles.state, handler);
+    }
+  } satisfies HuanAppAPI['subtitles']),
   bookmarks: Object.freeze({ get: () => ipcRenderer.invoke(IPC_CHANNELS.bookmarks.get),
     setRead: input => ipcRenderer.invoke(IPC_CHANNELS.bookmarks.setRead, input) } satisfies HuanAppAPI['bookmarks']),
   ai: Object.freeze({

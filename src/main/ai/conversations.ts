@@ -106,8 +106,8 @@ export function createConversations(getKey: () => Promise<string>, publish: (sta
               if (!run.controller.signal.aborted) owner.state.phase = 'generating';
             } else if (event.type === 'delta' && entry) {
               entry.answer = event.reset ? event.text : entry.answer + event.text;
-            } else if (event.type === 'page-read' && entry) {
-              if (!entry.sources.some(source => source.id === event.source.id)) entry.sources.push(event.source);
+            } else if ((event.type === 'page-read' || event.type === 'subtitles-read') && entry) {
+              if (!entry.sources.some(source => source.id === event.source.id && source.kind === event.source.kind)) entry.sources.push(event.source);
             } else if (event.type === 'note-written' && entry) {
               entry.writes.push(event.write);
             } else if (event.type === 'tools-ready' && entry) {

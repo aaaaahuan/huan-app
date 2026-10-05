@@ -1,11 +1,12 @@
 // 管理唯一的原页容器；切换收藏销毁旧容器，旧事件不得回填新收藏状态。
 import { IPC_CHANNELS } from '@shared/ipc-channels';
-import { WebContentsView, type BrowserWindow } from 'electron';
+import { WebContentsView, type BrowserWindow, type WebContents } from 'electron';
 import type { BookmarkLibrary, Bookmark } from '@shared/contracts/bookmarks';
 import type { ReaderAction, ReaderLayout, ReaderState } from '@shared/contracts/browser';
 import { validBookmarkUrl } from '@main/bookmarks/markdown';
 import type { createPlatformSessions } from './sessions';
 import type { Platform } from '@shared/contracts/settings';
+import type { PageContent, PageContext } from '@shared/contracts/page-context';
 import { extractReadablePage } from './readability';
 import { createPageStore } from './page-store';
 
@@ -22,6 +23,9 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
   let state: ReaderState = { revision: 0, bookmarkId: null, phase: 'empty', url: '', title: '',
     message: '', notice: '', canGoBack: false, canGoForward: false, contentStatus: 'empty' };
   const configured = new Set<string>();
+  const observers = new Set<(contents: WebContents | undefined) => void>();
+  const sessionObservers = new Set<(platform: Platform) => void>();
+  function notifyContents() { for (const listener of observers) listener(view?.webContents); }
 
   function applyLayout() {
     if (!view || window.isDestroyed()) return;
@@ -54,6 +58,7 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
     clearDeadline();
     const old = view;
     view = undefined;
+    notifyContents();
     if (!old) return;
     if (!window.isDestroyed()) window.contentView.removeChildView(old);
     // 切换收藏不能被远程页面的 beforeunload 留住，也不能保留隐藏的媒体进程。
@@ -127,7 +132,7 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
         if (!isCurrent()) return;
         attempts++;
         try {
-          const content = await extractReadablePage(contents);
+          const content = await extractReadablePage(contents, item.platform === 'other');
           if (!isCurrent()) return;
           if (content) { pages.complete(pageId, content); publish(); return; }
           if (attempts < 4) extractionTimer = setTimeout(() => void attempt(), 1500);
@@ -163,11 +168,12 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
     });
     contents.on('did-start-navigation', (event) => {
       if (!active() || !event.isMainFrame) return;
-      if (event.isSameDocument && event.url.split('#')[0] === navigationUrl.split('#')[0]) return;
+      // Other 可能用 hash 路由切换文章，不能将所有片段导航当作正文不变的锚点。
+      if (item.platform !== 'other' && event.isSameDocument && event.url.split('#')[0] === navigationUrl.split('#')[0]) return;
       navigationEpoch++;
       cancelExtraction();
       navigationUrl = event.url;
-      pages.begin(event.url);
+      pages.begin(event.url, item.platform);
       publish();
       if (event.isSameDocument) return;
       publish({ phase: 'loading', url: event.url, message: '', notice: '' });
@@ -181,7 +187,7 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
     contents.on('did-navigate', (_event, url, responseCode) => {
       if (!active()) return;
       // 重定向后的真实页面拥有独立快照，不沿用重定向前的身份。
-      if (navigationUrl !== url) { navigationUrl = url; pages.begin(url); }
+      if (navigationUrl !== url) { navigationUrl = url; pages.begin(url, item.platform); }
       // HTTP 错误页仍展示原站内容，避免隐藏网站自己的登录或验证提示。
       publish({ url, notice: responseCode >= 400 ? `原站返回 HTTP ${responseCode}，正在展示网站响应。` : '' });
     });
@@ -217,12 +223,14 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
       if (view !== target) return;
       clearDeadline();
       view = undefined;
+      notifyContents();
       pages.clearCurrent();
       if (!window.isDestroyed()) window.contentView.removeChildView(target);
       publish({ phase: 'error', message: '页面已关闭，请重新加载。' });
     });
     // 不让站点自行切换全屏，避免隐藏宿主设置和导航控制。
     contents.on('enter-html-full-screen', () => { if (active()) contents.executeJavaScript('document.exitFullscreen?.()').catch(() => undefined); });
+    notifyContents();
     load(target, item.url);
   }
 
@@ -282,10 +290,42 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
 
   return {
     get: () => state, select, action,
-    snapshot: () => suspended ? { pages: [] } : pages.snapshot(),
+    isSuspended: () => suspended,
+    observeContents(listener: (contents: WebContents | undefined) => void) {
+      observers.add(listener); listener(view?.webContents);
+      return () => { observers.delete(listener); };
+    },
+    observeSessionClear(listener: (platform: Platform) => void) {
+      sessionObservers.add(listener);
+      return () => { sessionObservers.delete(listener); };
+    },
+    freezeSnapshot() {
+      const context: PageContext = suspended ? { pages: [] } : pages.snapshot();
+      const page = pages.current();
+      const target = view;
+      const epoch = navigationEpoch;
+      const refresh = !suspended && bookmark?.platform === 'other' && target && page?.status === 'ready';
+      // 同步冻结目录与身份，刷新等待属于 AI run，停止和退出能取消；切页后不混入新正文。
+      return async (signal: AbortSignal) => {
+        signal.throwIfAborted();
+        if (!refresh || !target || !page) return context;
+        let content: PageContent | null = null;
+        const valid = () => view === target && navigationEpoch === epoch && pages.current()?.id === page.id && !suspended;
+        if (valid()) {
+          try { content = await extractReadablePage(target.webContents, true, signal); }
+          catch { signal.throwIfAborted(); }
+        }
+        signal.throwIfAborted();
+        context.pages = context.pages.map(snapshot => snapshot.id !== page.id ? snapshot : valid() && content
+          ? { ...snapshot, ...content, status: 'ready', capturedAt: Date.now() }
+          : { ...snapshot, text: '', status: 'unavailable' });
+        return context;
+      };
+    },
     sessionModes: sessions.modes,
     async clearSession(platform: Platform) {
       pages.clear();
+      for (const listener of sessionObservers) listener(platform);
       const affected = bookmark?.platform === platform;
       // 先销毁当前网页，避免网页脚本在清理期间重新写入 Cookie 或存储。
       if (affected) {

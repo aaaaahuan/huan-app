@@ -31,6 +31,8 @@
 .discard-prompt p{margin:0 0 12px}
 .settings-feedback{font-size:12px;color:#496f56;margin:12px 0}
 .settings-tabs{display:flex;gap:6px;padding:14px 28px 0}
+.settings-tabs{flex-wrap:wrap}
+.subtitle-usage{margin-top:20px;padding-top:18px;border-top:1px solid #e0e8df}
 .settings-tabs button{border-color:transparent;background:transparent;color:#819080;padding:9px 15px}
 .settings-tabs button[aria-selected=true]{background:#e7efe4;color:#375b42;border-color:#d3e0cd}
 .settings-body [hidden]{display:none}

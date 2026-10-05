@@ -29,7 +29,8 @@ export function createSettingsStore(directory: string) {
     }
   }
   
-  async function save(input: unknown, revision: unknown, keyChange?: unknown, consent = false): Promise<SettingsResult> {
+  async function save(input: unknown, revision: unknown, keyChange?: unknown, subtitleKeyChange?: unknown,
+    materialConsentVersion?: 2 | 3): Promise<SettingsResult> {
     // IPC 参数在运行时并不可信，不能只依靠 TypeScript 类型声明。
     if (saving) return { ok: false, message: '正在保存设置，请稍后重试。' };
     const parsed = settingsSchema.safeParse(input);
@@ -38,8 +39,12 @@ export function createSettingsStore(directory: string) {
     if (keyChange !== undefined && keyChange !== null &&
       (typeof keyChange !== 'string' || !/^[\x21-\x7e]{8,512}$/.test(keyChange)))
       return { ok: false, message: 'API Key 格式不正确，请检查是否包含空格或换行。' };
+    if (subtitleKeyChange !== undefined && subtitleKeyChange !== null &&
+      (typeof subtitleKeyChange !== 'string' || !/^[\x21-\x7e]{8,512}$/.test(subtitleKeyChange)))
+      return { ok: false, message: 'Transcript Guru Key 格式不正确，请检查是否包含空格或换行。' };
     saving = true;
     let createdKey: string | undefined;
+    let createdSubtitleKey: string | undefined;
     let committed = false;
     const temporary = join(directory, `.settings-${randomUUID()}.tmp`);
     try {
@@ -72,8 +77,11 @@ export function createSettingsStore(directory: string) {
       await mkdir(directory, { recursive: true, mode: 0o700 });
       // 凭据先写新文件，再原子切换引用；UI 不能指定其他密钥或伪造授权记录。
       if (typeof keyChange === 'string') createdKey = await credentials.write(keyChange);
+      if (typeof subtitleKeyChange === 'string') createdSubtitleKey = await credentials.write(subtitleKeyChange);
       parsed.data.ai = { credentialId: keyChange === null ? null : createdKey ?? current.settings.ai.credentialId,
-        consentVersion: consent ? 2 : current.settings.ai.consentVersion };
+        consentVersion: Math.max(current.settings.ai.consentVersion, materialConsentVersion ?? 0) };
+      parsed.data.subtitles = { credentialId: subtitleKeyChange === null ? null : createdSubtitleKey ?? current.settings.subtitles.credentialId,
+        consentVersion: subtitleKeyChange === null ? 0 : createdSubtitleKey ? 1 : current.settings.subtitles.consentVersion };
       const text = JSON.stringify(parsed.data, null, 2) + '\n';
       const file = await open(temporary, 'wx', 0o600);
       try { await file.writeFile(text, 'utf8'); await file.sync(); }
@@ -83,6 +91,8 @@ export function createSettingsStore(directory: string) {
       committed = true;
       const oldKey = current.settings.ai.credentialId;
       if (oldKey && oldKey !== parsed.data.ai.credentialId) await credentials.remove(oldKey);
+      const oldSubtitleKey = current.settings.subtitles.credentialId;
+      if (oldSubtitleKey && oldSubtitleKey !== parsed.data.subtitles.credentialId) await credentials.remove(oldSubtitleKey);
       return { ok: true, settings: parsed.data, revision: digest(text) };
     } catch (error) {
       console.error('Settings save failed', error);
@@ -90,6 +100,7 @@ export function createSettingsStore(directory: string) {
     } finally {
       await unlink(temporary).catch(() => undefined);
       if (createdKey && !committed) await credentials.remove(createdKey);
+      if (createdSubtitleKey && !committed) await credentials.remove(createdSubtitleKey);
       saving = false;
     }
   }
@@ -99,10 +110,16 @@ export function createSettingsStore(directory: string) {
       if (!result.ok) throw new Error(result.message);
       return credentials.read(result.settings.ai.credentialId);
     },
-    async allowMaterials() {
+    async getSubtitleKey(credentialId: string) {
       const result = await load();
       if (!result.ok) throw new Error(result.message);
-      const saved = await save(result.settings, result.revision, undefined, true);
+      if (result.settings.subtitles.credentialId !== credentialId) throw new Error('字幕凭据已变更。');
+      return credentials.read(credentialId);
+    },
+    async allowMaterials(requiredVersion: 2 | 3) {
+      const result = await load();
+      if (!result.ok) throw new Error(result.message);
+      const saved = await save(result.settings, result.revision, undefined, undefined, requiredVersion);
       if (!saved.ok) throw new Error(saved.message);
     }
   };

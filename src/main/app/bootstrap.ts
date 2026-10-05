@@ -10,9 +10,13 @@ import { createBookmarkLibrary } from '@main/bookmarks/library';
 import { createPageHost } from '@main/browser/page-host';
 import { registerBrowser } from '@main/browser/ipc';
 import { createPlatformSessions } from '@main/browser/sessions';
-import { defaultSessionModes } from '@shared/contracts/settings';
+import { defaultSessionModes, defaultSettings } from '@shared/contracts/settings';
 import { registerAI } from '@main/ai/ipc';
 import { setReadSchema } from '@shared/contracts/bookmarks';
+import { createSubtitleService } from '@main/subtitles/service';
+import { registerSubtitles } from '@main/subtitles/ipc';
+import { createYouTubePlayback } from '@main/browser/youtube-playback';
+import { youtubeVideoId } from '@shared/contracts/subtitles';
 
 // 协议权限必须在 app ready 前声明；生产界面通过 app:// 加载，不依赖开发服务器。
 protocol.registerSchemesAsPrivileged([
@@ -90,8 +94,24 @@ if (!app.requestSingleInstanceLock()) {
     const sessions = createPlatformSessions(initialSettings.ok ? initialSettings.settings.sessions : defaultSessionModes());
     const pageHost = createPageHost(window, bookmarks.get, sessions);
     registerBrowser(window, pageHost, assertTrusted);
-    const ai = registerAI(window, pageHost, settings, assertTrusted);
-    registerSettings(window, settings, assertTrusted, bookmarks.update);
+    let currentVideo = () => youtubeVideoId(pageHost.get().url);
+    const subtitles = createSubtitleService(initialSettings.ok ? initialSettings.settings : defaultSettings(),
+      () => currentVideo(), settings.getSubtitleKey, state => {
+        if (!contents.isDestroyed()) contents.send(IPC_CHANNELS.subtitles.state, state);
+      }, async signal => {
+        const answer = await dialog.showMessageBox(window!, { type: 'warning', signal, buttons: ['取消', '确认新建'], defaultId: 0, cancelId: 0,
+          message: '重新创建字幕任务？', detail: '旧提交可能已受理或属于另一账户。新建可能重复计次或产生费用，本地取消不会取消服务端任务。' });
+        return answer.response === 1;
+      });
+    const playback = createYouTubePlayback(pageHost, subtitles.bind, subtitles.updatePlayback);
+    currentVideo = playback.currentVideo;
+    registerSubtitles(subtitles, playback, assertTrusted);
+    pageHost.observeSessionClear(platform => { if (platform === 'youtube') subtitles.clear(); });
+    const ai = registerAI(window, pageHost, settings, assertTrusted, subtitles.snapshot);
+    registerSettings(window, settings, assertTrusted, async value => {
+      await subtitles.configure(value);
+      await bookmarks.update(value);
+    }, subtitles.usage);
 
     app.on('before-quit', (event) => {
       if (ai.hasWork() && dialog.showMessageBoxSync(window!, { type: 'question', buttons: ['继续使用', '退出'],
@@ -99,7 +119,7 @@ if (!app.requestSingleInstanceLock()) {
         event.preventDefault(); quitting = false;
       }
     });
-    app.on('will-quit', () => ai.close());
+    app.on('will-quit', () => { ai.close(); playback.close(); subtitles.clear(); });
 
     ipcMain.handle(IPC_CHANNELS.bookmarks.get, (event) => {
       assertTrusted(event);

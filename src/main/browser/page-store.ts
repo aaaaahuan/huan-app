@@ -1,12 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import type { PageContent, PageContext, PageSnapshot } from '@shared/contracts/page-context';
+import type { Platform } from '@shared/contracts/settings';
 
-// 仅接收文章详情页；首页、登录页、私信和 YouTube 不进入正文提取。
-export function supportsPage(url: URL): boolean {
+// 已有平台仍限定详情页；Other 网站由 Readability 再判断是否为可读文章。
+export function supportsPage(url: URL, platform?: Platform): boolean {
   const host = url.hostname.replace(/^www\./, '');
-  if (host === 'x.com' || host === 'twitter.com') return /\/(?:status|article)\/\d+/.test(url.pathname);
-  if (host === 'reddit.com' || host === 'old.reddit.com') return /\/comments\/[a-z0-9]+/i.test(url.pathname);
-  return host === 'mp.weixin.qq.com' && /^\/s(?:\/|$)/.test(url.pathname);
+  if (host === 'x.com' || host.endsWith('.x.com') || host === 'twitter.com' || host.endsWith('.twitter.com'))
+    return /\/(?:status|article)\/\d+/.test(url.pathname);
+  if (host === 'reddit.com' || host.endsWith('.reddit.com')) return /\/comments\/[a-z0-9]+/i.test(url.pathname);
+  if (host === 'mp.weixin.qq.com') return /^\/s(?:\/|$)/.test(url.pathname);
+  if (host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be') return false;
+  return platform === 'other' && ['http:', 'https:'].includes(url.protocol);
 }
 
 export function createPageStore() {
@@ -18,17 +22,23 @@ export function createPageStore() {
     currentPageId = undefined;
   }
   return {
-    begin(address: string) {
+    begin(address: string, platform?: Platform) {
       clearCurrent();
       const url = new URL(address);
       url.hash = ''; url.username = ''; url.password = '';
-      const supported = supportsPage(url);
+      const supported = supportsPage(url, platform);
       // 微信旧式文章地址需要这些定位参数；不保留跟踪参数或授权令牌。
       const query = new URLSearchParams();
       if (url.hostname === 'mp.weixin.qq.com' && url.pathname === '/s') {
         for (const key of ['__biz', 'mid', 'idx', 'sn']) {
           const value = url.searchParams.get(key);
           if (value) query.set(key, value);
+        }
+      } else if (platform === 'other') {
+        // 兼容常见 query 定位文章；不把任意跟踪参数或授权字段带入 AI 目录。
+        for (const key of ['id', 'p', 'page_id', 'post_id', 'article_id', 'story_id', 'lang']) {
+          const value = url.searchParams.get(key);
+          if (value && /^[A-Za-z0-9_-]{1,128}$/.test(value)) query.set(key, value);
         }
       }
       url.search = query.toString();

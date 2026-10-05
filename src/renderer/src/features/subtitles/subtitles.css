@@ -1,0 +1,16 @@
+.subtitles-panel { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
+.subtitle-empty { margin: auto 0; padding: 24px 18px; color: #7d8c79; font-size: 12px; line-height: 1.9; text-align: center; overflow-wrap: anywhere; }
+.subtitle-empty small { color: #9b705d; font-size: 10px; }
+.subtitle-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.subtitle-info { display: flex; flex-wrap: wrap; gap: 5px 12px; padding: 12px 17px; border-bottom: 1px solid #e3eadd; color: #879781; font-size: 10px; line-height: 1.8; }
+.subtitle-info span { overflow-wrap: anywhere; }
+.subtitle-info button { padding: 0; font-size: 10px; color: #497a60; }
+.subtitle-scroll { overflow-y: auto; overflow-x: hidden; flex: 1; min-height: 0; min-width: 0; padding: 10px 17px 24px; }
+.subtitle-scroll:focus-visible { outline: 2px solid #86b7a2; outline-offset: -2px; }
+.subtitle-row { margin: 0 -5px 6px; padding: 4px 5px; border-radius: 6px; }
+.subtitle-row--active { background: #eaf3e5; }
+.subtitle-timestamp, .subtitle-timestamp.ui-button { display: block; font: inherit; font-size: 10px; line-height: 1.8; color: #9aab93; border: 0; background: none; padding: 0; user-select: none; }
+.subtitle-timestamp.ui-button:hover { color: #497a60; background: none; }
+.subtitle-text { font-size: 13px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; user-select: text; }
+.subtitle-wait, .subtitle-notice { color: #879781; font-size: 11px; line-height: 1.8; }
+.subtitle-notice { padding: 0 17px; color: #9b543b; }

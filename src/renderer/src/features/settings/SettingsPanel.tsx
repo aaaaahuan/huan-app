@@ -6,10 +6,11 @@ import { Tabs } from '@renderer/components/Tabs';
 import { SourceCard } from './SourceCard';
 import { SessionCard } from './SessionCard';
 import { AICard } from './AICard';
+import { SubtitleCard } from './SubtitleCard';
 import './settings.css';
 
 export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
-  onClose(): void; onSaved(): void; initialTab?: 'sources' | 'ai';
+  onClose(): void; onSaved(): void; initialTab?: 'sources' | 'ai' | 'subtitles';
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [draft, setDraft] = useState<Settings>();
@@ -21,12 +22,13 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
   const [message, setMessage] = useState('');
   const [fields, setFields] = useState<Partial<Record<Platform, string>>>({});
   const [confirmClose, setConfirmClose] = useState(false);
-  const [tab, setTab] = useState<'sources' | 'sessions' | 'ai'>(initialTab);
+  const [tab, setTab] = useState<'sources' | 'sessions' | 'ai' | 'subtitles'>(initialTab);
   const [keyChange, setKeyChange] = useState<string | null>();
+  const [subtitleKeyChange, setSubtitleKeyChange] = useState<string | null>();
   const [aiMessage, setAIMessage] = useState('');
   const [activeModes, setActiveModes] = useState<SessionModes>();
   const [sessionMessage, setSessionMessage] = useState('');
-  const dirty = keyChange !== undefined || (!!draft && JSON.stringify(draft) !== baseline);
+  const dirty = keyChange !== undefined || subtitleKeyChange !== undefined || (!!draft && JSON.stringify(draft) !== baseline);
 
   function accept(result: SettingsResult) {
     if (!result.ok) { setMessage(result.message); return; }
@@ -94,14 +96,14 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
     setMessage('');
     setFields({});
     try {
-      const result = await window.huanApp.settings.save(draft, revision, keyChange);
+      const result = await window.huanApp.settings.save(draft, revision, keyChange, subtitleKeyChange);
       // 保存失败不关闭面板，也不重置草稿，方便修正后重试。
       if (!result.ok) {
         setMessage(result.message); setFields(result.fields ?? {});
         if (result.fields) setTab('sources');
         return;
       }
-      setKeyChange(undefined); onSaved();
+      setKeyChange(undefined); setSubtitleKeyChange(undefined); onSaved();
     } catch { setMessage('未能确认保存结果，请保留输入并重试；如提示配置已变更，请重新打开设置核对。'); }
     finally { setBusy(false); }
   }
@@ -136,8 +138,8 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
         <Button aria-label="关闭设置" disabled={busy} onClick={requestClose}>关闭</Button>
       </div>
       <form onSubmit={(event) => { event.preventDefault(); void save(); }}>
-        <Tabs<'sources' | 'sessions' | 'ai'> className="settings-tabs" label="设置分类" value={tab} onChange={setTab} disabled={busy || confirmClose}
-          options={[{ value: 'sources', label: '收藏来源' }, { value: 'sessions', label: '登录与隐私' }, { value: 'ai', label: 'AI 伴读' }]} />
+        <Tabs<'sources' | 'sessions' | 'ai' | 'subtitles'> className="settings-tabs" label="设置分类" value={tab} onChange={setTab} disabled={busy || confirmClose}
+          options={[{ value: 'sources', label: '收藏来源' }, { value: 'sessions', label: '登录与隐私' }, { value: 'ai', label: 'AI 伴读' }, { value: 'subtitles', label: '字幕服务' }]} />
         <div className="settings-body">
           <div id="sources-panel" role="tabpanel" aria-labelledby="sources-tab" hidden={tab !== 'sources'}>
           <p className="settings-description">选择 Obsidian 中各平台的 Markdown 文件。仅手动标记已读/未读时写回“是否已读”列，打开帖子不会改动笔记。</p>
@@ -166,6 +168,11 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
               <AICard hasKey={!!draft.ai.credentialId} value={keyChange} onChange={setKeyChange}
                 notesPath={draft.notesPath} onNotesPathChange={notesPath => setDraft({ ...draft, notesPath })}
                 onTest={() => void testKey()} message={aiMessage} />
+            </fieldset> : <p>正在读取设置…</p>}
+          </div>
+          <div role="tabpanel" id="subtitles-panel" aria-labelledby="subtitles-tab" hidden={tab !== 'subtitles'}>
+            {draft ? <fieldset className="settings-sources" disabled={busy || confirmClose}>
+              <SubtitleCard credentialId={draft.subtitles.credentialId} value={subtitleKeyChange} active={tab === 'subtitles'} onChange={setSubtitleKeyChange} />
             </fieldset> : <p>正在读取设置…</p>}
           </div>
           {message ? <p role="alert" className="settings-error">{message}</p> : null}

@@ -7,7 +7,7 @@ import { BookmarkList } from '@renderer/features/bookmarks/BookmarkList';
 import { Reader } from '@renderer/features/reader/Reader';
 import { ReadingPlaceholder } from '@renderer/features/reader/ReadingPlaceholder';
 import { Button, IconButton } from '@renderer/components/Button';
-import { AIChat } from '@renderer/features/ai-chat/AIChat';
+import { ReadingAssistant } from '@renderer/features/reading-assistant/ReadingAssistant';
 import { PanelDivider } from '@renderer/components/PanelDivider';
 import { usePanelWidths } from './usePanelWidths';
 import '@renderer/components/controls.css';
@@ -20,7 +20,7 @@ export function App() {
   const [revision, setRevision] = useState(0);
   // 下列界面状态仅保留在本轮运行中，不写回 Obsidian 或收藏副本。
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<'sources' | 'ai'>('sources');
+  const [settingsTab, setSettingsTab] = useState<'sources' | 'ai' | 'subtitles'>('sources');
   const [feedback, setFeedback] = useState('');
   const [collapsed, setCollapsed] = useState(false);
   const [aiCollapsed, setAICollapsed] = useState(false);
@@ -49,7 +49,7 @@ export function App() {
   const enabled = library?.sources.some((source) => source.state !== 'disabled');
   const hasItems = library?.sources.some((source) => source.items.length > 0);
   const failures = library?.sources.filter((source) => source.state === 'cached' || source.state === 'error') ?? [];
-  async function openSettings(tab: 'sources' | 'ai' = 'sources') {
+  async function openSettings(tab: 'sources' | 'ai' | 'subtitles' = 'sources') {
     // 原生视图不受 DOM z-index 约束，确认隐藏后才能打开设置对话框。
     try { await window.huanApp.browser.suspend(true); setFeedback(''); setSettingsTab(tab); setSettingsOpen(true); }
     catch { setError('无法隐藏网页容器，请重试打开设置。'); }
@@ -99,7 +99,7 @@ export function App() {
       {!aiCollapsed ? <PanelDivider label="调整 AI 对话宽度" controls="ai-chat" value={panels.right}
         {...panels.limits.right} direction={-1} onStart={x => panels.start('right', x)} onMove={panels.move}
         onEnd={panels.end} onChange={value => panels.change('right', value)} /> : null}
-      <AIChat collapsed={aiCollapsed} settingsRevision={revision} onConfigure={() => void openSettings('ai')} />
+      <ReadingAssistant collapsed={aiCollapsed} settingsRevision={revision} onConfigure={tab => void openSettings(tab)} />
     </div>
     {settingsOpen ? <SettingsPanel initialTab={settingsTab} onClose={closeSettings} onSaved={() => {
       closeSettings(); setRevision((value) => value + 1);

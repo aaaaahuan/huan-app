@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AIResult, ConversationState } from '@shared/contracts/ai';
 import type { ReaderState } from '@shared/contracts/browser';
+import { youtubeVideoId } from '@shared/contracts/subtitles';
 import { Button, IconButton } from '@renderer/components/Button';
 import { Icon } from '@renderer/components/Icon';
 import './ai-chat.css';
@@ -114,15 +115,15 @@ export function AIChat({ settingsRevision, collapsed, onConfigure }: {
       return result;
     });
   }
-  if (!configured) return <aside id="ai-chat" className="ai-chat" hidden={collapsed} aria-label="AI 辅助阅读">
+  if (!configured) return <section id="reading-chat-panel" role="tabpanel" aria-labelledby="reading-chat-tab" className="ai-chat" hidden={collapsed}>
     <div className="ai-unconfigured">
       <Icon name="book" width="48" height="48" />
       <p>需要配置api-key后可用ai伴读能力</p>
       <Button onClick={onConfigure}>配置 DeepSeek</Button>
     </div>
-  </aside>;
+  </section>;
 
-  return <aside id="ai-chat" className="ai-chat" hidden={collapsed} aria-label="AI 辅助阅读">
+  return <section id="reading-chat-panel" role="tabpanel" aria-labelledby="reading-chat-tab" className="ai-chat" hidden={collapsed}>
     <div className="ai-heading">
       <IconButton className="ai-new-chat" icon="plus" label="新开对话" disabled={!current || commandBusy} onClick={() => setConfirmRestart(true)} /></div>
     <div className="ai-messages">
@@ -133,9 +134,9 @@ export function AIChat({ settingsRevision, collapsed, onConfigure }: {
         {entry.tools ? <p className="ai-hint">本轮工具：{entry.tools.join(' / ')}</p> : null}
         {entry.toolError ? <p className="ai-error">{entry.toolError}</p> : null}
         {entry.sources.map(source => <details className="ai-material" key={source.id}>
-          <summary>已读取：{source.title || '页面正文'}</summary>
+          <summary>{source.kind === 'subtitles' ? '已读取字幕片段' : '已读取'}：{source.title || '页面正文'}</summary>
           <p>{source.url}</p>
-          <p>读取了缓存正文片段，不包含图片或视频内容。{source.truncated ? '缓存正文已截断。' : ''}</p>
+          <p>{source.kind === 'subtitles' ? `读取了冻结字幕片段（${source.language} / ${source.subtitleSource}），不包含视频画面。` : '读取了缓存正文片段，不包含图片或视频内容。'}{source.truncated ? '缓存正文已截断。' : ''}</p>
         </details>)}
         <div className="ai-answer">{entry.answer || (entry.status === 'generating' ? '正在等待回复…' : '')}</div>
         {entry.writes.map((write, index) => <p className="ai-hint" key={index}>已保存到本机：{write.path}</p>)}
@@ -146,7 +147,9 @@ export function AIChat({ settingsRevision, collapsed, onConfigure }: {
     <div className="ai-composer">
       {confirmRestart ? <div className="ai-notice"><p>清空当前对话和草稿并新开对话？页面缓存与 API Key 不受影响。</p>
         <Button onClick={() => setConfirmRestart(false)}>取消</Button>{' '}<Button onClick={() => void restart()}>确认新开对话</Button></div> : null}
-      <p className="ai-hint" role="status">{pageStatuses[page?.contentStatus ?? 'empty']}</p>
+      <p className="ai-hint" role="status">{youtubeVideoId(page?.url ?? '')
+        ? '视频问答使用提问时已获取的字幕，不包含视频画面。可在「实时字幕」按需获取。'
+        : pageStatuses[page?.contentStatus ?? 'empty']}</p>
       {error || current?.error ? <p className="ai-error" role="alert">{error || current?.error}</p> : null}
       <label className="visually-hidden" htmlFor="ai-question">向 AI 提问</label>
       <textarea id="ai-question" placeholder="向 AI 提问…" value={draft} maxLength={8000}
@@ -159,5 +162,5 @@ export function AIChat({ settingsRevision, collapsed, onConfigure }: {
       </div>
       <p className="ai-hint" role="status">{current ? phases[current.phase] : '正在准备对话'} · ⌘ Enter 发送 · 退出不保留</p>
     </div>
-  </aside>;
+  </section>;
 }
