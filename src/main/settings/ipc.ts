@@ -3,7 +3,7 @@ import { IPC_CHANNELS } from '@shared/ipc-channels';
 import { dialog, ipcMain, shell, type BrowserWindow, type IpcMainInvokeEvent } from 'electron';
 import { z } from 'zod';
 import type { createSettingsStore } from './store';
-import { settingsSchema, type Settings, type SubtitleKeyResult, type SubtitleUsage } from '@shared/contracts/settings';
+import { settingsSchema, type SavedKeyResult, type Settings, type SubtitleUsage } from '@shared/contracts/settings';
 
 export function registerSettings(window: BrowserWindow, store: ReturnType<typeof createSettingsStore>,
   assertTrusted: (event: IpcMainInvokeEvent) => void, onSaved: (settings: Settings) => Promise<unknown>, subtitleUsage: () => Promise<SubtitleUsage>) {
@@ -36,8 +36,20 @@ export function registerSettings(window: BrowserWindow, store: ReturnType<typeof
     assertTrusted(event);
     return subtitleUsage();
   });
-  // 仅显式查看时返回当前字幕 Key；普通设置读取仍只返回凭据引用。
-  ipcMain.handle(IPC_CHANNELS.settings.revealSubtitleKey, async (event, input: unknown): Promise<SubtitleKeyResult> => {
+  // 仅显式查看时返回当前 Key；普通设置读取仍只返回凭据引用。
+  ipcMain.handle(IPC_CHANNELS.settings.revealAIKey, async (event, input: unknown): Promise<SavedKeyResult> => {
+    assertTrusted(event);
+    const parsed = z.uuid().safeParse(input);
+    if (!parsed.success) return { ok: false, message: 'AI 凭据无效，请重新打开设置。' };
+    try {
+      const key = await store.getKey(parsed.data);
+      const current = await store.load();
+      if (!current.ok || current.settings.ai.credentialId !== parsed.data)
+        return { ok: false, message: 'AI 凭据已变更，请重新打开设置。' };
+      return { ok: true, credentialId: parsed.data, key };
+    } catch { return { ok: false, message: '无法读取 DeepSeek Key，请重新打开设置或重新配置。' }; }
+  });
+  ipcMain.handle(IPC_CHANNELS.settings.revealSubtitleKey, async (event, input: unknown): Promise<SavedKeyResult> => {
     assertTrusted(event);
     const parsed = z.uuid().safeParse(input);
     if (!parsed.success) return { ok: false, message: '字幕凭据无效，请重新打开设置。' };

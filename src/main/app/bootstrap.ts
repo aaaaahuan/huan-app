@@ -17,6 +17,7 @@ import { createSubtitleService } from '@main/subtitles/service';
 import { registerSubtitles } from '@main/subtitles/ipc';
 import { createYouTubePlayback } from '@main/browser/youtube-playback';
 import { youtubeVideoId } from '@shared/contracts/subtitles';
+import { registerTranslation } from '@main/translation';
 
 // 协议权限必须在 app ready 前声明；生产界面通过 app:// 加载，不依赖开发服务器。
 protocol.registerSchemesAsPrivileged([
@@ -66,7 +67,7 @@ if (!app.requestSingleInstanceLock()) {
 
     await mkdir(app.getPath('userData'), { recursive: true, mode: 0o700 });
     window = new BrowserWindow({
-      title: 'huan-app', width: 1240, height: 820, minWidth: 900, minHeight: 640,
+      title: 'huan-app', width: 1240, height: 820, minWidth: 940, minHeight: 640,
       show: false, backgroundColor: '#f5f7f4', titleBarStyle: 'hiddenInset',
       webPreferences: {
         // React 不直接获得 Node 权限；仅通过隔离的 preload 使用明确开放的能力。
@@ -108,18 +109,19 @@ if (!app.requestSingleInstanceLock()) {
     registerSubtitles(subtitles, playback, assertTrusted);
     pageHost.observeSessionClear(platform => { if (platform === 'youtube') subtitles.clear(); });
     const ai = registerAI(window, pageHost, settings, assertTrusted, subtitles.snapshot);
+    const translation = registerTranslation(contents, assertTrusted);
     registerSettings(window, settings, assertTrusted, async value => {
       await subtitles.configure(value);
       await bookmarks.update(value);
     }, subtitles.usage);
 
     app.on('before-quit', (event) => {
-      if (ai.hasWork() && dialog.showMessageBoxSync(window!, { type: 'question', buttons: ['继续使用', '退出'],
+      if ((ai.hasWork() || translation.hasWork()) && dialog.showMessageBoxSync(window!, { type: 'question', buttons: ['继续使用', '退出'],
         defaultId: 0, cancelId: 0, message: 'AI 任务仍在进行，确定退出？', detail: '退出会中断任务，临时聊天不会保存。' }) !== 1) {
         event.preventDefault(); quitting = false;
       }
     });
-    app.on('will-quit', () => { ai.close(); playback.close(); subtitles.clear(); });
+    app.on('will-quit', () => { translation.close(); ai.close(); playback.close(); subtitles.clear(); });
 
     ipcMain.handle(IPC_CHANNELS.bookmarks.get, (event) => {
       assertTrusted(event);

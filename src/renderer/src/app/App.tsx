@@ -10,14 +10,20 @@ import { Button, IconButton } from '@renderer/components/Button';
 import { ReadingAssistant } from '@renderer/features/reading-assistant/ReadingAssistant';
 import { PanelDivider } from '@renderer/components/PanelDivider';
 import { usePanelWidths } from './usePanelWidths';
+import { Navigation, type SystemPage } from './Navigation';
+import { Translation } from '@renderer/features/translation/Translation';
 import '@renderer/components/controls.css';
 import '@renderer/features/bookmarks/bookmarks.css';
+import './navigation.css';
 
 export function App() {
   const [library, setLibrary] = useState<BookmarkLibrary>();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [revision, setRevision] = useState(0);
+  const [activePage, setActivePage] = useState<SystemPage>('reading');
+  const [navigationBusy, setNavigationBusy] = useState(false);
+  const navigationPending = useRef(false);
   // 下列界面状态仅保留在本轮运行中，不写回 Obsidian 或收藏副本。
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'sources' | 'ai' | 'subtitles'>('sources');
@@ -56,7 +62,17 @@ export function App() {
   }
   function closeSettings() {
     setSettingsOpen(false);
-    void window.huanApp.browser.suspend(false).catch(() => setError('无法恢复网页容器，请重启应用。'));
+    void window.huanApp.browser.suspend(activePage !== 'reading').catch(() => setFeedback('无法恢复网页容器，请重启应用。'));
+  }
+  async function navigate(page: SystemPage) {
+    if (page === activePage || navigationPending.current) return;
+    navigationPending.current = true; setNavigationBusy(true); setFeedback('');
+    try {
+      // 原生网页不受 DOM hidden/z-index 约束，隐藏确认后再展示其他系统。
+      await window.huanApp.browser.suspend(page !== 'reading' || settingsOpen);
+      setActivePage(page);
+    } catch { setFeedback('无法切换系统，请重试。'); }
+    finally { navigationPending.current = false; setNavigationBusy(false); }
   }
   async function toggleRead(item: Bookmark) {
     if (readPending.current) return;
@@ -70,20 +86,25 @@ export function App() {
   }
   return <div className="workspace-shell">
     <div className="titlebar">
-      <IconButton icon={collapsed ? 'expand' : 'collapse'} label={collapsed ? '展开收藏列表' : '收起收藏列表'}
-        aria-expanded={!collapsed} aria-controls="bookmark-sidebar" onClick={() => setCollapsed(value => !value)} />
+      <div className="titlebar-leading">{activePage === 'reading' ? <IconButton icon={collapsed ? 'expand' : 'collapse'} label={collapsed ? '展开收藏列表' : '收起收藏列表'}
+        aria-expanded={!collapsed} aria-controls="bookmark-sidebar" onClick={() => setCollapsed(value => !value)} /> : null}</div>
+      <span className="window-title">huan-app</span>
       <div className="titlebar-actions">
-        <IconButton icon="settings" label="设置" disabled={readBusy} onClick={() => void openSettings()} />
-        <IconButton className="right-panel-toggle" icon={aiCollapsed ? 'expand' : 'collapse'} label={aiCollapsed ? '展开 AI 伴读' : '收起 AI 伴读'}
-          aria-expanded={!aiCollapsed} aria-controls="ai-chat" onClick={() => setAICollapsed(value => !value)} />
+        {activePage === 'reading' ? <IconButton className="right-panel-toggle" icon={aiCollapsed ? 'expand' : 'collapse'} label={aiCollapsed ? '展开 AI 伴读' : '收起 AI 伴读'}
+          aria-expanded={!aiCollapsed} aria-controls="ai-chat" onClick={() => setAICollapsed(value => !value)} /> : null}
       </div>
     </div>
+    <div className="application-body">
+    <Navigation active={activePage} busy={navigationBusy} settingsDisabled={readBusy || navigationBusy}
+      onChange={page => void navigate(page)} onSettings={() => void openSettings()} />
+    <div className="application-content">
+    {feedback ? <div className="settings-feedback" role="status">{feedback}</div> : null}
+    <div className="reading-system" hidden={activePage !== 'reading'}>
     {error || library?.warning || failures.length ? <div className="library-alert" role="alert">
       {error ? <p>{error}</p> : null}{library?.warning ? <p>{library.warning}</p> : null}
       {failures.map((source) => <p key={source.platform}>{PLATFORM_NAMES[source.platform]}：{source.message}</p>)}
       <Button onClick={() => void openSettings()}>检查来源设置</Button>
     </div> : null}
-    {feedback ? <div className="settings-feedback" role="status">{feedback}</div> : null}
     <div ref={panels.workspace} className={`workspace${panels.dragging ? ' workspace-resizing' : ''}`}
       style={{ '--left-panel-width': `${panels.left}px`, '--right-panel-width': `${panels.right}px` } as CSSProperties}>
       <BookmarkList library={library} loading={loading} collapsed={collapsed} selectedId={selectedId}
@@ -92,7 +113,7 @@ export function App() {
       {!collapsed ? <PanelDivider label="调整收藏列表宽度" controls="bookmark-sidebar" value={panels.left}
         {...panels.limits.left} direction={1} onStart={x => panels.start('left', x)} onMove={panels.move}
         onEnd={panels.end} onChange={value => panels.change('left', value)} /> : null}
-      <Reader selected={selected} suspended={settingsOpen} layoutKey={`${collapsed}:${aiCollapsed}:${panels.left}:${panels.right}:${feedback}:${error}:${library?.warning}:${failures.length}`}>
+      <Reader selected={selected} suspended={settingsOpen || activePage !== 'reading'} layoutKey={`${activePage}:${collapsed}:${aiCollapsed}:${panels.left}:${panels.right}:${feedback}:${error}:${library?.warning}:${failures.length}`}>
         <ReadingPlaceholder loading={loading} enabled={!!enabled} hasItems={!!hasItems}
           failed={!!(error || failures.length || library?.warning)} onConfigure={() => void openSettings()} />
       </Reader>
@@ -100,6 +121,10 @@ export function App() {
         {...panels.limits.right} direction={-1} onStart={x => panels.start('right', x)} onMove={panels.move}
         onEnd={panels.end} onChange={value => panels.change('right', value)} /> : null}
       <ReadingAssistant collapsed={aiCollapsed} settingsRevision={revision} onConfigure={tab => void openSettings(tab)} />
+    </div>
+    </div>
+    <Translation active={activePage === 'translation'} />
+    </div>
     </div>
     {settingsOpen ? <SettingsPanel initialTab={settingsTab} onClose={closeSettings} onSaved={() => {
       closeSettings(); setRevision((value) => value + 1);

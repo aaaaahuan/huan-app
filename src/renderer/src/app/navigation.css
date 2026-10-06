@@ -1,0 +1,16 @@
+.application-body{display:flex;flex:1;min-height:0}
+.application-content{display:flex;flex:1;flex-direction:column;min-width:0;min-height:0}
+.reading-system{display:flex;flex:1;flex-direction:column;min-height:0}
+.reading-system[hidden]{display:none}
+.window-title{position:absolute;left:50%;transform:translateX(-50%);color:#738577;letter-spacing:.03em;pointer-events:none}
+.titlebar-leading{display:flex;align-items:center;min-width:34px}
+.titlebar-actions{display:flex;align-items:center;gap:8px}
+.system-navigation{width:168px;flex-shrink:0;display:flex;flex-direction:column;padding:26px 12px 18px;border-right:1px solid #dfe7df;background:#fcfdf9d9}
+.navigation-brand{padding:0 15px 28px;font:500 26px "Songti SC","STSong",serif;color:#41624e;letter-spacing:.04em}
+.navigation-pages{display:grid;gap:8px}
+.navigation-item.ui-button{display:flex;align-items:center;gap:13px;min-height:46px;padding:11px 14px;text-align:left;background:transparent;border-color:transparent;color:#65796b;font-size:13px;border-radius:9px}
+.navigation-item>svg{width:22px;height:22px;flex-shrink:0}
+.navigation-item.ui-button:hover{background:#eef3ec;color:#344b3c}
+.navigation-item.ui-button[aria-current=page]{background:#e7f0e6;border-color:#bdd3be;color:#344b3c;box-shadow:inset 3px 0 #6b9475}
+.navigation-settings{margin-top:auto}
+@media(max-width:1100px){.system-navigation{width:72px;padding:24px 8px 14px}.navigation-brand{padding:0 0 28px;text-align:center;font-size:18px}.navigation-item.ui-button{justify-content:center;padding:11px 8px}.navigation-label{display:none}}

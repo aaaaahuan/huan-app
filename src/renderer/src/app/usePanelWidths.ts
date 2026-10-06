@@ -15,7 +15,7 @@ export function usePanelWidths(leftHidden: boolean, rightHidden: boolean) {
   useEffect(() => {
     const element = workspace.current;
     if (!element) return;
-    const observer = new ResizeObserver(() => setAvailable(element.clientWidth));
+    const observer = new ResizeObserver(() => { if (element.clientWidth) setAvailable(element.clientWidth); });
     observer.observe(element);
     return () => observer.disconnect();
   }, []);

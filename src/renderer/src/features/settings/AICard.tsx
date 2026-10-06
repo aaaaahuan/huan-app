@@ -1,18 +1,55 @@
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@renderer/components/Button';
-import { Input } from '@renderer/components/Input';
+import { Input, SecretInput } from '@renderer/components/Input';
 
-export function AICard({ hasKey, value, onChange, onTest, message, notesPath, onNotesPathChange }: {
-  hasKey: boolean; value: string | null | undefined; onChange(value: string | null | undefined): void;
+export function AICard({ credentialId, value, active, onChange, onTest, message, notesPath, onNotesPathChange }: {
+  credentialId: string | null; value: string | null | undefined; active: boolean; onChange(value: string | null | undefined): void;
   onTest(): void; message: string;
   notesPath: string; onNotesPathChange(value: string): void;
 }) {
+  const hasKey = !!credentialId;
+  const [visible, setVisible] = useState(false);
+  const [revealedKey, setRevealedKey] = useState<{ credentialId: string; key: string }>();
+  const [revealing, setRevealing] = useState(false);
+  const [keyError, setKeyError] = useState('');
+  const keySequence = useRef(0);
+  useEffect(() => {
+    setVisible(false); setRevealedKey(undefined); setRevealing(false); setKeyError('');
+    return () => { keySequence.current++; };
+  }, [active, credentialId]);
+  useEffect(() => {
+    keySequence.current++; setRevealedKey(undefined); setRevealing(false); setKeyError('');
+    if (value === undefined) setVisible(false);
+  }, [value]);
+  async function toggleVisibility() {
+    if (visible) {
+      keySequence.current++; setVisible(false); setRevealedKey(undefined);
+      return;
+    }
+    if (value !== undefined || !credentialId) { setVisible(true); return; }
+    const call = ++keySequence.current;
+    setRevealing(true); setKeyError('');
+    try {
+      const result = await window.huanApp.settings.revealAIKey(credentialId);
+      if (keySequence.current !== call) return;
+      if (result.ok && result.credentialId === credentialId) { setRevealedKey({ credentialId: result.credentialId, key: result.key }); setVisible(true); }
+      else setKeyError(result.ok ? 'AI 凭据已变更，请重新打开设置。' : result.message);
+    } catch { if (keySequence.current === call) setKeyError('无法读取 DeepSeek Key，请重试。'); }
+    finally { if (keySequence.current === call) setRevealing(false); }
+  }
+  const savedKey = revealedKey?.credentialId === credentialId ? revealedKey.key : undefined;
   return <section className="source-card">
     <h3>DeepSeek Flash</h3>
     <p className="settings-description">内置唯一模型，连接 DeepSeek 官方服务。只需填写自己的 API Key。</p>
     <label className="source-path-label" htmlFor="deepseek-key">API Key</label>
-    <Input id="deepseek-key" type="password" autoComplete="off" spellCheck={false} maxLength={512}
-      placeholder={hasKey ? '已安全保存；留空保持不变' : '输入 DeepSeek API Key'} value={value ?? ''}
-      onChange={event => onChange(event.target.value || undefined)} />
+    <SecretInput id="deepseek-key" autoComplete="off" spellCheck={false} maxLength={512}
+      visible={active && visible && (value !== undefined || !!savedKey)} revealing={revealing} onToggle={() => void toggleVisibility()}
+      placeholder={hasKey ? '已安全保存；留空保持不变' : '输入 DeepSeek API Key'}
+      value={value === undefined ? active && visible && savedKey ? savedKey : hasKey ? '********' : '' : value ?? ''}
+      onFocus={event => { if (value === undefined && hasKey) event.currentTarget.select(); }}
+      onClick={event => { if (value === undefined && hasKey) event.currentTarget.select(); }}
+      onChange={event => { keySequence.current++; setRevealedKey(undefined); onChange(event.target.value || undefined); }} />
+    {keyError ? <p className="settings-error" role="alert">{keyError}</p> : null}
     <div className="session-actions">
       <span>{value === null ? '保存后清除 Key' : hasKey ? '已配置' : '尚未配置'}</span>
       <div><Button onClick={onTest} disabled={value === null || (!hasKey && !value)}>测试连接</Button>{' '}

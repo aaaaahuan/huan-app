@@ -6,10 +6,22 @@ import type { HuanAppAPI } from '@shared/contracts/app';
 // 通道名固定在这里；页面不能自行指定任意 IPC 通道或直接调用文件系统。
 const api: HuanAppAPI = {
   app: Object.freeze({ getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.app.status) }),
+  translation: Object.freeze({
+    getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.translation.getStatus),
+    translate: request => ipcRenderer.invoke(IPC_CHANNELS.translation.translate, request),
+    stop: requestId => ipcRenderer.invoke(IPC_CHANNELS.translation.stop, requestId),
+    copy: text => ipcRenderer.invoke(IPC_CHANNELS.translation.copy, text),
+    onStatus: listener => {
+      const handler = (_event: Electron.IpcRendererEvent, status: Parameters<typeof listener>[0]) => listener(status);
+      ipcRenderer.on(IPC_CHANNELS.translation.status, handler);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.translation.status, handler);
+    }
+  } satisfies HuanAppAPI['translation']),
   settings: Object.freeze({
     load: () => ipcRenderer.invoke(IPC_CHANNELS.settings.load),
     save: (settings, revision, keyChange, subtitleKeyChange) => ipcRenderer.invoke(IPC_CHANNELS.settings.save, settings, revision, keyChange, subtitleKeyChange),
     subtitleUsage: () => ipcRenderer.invoke(IPC_CHANNELS.settings.subtitleUsage),
+    revealAIKey: credentialId => ipcRenderer.invoke(IPC_CHANNELS.settings.revealAIKey, credentialId),
     revealSubtitleKey: credentialId => ipcRenderer.invoke(IPC_CHANNELS.settings.revealSubtitleKey, credentialId),
     openSubtitleAccount: () => ipcRenderer.invoke(IPC_CHANNELS.settings.openSubtitleAccount),
     chooseFile: () => ipcRenderer.invoke(IPC_CHANNELS.settings.chooseFile)

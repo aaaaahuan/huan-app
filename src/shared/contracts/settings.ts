@@ -42,10 +42,11 @@ export interface SettingsAPI {
   save(settings: Settings, revision: string | null, keyChange?: string | null, subtitleKeyChange?: string | null): Promise<SettingsResult>;
   chooseFile(): Promise<{ ok: true; path: string | null } | { ok: false; message: string }>;
   subtitleUsage(): Promise<SubtitleUsage>;
-  revealSubtitleKey(credentialId: string): Promise<SubtitleKeyResult>;
+  revealAIKey(credentialId: string): Promise<SavedKeyResult>;
+  revealSubtitleKey(credentialId: string): Promise<SavedKeyResult>;
   openSubtitleAccount(): Promise<void>;
 }
-export type SubtitleKeyResult =
+export type SavedKeyResult =
   | { ok: true; credentialId: string; key: string }
   | { ok: false; message: string };
 export type SubtitleUsage = {

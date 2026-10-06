@@ -1,6 +1,6 @@
 import type { SVGProps } from 'react';
 
-export type IconName = 'search' | 'chevron' | 'settings' | 'collapse' | 'expand' | 'back' | 'forward' | 'book' | 'bookmarks' | 'plus' | 'eye' | 'eye-off';
+export type IconName = 'search' | 'chevron' | 'settings' | 'collapse' | 'expand' | 'back' | 'forward' | 'book' | 'bookmarks' | 'plus' | 'eye' | 'eye-off' | 'translate' | 'swap' | 'copy' | 'close';
 
 // 图形集中维护；业务组件只选择语义名称，不重复拼装 SVG。
 export function Icon({ name, ...props }: SVGProps<SVGSVGElement> & { name: IconName }) {
@@ -18,6 +18,10 @@ export function Icon({ name, ...props }: SVGProps<SVGSVGElement> & { name: IconN
     {name === 'search' ? <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></> : null}
     {name === 'chevron' ? <path d="m7 10 5 5 5-5" /> : null}
     {name === 'plus' ? <path d="M12 5v14M5 12h14" /> : null}
+    {name === 'translate' ? <><path d="M3 5h12M9 3v2M12 5c-1 5-3 8-8 11M5 8c1 3 4 6 7 8M13 21l4-11 4 11M15 17h4" /></> : null}
+    {name === 'swap' ? <path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4" /> : null}
+    {name === 'copy' ? <><rect x="8" y="3" width="12" height="14" rx="2" /><path d="M5 7H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1" /></> : null}
+    {name === 'close' ? <path d="m6 6 12 12M18 6 6 18" /> : null}
     {name === 'eye' || name === 'eye-off' ? <><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" />{name === 'eye-off' ? <path d="m3 3 18 18" /> : null}</> : null}
     {name === 'settings' ? <><path d="m9 3 6 0 1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1Z" /><circle cx="12" cy="12" r="3" /></> : null}
     {name === 'collapse' || name === 'expand' ? <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /><path d={name === 'expand' ? 'm13 9 3 3-3 3' : 'm17 9-3 3 3 3'} /></> : null}

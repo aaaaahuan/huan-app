@@ -105,9 +105,10 @@ export function createSettingsStore(directory: string) {
     }
   }
   return { load, save,
-    async getKey() {
+    async getKey(credentialId?: string) {
       const result = await load();
       if (!result.ok) throw new Error(result.message);
+      if (credentialId !== undefined && result.settings.ai.credentialId !== credentialId) throw new Error('AI 凭据已变更。');
       return credentials.read(result.settings.ai.credentialId);
     },
     async getSubtitleKey(credentialId: string) {

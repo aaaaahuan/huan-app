@@ -1,6 +1,6 @@
 # huan-app
 
-独立 macOS 桌面应用，基础阅读与 AI 独立。已实现设置、本地收藏、原页容器、分平台会话策略，以及 Readability 页面缓存、Pi SDK + DeepSeek 工具式伴读和 YouTube 字幕阅读。字幕获取使用官方 REST API，自动检测原语言并在提交前预检费用。
+独立 macOS 桌面应用，左侧导航切换阅读和翻译，左下角打开全局设置。基础阅读与 AI 独立；已实现本地收藏、原页容器、分平台会话策略、Readability 页面缓存、Pi SDK + DeepSeek 工具式伴读、YouTube 字幕阅读，以及 Qwen3.5-4B 本地离线中英互译。字幕获取使用官方 REST API，自动检测原语言并在提交前预检费用。
 
 ## 开发与验证
 
@@ -35,12 +35,14 @@ pnpm pack:arm64
 | `src/main/bookmarks` | Markdown 解析、来源读取与最近成功副本 |
 | `src/main/browser` | 原生网页容器、导航、页面状态与受限 IPC |
 | `src/main/subtitles` | 字幕服务费用预检、内存缓存、凭据隔离与受限 IPC |
-| `src/preload` | 暴露有限的 app、settings、bookmarks、browser、AI 与 subtitles API |
+| `src/main/translation` | 包外模型进程、单次本地翻译请求与取消 |
+| `src/preload` | 暴露有限的 app、settings、bookmarks、browser、AI、subtitles 与 translation API |
 | `src/renderer/src/app` | React 应用外壳 |
 | `src/renderer/src/components` | 无业务状态的图标、按钮、输入、下拉、标签页与截断文本 |
 | `src/renderer/src/features/settings` | 设置表单、草稿、保存与取消 |
 | `src/renderer/src/features/bookmarks` | 收藏列表、搜索、平台筛选、全量滚动与折叠 |
 | `src/renderer/src/features/reader` | 阅读工具栏、原生容器定位与失败占位 |
+| `src/renderer/src/features/translation` | 翻译草稿、语言切换、提交、停止与结果展示 |
 | `src/shared/contracts` | 按功能定义通信契约 |
 
 后续模块与数据格式见 [实施约定](docs/implementation-plan.md)。不提前创建空模块、插件框架或通用服务层。
@@ -63,11 +65,35 @@ pnpm pack:arm64
 
 列表支持标题/链接搜索、平台筛选、全量滚动展示、折叠和选择，不再分页。搜索与平台筛选位于同一行，空列表仅显示浅绿色书签图标，底部不显示来源状态；读取异常仍在应用顶部提示。这些界面状态保留在本轮运行中，退出后重置。搜索与折叠不改变选中项，刷新后条目不再存在则回空状态，不自动选中其他帖子。选中收藏通过 WebContentsView 加载原页，支持前进/后退、刷新/停止；切换其他收藏后返回会重新加载原始 URL。页面内跳转不会改变选中收藏。
 
-Review：打开右上角设置，为平台选择符合收藏表格格式（兼容旧四列）的 Markdown 文件并启用；保存后点击收藏阅读原页。原页无应用 preload，不可调用文件或设置接口。下载、非 HTTP/HTTPS 主页面导航、权限请求和 POST 弹窗暂不支持，不保证各平台第三方登录流程兼容。当前记录见 [A5/A6 验收](docs/a5-a6-review.md)，历史清单见 [A4](docs/a4-review.md)、[A2/A3](docs/a2-a3-review.md) 与 [A1](docs/a1-review.md)。
+Review：打开左下角设置，为平台选择符合收藏表格格式（兼容旧四列）的 Markdown 文件并启用；保存后点击收藏阅读原页。原页无应用 preload，不可调用文件或设置接口。下载、非 HTTP/HTTPS 主页面导航、权限请求和 POST 弹窗暂不支持，不保证各平台第三方登录流程兼容。当前记录见 [A5/A6 验收](docs/a5-a6-review.md)，历史清单见 [A4](docs/a4-review.md)、[A2/A3](docs/a2-a3-review.md) 与 [A1](docs/a1-review.md)。
+
+## 本地离线翻译
+
+翻译页手动选择英语→中文或中文→英语，点击翻译或按 `Cmd+Enter` 提交，普通 Enter 换行。每次是独立的非流式本地请求，只显示最终译文，不接入伴读 Agent、工具、云端或自动重试。交换语言时仅将完整译文回填到原文，不自动提交；支持清空、复制和停止。切离翻译页停止当前请求，返回保留本轮草稿；阅读组件和原生网页不重建，聊天草稿、选中收藏及栏宽保持。翻译草稿和结果不写盘。
+
+原文与译文区域随窗口剩余空间展开。翻译期间原文仍可聚焦、选取和编辑，语言切换与新提交继续保持单请求约束；修改原文后丢弃该请求的迟到译文，并提示重新翻译，即使又改回相同文字也不接纳旧结果。编辑不会自动取消或重新提交，需点击停止或等待当前请求结束。
+
+直接引用既有 Qwen3.5-4B Q4_K_M GGUF 和 llama.cpp b11429 `llama-server`。开发态默认从工程同级 `../model` 加载，首次请求自动启动，后续驻留；关窗只隐藏，`Cmd+Q` 清理本应用启动的模型进程。可通过环境变量覆盖包外绝对路径，不新增模型设置页：
+
+```sh
+HUAN_MODEL_PATH=/Users/bytedance/Desktop/llm/model/models/Qwen3.5-4B-Q4_K_M.gguf \
+HUAN_LLAMA_SERVER_PATH=/Users/bytedance/Desktop/llm/model/runtime/llama/llama-b11429/llama-server \
+pnpm dev
+```
+
+保留 runtime 目录中的配套动态库，不只复制单个可执行文件。权重和 runtime 均在工程之外，不增加到打包配置。打包态没有开发默认路径，需由启动环境显式传入两条路径；Finder 启动通常不继承终端变量，因此当前仅完成开发态验收，不宣称打包后已可开箱即用。
+
+本地服务仅监听 `127.0.0.1` 随机端口，使用每次启动的新认证令牌，路径和令牌不暴露给 renderer。不开 Web UI、不下载模型、不继承其他 llama 参数或云端 Key。不主动输出原文/译文日志，原生诊断只在内存中保存并在失败时显示。
+
+不设置输入字符、输出 token 或翻译等待时长的应用级上限；空白内容不提交。保持引擎默认上下文适配，输出 `n_predict=-1`，禁用上下文静默滑移。HTTP/模型错误原样显示；引擎若因上下文容量结束生成，会明确标记译文不完整，而非伪装成功。模型上下文、llama.cpp 原生超时、系统内存仍有限，超长输入可能报错、耗时很久或耗尽资源；取消仅丢弃译文，不保证释放驻留模型内存。首次模型启动另有 60 秒健康检查保护。
+
+开发态实机记录与未验证边界见 [翻译验收](docs/translation-review.md)。此功能尚未将阅读区问答切换为本地模型，也未接入实时字幕翻译。
 
 ## AI 伴读
 
 设置新增“AI 伴读”：内置唯一模型 DeepSeek Flash（`deepseek-flash`），固定官方 Chat Completions 端点。输入 API Key 后点击“保存设置”；不会读取 Pi CLI 认证、环境 Key 或用户扩展。Key 用 Electron safeStorage 加密保存为 `~/.huan-app/key-<UUID>.bin`，设置只保存引用。替换/清除 Key 不清空聊天，在途请求保留自身认证。未签名构建的 Keychain 行为需实机验证。
+
+与字幕服务相同，DeepSeek Key 默认只展示掩码；点击眼睛才通过可信 IPC 读取当前保存值，隐藏、切换设置 tab 或关闭面板后清除展示明文。显隐不修改配置，不触发连接测试；留空保持保存值不变，清除仍需点击“清除 Key”并保存设置。
 
 页面提取与 AI 独立：`page-host.ts` 监听完整导航和站内切页，加载后等待 1.5 秒，用 `readability.ts` 在隔离世界读取 DOM 副本；空结果每隔 1.5 秒重试，最多 4 次。中间视图关闭后台节流。X、Reddit 和微信仍限定文章详情页；Other 的 HTTP(S) 网站先检查文章可读性、排除带可见密码输入框的页面，再共用 Readability 提取正文，失败仍可浏览原页和普通聊天。预检兼容以 section/div 排版的结构化长文，仍交给 Readability 筛选，不回退到整页文本。YouTube 页面不提取，视频使用字幕链路。不下载图片、识别视频、自动滚动或抓取外链；Readability 是尽力识别，不能保证正文完整、排除所有评论或辨别全部敏感页面，发送前应核对当前阅读材料。提取仅在本机进行，只有提问并获既有材料授权后才允许 AI 按需读取冻结快照。
 

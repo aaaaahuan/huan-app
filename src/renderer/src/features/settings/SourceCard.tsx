@@ -6,7 +6,7 @@ export function SourceCard({ platform, source, error, onChange, onChoose }: {
   platform: Platform; source: Settings['sources'][Platform]; error?: string;
   onChange(change: Partial<Settings['sources'][Platform]>): void; onChoose(): void;
 }) {
-  return <section className="source-card" aria-labelledby={`${platform}-title`}>
+  return <section className="source-card source-card--source" aria-labelledby={`${platform}-title`}>
     <div className="source-heading"><h4 id={`${platform}-title`}>{PLATFORM_NAMES[platform]}</h4>
       <label className="source-toggle"><input type="checkbox" checked={source.enabled}
         onChange={(event) => onChange({ enabled: event.target.checked })} />启用来源</label></div>
