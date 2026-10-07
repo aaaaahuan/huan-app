@@ -104,7 +104,7 @@ if (!app.requestSingleInstanceLock()) {
           message: '重新创建字幕任务？', detail: '旧提交可能已受理或属于另一账户。新建可能重复计次或产生费用，本地取消不会取消服务端任务。' });
         return answer.response === 1;
       });
-    const playback = createYouTubePlayback(pageHost, subtitles.bind, subtitles.updatePlayback);
+    const playback = createYouTubePlayback(pageHost, subtitles.bind, subtitles.updatePlayback, subtitles.prefetch);
     currentVideo = playback.currentVideo;
     registerSubtitles(subtitles, playback, assertTrusted);
     pageHost.observeSessionClear(platform => { if (platform === 'youtube') subtitles.clear(); });
@@ -156,6 +156,7 @@ if (!app.requestSingleInstanceLock()) {
       { label: '编辑', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] }
     ]));
     await window.loadURL(devUrl ?? UI_URL);
+    translation.warmup();
   }).catch((error: unknown) => {
     console.error('Application startup failed', error);
     app.quit();

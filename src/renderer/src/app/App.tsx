@@ -6,7 +6,7 @@ import { SettingsPanel } from '@renderer/features/settings/SettingsPanel';
 import { BookmarkList } from '@renderer/features/bookmarks/BookmarkList';
 import { Reader } from '@renderer/features/reader/Reader';
 import { ReadingPlaceholder } from '@renderer/features/reader/ReadingPlaceholder';
-import { Button, IconButton } from '@renderer/components/Button';
+import { Button } from '@renderer/components/Button';
 import { ReadingAssistant } from '@renderer/features/reading-assistant/ReadingAssistant';
 import { PanelDivider } from '@renderer/components/PanelDivider';
 import { usePanelWidths } from './usePanelWidths';
@@ -86,13 +86,7 @@ export function App() {
   }
   return <div className="workspace-shell">
     <div className="titlebar">
-      <div className="titlebar-leading">{activePage === 'reading' ? <IconButton icon={collapsed ? 'expand' : 'collapse'} label={collapsed ? '展开收藏列表' : '收起收藏列表'}
-        aria-expanded={!collapsed} aria-controls="bookmark-sidebar" onClick={() => setCollapsed(value => !value)} /> : null}</div>
       <span className="window-title">huan-app</span>
-      <div className="titlebar-actions">
-        {activePage === 'reading' ? <IconButton className="right-panel-toggle" icon={aiCollapsed ? 'expand' : 'collapse'} label={aiCollapsed ? '展开 AI 伴读' : '收起 AI 伴读'}
-          aria-expanded={!aiCollapsed} aria-controls="ai-chat" onClick={() => setAICollapsed(value => !value)} /> : null}
-      </div>
     </div>
     <div className="application-body">
     <Navigation active={activePage} busy={navigationBusy} settingsDisabled={readBusy || navigationBusy}
@@ -108,6 +102,7 @@ export function App() {
     <div ref={panels.workspace} className={`workspace${panels.dragging ? ' workspace-resizing' : ''}`}
       style={{ '--left-panel-width': `${panels.left}px`, '--right-panel-width': `${panels.right}px` } as CSSProperties}>
       <BookmarkList library={library} loading={loading} collapsed={collapsed} selectedId={selectedId}
+        onToggleCollapsed={() => setCollapsed(value => !value)}
         readBusy={readBusy} onToggleRead={item => void toggleRead(item)}
         onSelect={(item) => setSelectedId(item.id)} />
       {!collapsed ? <PanelDivider label="调整收藏列表宽度" controls="bookmark-sidebar" value={panels.left}
@@ -120,7 +115,8 @@ export function App() {
       {!aiCollapsed ? <PanelDivider label="调整 AI 对话宽度" controls="ai-chat" value={panels.right}
         {...panels.limits.right} direction={-1} onStart={x => panels.start('right', x)} onMove={panels.move}
         onEnd={panels.end} onChange={value => panels.change('right', value)} /> : null}
-      <ReadingAssistant collapsed={aiCollapsed} settingsRevision={revision} onConfigure={tab => void openSettings(tab)} />
+      <ReadingAssistant collapsed={aiCollapsed} onToggleCollapsed={() => setAICollapsed(value => !value)}
+        settingsRevision={revision} onConfigure={tab => void openSettings(tab)} />
     </div>
     </div>
     <Translation active={activePage === 'translation'} />

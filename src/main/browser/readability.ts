@@ -7,14 +7,14 @@ import readabilitySource from '@mozilla/readability/Readability.js?raw';
 import readerableSource from '@mozilla/readability/Readability-readerable.js?raw';
 
 const resultSchema = z.discriminatedUnion('ok', [
-  z.object({ ok: z.literal(true), url: z.string().max(4096), title: z.string().max(500),
-    text: z.string().max(40000), truncated: z.boolean(), frames: z.array(z.string().max(4096)).max(4).default([]) }),
+  z.object({ ok: z.literal(true), url: z.string().max(4096), title: z.string(),
+    text: z.string(), truncated: z.boolean(), frames: z.array(z.string().max(4096)).default([]) }),
   z.object({ ok: z.literal(false), empty: z.boolean().optional(), message: z.string().max(1000) })
 ]);
 
 const extractScript = (articleOnly: boolean, includeFrames = false) => `
 (() => {
-  // 子 frame 的页面原型不可信；输出上限不依赖可被网站覆写的 String.slice。
+  // 子 frame 的页面原型不可信；URL 和错误信息限制不依赖可被网站覆写的 String.slice。
   function bounded(value, limit) {
     if (typeof value !== 'string') return '';
     let result = '';
@@ -50,10 +50,10 @@ const extractScript = (articleOnly: boolean, includeFrames = false) => `
     return {
       ok: true,
       url: bounded(location.href, 4096),
-      title: bounded((${articleOnly} ? document.querySelector('h1')?.textContent?.trim() : '') || article?.title || document.title, 500),
-      text: bounded(text, 40000),
-      truncated: text.length > 40000 || frames.length > 4,
-      frames: ${includeFrames} ? frames.slice(0, 4) : []
+      title: (${articleOnly} ? document.querySelector('h1')?.textContent?.trim() : '') || article?.title || document.title,
+      text,
+      truncated: false,
+      frames
     };
   } catch (error) {
     return {
@@ -100,8 +100,8 @@ export async function extractReadablePage(webContents: WebContents, articleOnly 
           truncated = true; continue;
         }
         const combined = text + (text ? '\n\n' : '') + embedded.title + '\n' + embedded.text;
-        truncated ||= embedded.truncated || combined.length > 40000;
-        text = combined.slice(0, 40000);
+        truncated ||= embedded.truncated;
+        text = combined;
       } catch { check(); truncated = true; }
     }
     if (!text) return null;

@@ -180,6 +180,10 @@ export function registerTranslation(contents: WebContents, assertTrusted: (event
   });
   contents.on('render-process-gone', () => active?.controller.abort('USER_STOP'));
   return {
+    warmup() {
+      // ensure 已发布失败详情；后台加载失败不阻断应用启动，也不自动重试。
+      void ensure().catch(() => undefined);
+    },
     hasWork: () => !!active,
     close() { closed = true; active?.controller.abort('USER_STOP'); server?.child.kill('SIGKILL'); }
   };

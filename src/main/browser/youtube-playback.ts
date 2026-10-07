@@ -4,7 +4,7 @@ import { youtubeVideoId, type SubtitleResult, type SubtitleState } from '@shared
 import type { createPageHost } from './page-host';
 
 const sampleSchema = z.discriminatedUnion('phase', [
-  z.object({ phase: z.literal('content'), seconds: z.number().finite().nonnegative(), duration: z.number().finite().nonnegative() }),
+  z.object({ phase: z.literal('content'), seconds: z.number().finite().nonnegative(), duration: z.number().finite().nonnegative(), playing: z.boolean() }),
   z.object({ phase: z.literal('advertisement') }), z.object({ phase: z.literal('unavailable') })
 ]);
 function playerScript(videoId: string, seconds?: number): string {
@@ -23,12 +23,14 @@ function playerScript(videoId: string, seconds?: number): string {
     for (let i = 0; i < video.seekable.length; i++) if (seconds >= video.seekable.start(i) && seconds <= video.seekable.end(i)) seekable = true;
     if (seconds > video.duration || !seekable) return { phase: 'unavailable' };
     video.currentTime = seconds;`}
-    return { phase: 'content', seconds: video.currentTime, duration: video.duration };
+    return { phase: 'content', seconds: video.currentTime, duration: video.duration,
+      playing: !video.paused && !video.ended && video.readyState >= 3 };
   })()`;
 }
 
 export function createYouTubePlayback(host: ReturnType<typeof createPageHost>,
-  bind: (videoId: string | null) => void, update: (playback: NonNullable<SubtitleState['playback']>) => void) {
+  bind: (videoId: string | null) => void, update: (playback: NonNullable<SubtitleState['playback']>) => void,
+  onPlaying: (videoId: string) => void) {
   let contents: WebContents | undefined;
   let videoId: string | null = null;
   let generation = 0;
@@ -52,7 +54,10 @@ export function createYouTubePlayback(host: ReturnType<typeof createPageHost>,
       if (!matches(target, id, epoch)) return;
       const parsed = sampleSchema.safeParse(raw);
       if (!parsed.success || Date.now() - observedAt > 1000) unavailable();
-      else update({ observedAt, phase: parsed.data.phase, seconds: parsed.data.phase === 'content' ? parsed.data.seconds : undefined });
+      else {
+        update({ observedAt, phase: parsed.data.phase, seconds: parsed.data.phase === 'content' ? parsed.data.seconds : undefined });
+        if (parsed.data.phase === 'content' && parsed.data.playing) onPlaying(id);
+      }
     } catch { unavailable(); }
     finally {
       clearTimeout(watchdog);

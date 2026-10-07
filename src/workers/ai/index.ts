@@ -63,16 +63,16 @@ async function initialize() {
           return { ...payload, model: 'deepseek-flash', thinking: { type: 'disabled' } };
         }
       }),
-      // 既限制工具次数，也限制模型轮数；工具错误也不能形成无限循环。
-      beforeToolCall: async () => {
-        if (++slot.toolCalls > 8) { slot.limitReached = true; return { block: true, reason: '本轮工具调用次数已达上限', terminate: true }; }
-      },
-      finishTurn: ({ context }) => {
-        if (++slot.turns >= 10 || JSON.stringify(context.messages).length > 240000) {
-          slot.limitReached = true;
-          return { action: 'end' };
-        }
-      }
+      // // 既限制工具次数，也限制模型轮数；工具错误也不能形成无限循环。
+      // beforeToolCall: async () => {
+      //   if (++slot.toolCalls > 8) { slot.limitReached = true; return { block: true, reason: '本轮工具调用次数已达上限', terminate: true }; }
+      // },
+      // finishTurn: ({ context }) => {
+      //   if (++slot.turns >= 10 || JSON.stringify(context.messages).length > 240000) {
+      //     slot.limitReached = true;
+      //     return { action: 'end' };
+      //   }
+      // }
     }) };
     return slot;
   }
@@ -96,7 +96,6 @@ async function initialize() {
     let final: AssistantMessage | undefined;
     let accepted = false;
     let failed = false;
-    let failureMessage: string | undefined;
     let toolError: string | undefined;
     const unsubscribe = slot.agent.subscribe(event => {
       if (event.type === 'message_end' && event.message.role === 'user') {
@@ -141,10 +140,9 @@ async function initialize() {
       // 目录配置与工具装配是两件事；显式给出本轮名单，避免沿用旧回合的不可用结论。
       if (Array.isArray(message.content)) message.content.splice(1, 0, { type: 'text',
         text: `本轮实际可用工具：${slot.agent.state.tools.map(tool => tool.name).join('、')}。${toolError ?? ''}\n以此名单和本轮工具定义为准，之前回合关于工具不可用的结论可能已过期。read 只能读取具体文件，不能列举目录；没有目录列举或全库搜索工具，不要承诺扫描目录或完成全库去重。用户已指定新笔记路径时，可直接 write 发起新建确认，同名文件不会被覆盖。` });
-      if (JSON.stringify(previous).length + JSON.stringify(message).length > 120000) {
-        failureMessage = '当前模型上下文已达容量上限，请新开对话。';
-        throw new Error('CONTEXT_LIMIT');
-      }
+      // if (JSON.stringify(previous).length + JSON.stringify(message).length > 120000) {
+      //   throw new Error('CONTEXT_LIMIT');
+      // }
       if (slot.cancelled || slot.retired) throw new Error('CANCELLED');
       await slot.agent.prompt(message);
     }
@@ -169,7 +167,7 @@ async function initialize() {
           content: `应用执行回执：本轮回答未完成，但以下文件已成功保存，不得当作未执行而重复写入：${JSON.stringify(writes)}` }];
       }
       const rawError = final?.errorMessage ?? '';
-      const error = status !== 'failed' ? undefined : failureMessage ?? (slot.limitReached ? '本轮工具调用或上下文已达上限，请缩小问题范围或新开对话。' : /401|403|authentication|api.?key/i.test(rawError)
+      const error = status !== 'failed' ? undefined : (slot.limitReached ? '本轮工具调用或上下文已达上限，请缩小问题范围或新开对话。' : /401|403|authentication|api.?key/i.test(rawError)
         ? 'API Key 无效或没有权限，请检查设置。' : /429|rate.?limit/i.test(rawError)
           ? 'DeepSeek 请求限流，请稍后手动重试。' : '模型请求失败；服务商可能已处理或计费，未自动重发。');
       port!.postMessage({ type: 'settled', instanceId: command.instanceId, requestId: command.requestId, status, text, error } satisfies WorkerEvent);

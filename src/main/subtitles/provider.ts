@@ -35,7 +35,7 @@ const usageSchema = z.object({ days: z.array(z.object({
 })).max(90) });
 const transcriptSchema = z.object({
   video_id: videoIdSchema, language: z.string().min(1).max(128), source: z.string().min(1).max(128),
-  segments: z.array(z.object({ time: z.string().max(128), seconds: z.number().finite().nonnegative(), text: z.string() })).max(30000),
+  segments: z.array(z.object({ time: z.string().max(128), seconds: z.number().finite().nonnegative(), text: z.string() })),
   word_count: z.number().int().nonnegative(), quality_warning: z.boolean(), quality_issues: z.array(z.unknown())
 });
 export function validateJob(raw: unknown, videoId: string): TranscriptGuruJob {
@@ -45,8 +45,6 @@ export function validateJob(raw: unknown, videoId: string): TranscriptGuruJob {
   return result.data;
 }
 export function validateTranscript(raw: unknown, videoId: string): TranscriptGuruTranscript {
-  if (typeof raw === 'object' && raw !== null && 'segments' in raw && Array.isArray(raw.segments) && raw.segments.length > 30000)
-    throw new SubtitleFailure('RESOURCE_LIMIT', '字幕超过 30,000 段限制，未缓存部分结果。');
   const result = transcriptSchema.safeParse(raw);
   if (!result.success || result.data.video_id !== videoId)
     throw new SubtitleFailure('INVALID_TRANSCRIPT', '服务返回的字幕格式或视频身份不匹配。');
@@ -54,13 +52,11 @@ export function validateTranscript(raw: unknown, videoId: string): TranscriptGur
   if (!transcript.segments.length) throw new SubtitleFailure('EMPTY_TRANSCRIPT', '服务返回空字幕；这不等于已确认视频没有字幕。');
   if (!CAPTION_SOURCES.has(transcript.source)) throw new SubtitleFailure('UNSUPPORTED_SOURCE',
     `服务返回的字幕来源“${transcript.source}”尚不支持；未接受该结果，不自动转写或翻译。`);
-  let bytes = 0, previous = -1;
+  let previous = -1;
   for (const segment of transcript.segments) {
     if (!segment.text.trim() || segment.seconds < previous)
       throw new SubtitleFailure('INVALID_TRANSCRIPT', '字幕包含空文本或不按时间顺序排列。');
     previous = segment.seconds;
-    bytes += Buffer.byteLength(segment.text, 'utf8');
-    if (bytes > 2 * 1024 * 1024) throw new SubtitleFailure('RESOURCE_LIMIT', '字幕正文超过 2MiB 限制，未缓存部分结果。');
     Object.freeze(segment);
   }
   Object.freeze(transcript.segments);
@@ -111,13 +107,10 @@ export function createSubtitleProvider() {
       const reader = response.body?.getReader();
       if (!reader) throw new SubtitleFailure('INVALID_RESPONSE', '字幕服务没有返回响应正文。');
       const chunks: Uint8Array[] = [];
-      let bytes = 0;
       try {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          bytes += value.byteLength;
-          if (bytes > 4 * 1024 * 1024) throw new SubtitleFailure('RESOURCE_LIMIT', '服务响应超过 4MiB，未缓存部分结果。');
           chunks.push(value);
         }
         try { return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown; }

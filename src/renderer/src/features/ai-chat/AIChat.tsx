@@ -148,7 +148,7 @@ export function AIChat({ settingsRevision, collapsed, onConfigure }: {
       {confirmRestart ? <div className="ai-notice"><p>清空当前对话和草稿并新开对话？页面缓存与 API Key 不受影响。</p>
         <Button onClick={() => setConfirmRestart(false)}>取消</Button>{' '}<Button onClick={() => void restart()}>确认新开对话</Button></div> : null}
       <p className="ai-hint" role="status">{youtubeVideoId(page?.url ?? '')
-        ? '视频问答使用提问时已获取的字幕，不包含视频画面。可在「实时字幕」按需获取。'
+        ? '视频问答使用提问时已获取的字幕，不包含视频画面。播放后自动获取，可在「实时字幕」查看。'
         : pageStatuses[page?.contentStatus ?? 'empty']}</p>
       {error || current?.error ? <p className="ai-error" role="alert">{error || current?.error}</p> : null}
       <label className="visually-hidden" htmlFor="ai-question">向 AI 提问</label>

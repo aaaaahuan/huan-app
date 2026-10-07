@@ -131,7 +131,7 @@ export function Subtitles({ visible, hidden, settingsRevision, onConfigure }: {
   return <section id="reading-subtitles-panel" role="tabpanel" aria-labelledby="reading-subtitles-tab" className="subtitles-panel" hidden={hidden}>
     {document ? <SubtitleReader key={state.videoId} document={document} state={state} visible={visible} /> : <div className="subtitle-empty">
       {!state.videoId ? <p>请打开支持的 YouTube 视频</p> : state.phase === 'loading' ? <p role="status">正在获取字幕…</p> : <>
-        <p role={message ? 'alert' : 'status'}>{message || '首次进入字幕视图后按需获取。'}</p>
+        <p role={message ? 'alert' : 'status'}>{message || '视频开始播放后会自动获取字幕。'}</p>
         {failureCode ? <small>{failureCode}{state.error?.retryAfter ? ` · 请等待至少 ${state.error.retryAfter} 秒` : ''}</small> : null}
         <div className="subtitle-actions">
           <Button onClick={onConfigure}>字幕服务设置</Button>

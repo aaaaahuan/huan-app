@@ -34,7 +34,11 @@ export function createSubtitleService(initial: Settings, currentVideo: () => str
       if (entries.size >= 20) {
         const disposable = [...entries].find(([id, value]) => id !== state.videoId && !value.promise &&
           (value.transcript || (!value.job && !value.submissionUnknown)));
-        if (!disposable) return Promise.resolve({ ok: false, code: 'CACHE_CAPACITY', message: '字幕缓存已满，未丢弃可续查或未知任务。请完全退出应用后重试。' });
+        if (!disposable) {
+          const error = { code: 'CACHE_CAPACITY', message: '字幕缓存已满，未丢弃可续查或未知任务。请完全退出应用后重试。' };
+          state = { ...state, phase: 'error', error }; notify();
+          return Promise.resolve({ ok: false, ...error });
+        }
         entries.delete(disposable[0]);
       }
       entry = {}; entries.set(videoId, entry);
@@ -112,6 +116,11 @@ export function createSubtitleService(initial: Settings, currentVideo: () => str
   }
   return {
     get: () => state, ensure,
+    prefetch(videoId: string) {
+      // 缺少授权时静默等待配置；在途、成功及失败条目不随播放采样重复请求。
+      if (config.credentialId && config.consentVersion >= 1 && state.videoId === videoId && state.phase === 'idle')
+        void ensure(videoId);
+    },
     usage(): Promise<SubtitleUsage> {
       const credentialId = config.credentialId;
       if (!credentialId) return Promise.resolve({ credentialId, phase: 'unavailable', message: '请先保存字幕服务 Key。' });

@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import type { ReaderState } from '@shared/contracts/browser';
 import { isYouTubeUrl } from '@shared/contracts/subtitles';
 import { Tabs } from '@renderer/components/Tabs';
+import { IconButton } from '@renderer/components/Button';
 import { AIChat } from '@renderer/features/ai-chat/AIChat';
 import { Subtitles } from '@renderer/features/subtitles/Subtitles';
 import './reading-assistant.css';
 
 type ReadingTab = 'reading-chat' | 'reading-subtitles';
-export function ReadingAssistant({ collapsed, settingsRevision, onConfigure }: {
-  collapsed: boolean; settingsRevision: number; onConfigure(tab: 'ai' | 'subtitles'): void;
+export function ReadingAssistant({ collapsed, settingsRevision, onConfigure, onToggleCollapsed }: {
+  collapsed: boolean; settingsRevision: number; onConfigure(tab: 'ai' | 'subtitles'): void; onToggleCollapsed(): void;
 }) {
   const [page, setPage] = useState<ReaderState>();
   const [tab, setTab] = useState<ReadingTab>('reading-chat');
@@ -28,12 +29,17 @@ export function ReadingAssistant({ collapsed, settingsRevision, onConfigure }: {
   }, []);
   const youtube = isYouTubeUrl(page?.url ?? '');
   const active = youtube ? tab : 'reading-chat';
-  return <aside id="ai-chat" className="reading-assistant" hidden={collapsed} aria-label="伴读面板">
-    <Tabs<ReadingTab> className="reading-tabs" label="伴读视图" value={active} onChange={setTab}
-      options={youtube ? [{ value: 'reading-chat', label: 'AI 伴读' }, { value: 'reading-subtitles', label: '实时字幕' }]
-        : [{ value: 'reading-chat', label: 'AI 伴读' }]} />
-    <AIChat collapsed={active !== 'reading-chat'} settingsRevision={settingsRevision} onConfigure={() => onConfigure('ai')} />
-    <Subtitles visible={!collapsed && active === 'reading-subtitles'} hidden={active !== 'reading-subtitles'}
+  return <aside id="ai-chat" className={`reading-assistant${collapsed ? ' reading-assistant--collapsed' : ''}`} aria-label="伴读面板">
+    <div className="reading-assistant-header">
+      <Tabs<ReadingTab> className="reading-tabs" label="伴读视图" value={active} onChange={setTab}
+        options={youtube ? [{ value: 'reading-chat', label: 'AI 伴读' }, { value: 'reading-subtitles', label: '实时字幕' }]
+          : [{ value: 'reading-chat', label: 'AI 伴读' }]} />
+      <IconButton className="panel-toggle right-panel-toggle" icon={collapsed ? 'expand' : 'collapse'}
+        label={collapsed ? '展开 AI 伴读' : '收起 AI 伴读'} aria-expanded={!collapsed}
+        aria-controls="ai-chat" onClick={onToggleCollapsed} />
+    </div>
+    <AIChat collapsed={collapsed || active !== 'reading-chat'} settingsRevision={settingsRevision} onConfigure={() => onConfigure('ai')} />
+    <Subtitles visible={!collapsed && active === 'reading-subtitles'} hidden={collapsed || active !== 'reading-subtitles'}
       settingsRevision={settingsRevision} onConfigure={() => onConfigure('subtitles')} />
   </aside>;
 }

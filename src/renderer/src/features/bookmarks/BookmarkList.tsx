@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { Bookmark, BookmarkLibrary } from '@shared/contracts/bookmarks';
 import { PLATFORMS, PLATFORM_NAMES, type Platform } from '@shared/contracts/settings';
 import { Icon } from '@renderer/components/Icon';
+import { IconButton } from '@renderer/components/Button';
 import { IconInput } from '@renderer/components/Input';
 import { Select } from '@renderer/components/Select';
 import { BookmarkCard } from './BookmarkCard';
@@ -18,7 +19,7 @@ function collectionDate(value: string): string {
   return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === date ? date : '';
 }
 
-export function BookmarkList({ library, loading, collapsed, selectedId, readBusy, onSelect, onToggleRead }: {
+export function BookmarkList({ library, loading, collapsed, selectedId, readBusy, onSelect, onToggleRead, onToggleCollapsed }: {
   library: BookmarkLibrary | undefined;
   loading: boolean;
   collapsed: boolean;
@@ -26,6 +27,7 @@ export function BookmarkList({ library, loading, collapsed, selectedId, readBusy
   readBusy: boolean;
   onSelect(bookmark: Bookmark): void;
   onToggleRead(bookmark: Bookmark): void;
+  onToggleCollapsed(): void;
 }) {
   const [query, setQuery] = useState('');
   const [platform, setPlatform] = useState<Platform | 'all'>('all');
@@ -38,9 +40,12 @@ export function BookmarkList({ library, loading, collapsed, selectedId, readBusy
     // ISO 日期可直接比较；空日期排末尾，同日依靠稳定排序保留原顺序。
     .sort((a, b) => b.date.localeCompare(a.date));
 
-  return <aside id="bookmark-sidebar" className="bookmark-sidebar" hidden={collapsed} aria-label="收藏列表">
+  return <aside id="bookmark-sidebar" className={`bookmark-sidebar${collapsed ? ' bookmark-sidebar--collapsed' : ''}`} aria-label="收藏列表">
+    <IconButton className="panel-toggle bookmark-panel-toggle" icon={collapsed ? 'expand' : 'collapse'}
+      label={collapsed ? '展开收藏列表' : '收起收藏列表'} aria-expanded={!collapsed}
+      aria-controls="bookmark-sidebar-content" onClick={onToggleCollapsed} />
     {/* 折叠只隐藏内容，不卸载整个列表，保留搜索和筛选状态。 */}
-    <div className="library-content">
+    <div id="bookmark-sidebar-content" className="library-content" hidden={collapsed}>
       <div className="library-controls">
         <label className="visually-hidden" htmlFor="bookmark-search">搜索标题或链接</label>
         <IconInput icon="search" id="bookmark-search" type="search" placeholder="搜索收藏" value={query}

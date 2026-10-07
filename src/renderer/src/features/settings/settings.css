@@ -1,8 +1,4 @@
-/* 设置面板样式；标题栏按钮必须关闭拖拽命中，否则点击会被窗口拖动拦截。 */
-.titlebar-actions{display:flex;align-items:center;gap:10px}
-.titlebar .ui-icon-button{-webkit-app-region:no-drag;background:transparent;border-color:transparent}
-.titlebar .ui-icon-button:hover{background:#e3eee5}
-.right-panel-toggle svg{transform:scaleX(-1)}
+/* 设置面板样式。 */
 .settings-dialog{width:min(760px,calc(100vw - 48px));max-height:calc(100vh - 64px);padding:0;border:1px solid #d4e0d7;border-radius:18px;background:#f8faf6;color:#293d36;box-shadow:0 24px 100px #1f382d30}
 /* 使用 dialog 的原生遮罩，不靠普通层级覆盖模拟模态窗口。 */
 .settings-dialog::backdrop{background:#20372c42;backdrop-filter:blur(3px)}

@@ -58,7 +58,6 @@ export function createConversations(getKey: () => Promise<string>, publish: (sta
   
   return {
     get(key: string) {
-      if (!sessions.has(key) && sessions.size >= 64) throw new Error('临时会话已达上限，请退出应用后重试。');
       return (sessions.get(key) ?? create(key)).state;
     },
     draft(input: Owner, text: string) { const owner = requireOwner(input); owner.state.draft = text; owner.draftRevision++; },
@@ -71,15 +70,12 @@ export function createConversations(getKey: () => Promise<string>, publish: (sta
       }
       if (owner.run) throw new Error('当前任务尚未结束，请等待或停止。');
       if (owner.broken) throw new Error('AI 进程已退出，请重新开始对话。');
-      if (owner.requests.size >= 200 || owner.state.entries.length >= 60) throw new Error('当前对话已达上限，请重新开始。');
-      if (running.size >= 3) throw new Error('同时最多处理 3 个任务，请等待已有任务结束。');
       const run: Run = { id: input.requestId, controller: new AbortController() };
       const draftRevision = owner.draftRevision;
       // 在任何异步授权前占用会话；停止覆盖授权、生成和收尾全过程。
       owner.run = run; owner.state.phase = 'preparing'; owner.state.error = '';
       owner.requests.set(input.requestId, signature);
       running.add(run); notify(owner);
-      const timer = setTimeout(() => { owner.state.error = '请求超时，正在取消；未自动重发。'; stopRun(owner, run); }, 180000);
       let entry: ChatEntry | undefined;
       run.done = (async () => {
         const key = await getKey();
@@ -122,7 +118,7 @@ export function createConversations(getKey: () => Promise<string>, publish: (sta
       })().catch(error => {
         owner.state.error = run.controller.signal.aborted ? '已停止。' : message(error);
       }).finally(() => {
-        clearTimeout(timer); running.delete(run);
+        running.delete(run);
         if (entry?.status === 'generating') { entry.status = 'failed'; entry.error = '请求中断，未自动重发。'; }
         if ((!entry || entry.status === 'failed') && owner.draftRevision === draftRevision) owner.state.draft = input.text;
         if (owner.run === run) { owner.run = undefined; owner.state.phase = 'idle'; notify(owner); }

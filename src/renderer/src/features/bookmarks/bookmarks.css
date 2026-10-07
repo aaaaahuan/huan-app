@@ -1,10 +1,13 @@
 /* 三栏工作区：侧栏可调宽，中间区域随折叠扩展；长列表仅在自身区域滚动。 */
 .workspace-shell{height:100vh;display:flex;flex-direction:column;background:radial-gradient(ellipse at 85% 12%,#e7f0e9,transparent 55%),#f6f8f4}
 .workspace{display:flex;flex:1;min-height:0}
-.bookmark-sidebar{width:var(--left-panel-width,350px);flex-shrink:0;display:flex;flex-direction:column;min-height:0;border-right:1px solid #dfe7df;background:#fcfdf9d9}
-.bookmark-sidebar[hidden]{display:none}
+.bookmark-sidebar{position:relative;width:var(--left-panel-width,350px);flex-shrink:0;display:flex;flex-direction:column;min-height:0;border-right:1px solid #dfe7df;background:#fcfdf9d9}
+.bookmark-panel-toggle{position:absolute;top:21px;left:22px}
+.bookmark-sidebar--collapsed .bookmark-panel-toggle{left:8px}
 .library-content{display:flex;flex:1;flex-direction:column;min-height:0}.library-content[hidden]{display:none}
-.library-controls{padding:20px 22px 18px;display:grid;grid-template-columns:minmax(0,1fr) 100px;gap:8px}
+.library-controls{padding:20px 22px 18px 66px;display:flex;flex-wrap:wrap;gap:8px}
+.library-controls .ui-icon-input{flex:1;min-width:120px}
+.library-controls .ui-select{width:100px;flex-shrink:0;margin-left:auto}
 .bookmark-scroll{flex:1;overflow:auto;min-height:100px;padding:3px 12px 16px;scrollbar-gutter:stable}
 .bookmark-items{list-style:none;padding:0;margin:0;display:grid;gap:6px}
 .bookmark-items li{min-width:0;content-visibility:auto;contain-intrinsic-size:auto 76px}

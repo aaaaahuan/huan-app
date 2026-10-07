@@ -46,24 +46,20 @@ export function createPageStore() {
       pages.set(id, { id, url: url.href, title: '', text: '', truncated: false,
         status: supported ? 'loading' : 'unsupported' });
       currentPageId = id;
-      if (pages.size > 20) {
-        const oldest = pages.keys().next().value;
-        if (oldest) pages.delete(oldest);
-      }
       return id;
     },
     complete(id: string, content: PageContent) {
       const page = pages.get(id);
       if (!page || page.status !== 'loading') return;
-      pages.set(id, { ...page, title: content.title.slice(0, 500), text: content.text.slice(0, 40000),
-        truncated: content.truncated || content.text.length > 40000, status: 'ready', capturedAt: Date.now() });
+      pages.set(id, { ...page, title: content.title, text: content.text,
+        truncated: content.truncated, status: 'ready', capturedAt: Date.now() });
     },
     fail(id: string) {
       const page = pages.get(id);
       if (page?.status === 'loading') pages.set(id, { ...page, status: 'unavailable' });
     },
     current: () => currentPageId ? pages.get(currentPageId) : undefined,
-    // 快照不共享可变对象；本轮发送后切页或淘汰缓存均不影响工具读取。
+    // 快照不共享可变对象；本轮发送后切页或清理缓存均不影响工具读取。
     snapshot: (): PageContext => ({ currentPageId, pages: [...pages.values()]
       .filter(page => page.status === 'ready' || page.id === currentPageId).map(page => ({ ...page })) }),
     clearCurrent,
