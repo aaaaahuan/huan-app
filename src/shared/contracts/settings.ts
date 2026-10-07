@@ -1,5 +1,6 @@
 // 设置的共享结构与接口；不在此处执行文件读写或依赖 Electron。
 import { z } from 'zod';
+import { defaultModelSelection, modelSelectionSchema } from './models';
 
 // 顺序同时用于设置展示与跨平台收藏拼接；不改变各来源内部的行顺序。
 export const PLATFORMS = ['x', 'reddit', 'youtube', 'wechat', 'other'] as const;
@@ -18,6 +19,7 @@ export const settingsSchema = z.object({
   // 兼容 A1-A4 的配置；缺少会话设置时沿用内存模式，不自动持久化登录态。
   sessions: sessionModesSchema.default(defaultSessionModes),
   notesPath: z.string().trim().max(4096).default(''),
+  model: modelSelectionSchema.default(defaultModelSelection),
   ai: z.object({ credentialId: z.uuid().nullable(), consentVersion: z.number().int().min(0).max(3) })
     .default({ credentialId: null, consentVersion: 0 }),
   subtitles: z.object({ credentialId: z.uuid().nullable(), consentVersion: z.number().int().min(0).max(1) })
@@ -30,7 +32,7 @@ export function defaultSettings(): Settings {
   return { version: 1, sources: {
     x: { enabled: false, path: '' }, reddit: { enabled: false, path: '' },
     youtube: { enabled: false, path: '' }, wechat: { enabled: false, path: '' }, other: { enabled: false, path: '' }
-  }, sessions: defaultSessionModes(), notesPath: '', ai: { credentialId: null, consentVersion: 0 },
+  }, sessions: defaultSessionModes(), notesPath: '', model: defaultModelSelection(), ai: { credentialId: null, consentVersion: 0 },
   subtitles: { credentialId: null, consentVersion: 0 } };
 }
 // revision 为磁盘内容摘要；null 表示尚无配置文件，不是配置读取失败。

@@ -18,6 +18,7 @@ import { registerSubtitles } from '@main/subtitles/ipc';
 import { createYouTubePlayback } from '@main/browser/youtube-playback';
 import { youtubeVideoId } from '@shared/contracts/subtitles';
 import { registerTranslation } from '@main/translation';
+import { createLocalModelRuntime } from '@main/ai/local-model';
 
 // 协议权限必须在 app ready 前声明；生产界面通过 app:// 加载，不依赖开发服务器。
 protocol.registerSchemesAsPrivileged([
@@ -108,8 +109,9 @@ if (!app.requestSingleInstanceLock()) {
     currentVideo = playback.currentVideo;
     registerSubtitles(subtitles, playback, assertTrusted);
     pageHost.observeSessionClear(platform => { if (platform === 'youtube') subtitles.clear(); });
-    const ai = registerAI(window, pageHost, settings, assertTrusted, subtitles.snapshot);
-    const translation = registerTranslation(contents, assertTrusted);
+    const localModel = createLocalModelRuntime(contents);
+    const ai = registerAI(window, pageHost, settings, assertTrusted, subtitles.snapshot, localModel);
+    const translation = registerTranslation(contents, assertTrusted, localModel, ai.runtime, ai.getTarget);
     registerSettings(window, settings, assertTrusted, async value => {
       await subtitles.configure(value);
       await bookmarks.update(value);
@@ -121,7 +123,7 @@ if (!app.requestSingleInstanceLock()) {
         event.preventDefault(); quitting = false;
       }
     });
-    app.on('will-quit', () => { translation.close(); ai.close(); playback.close(); subtitles.clear(); });
+    app.on('will-quit', () => { translation.close(); ai.close(); localModel.close(); playback.close(); subtitles.clear(); });
 
     ipcMain.handle(IPC_CHANNELS.bookmarks.get, (event) => {
       assertTrusted(event);
@@ -156,7 +158,7 @@ if (!app.requestSingleInstanceLock()) {
       { label: '编辑', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] }
     ]));
     await window.loadURL(devUrl ?? UI_URL);
-    translation.warmup();
+    localModel.warmup();
   }).catch((error: unknown) => {
     console.error('Application startup failed', error);
     app.quit();

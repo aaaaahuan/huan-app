@@ -15,12 +15,18 @@ import { Translation } from '@renderer/features/translation/Translation';
 import '@renderer/components/controls.css';
 import '@renderer/features/bookmarks/bookmarks.css';
 import './navigation.css';
+import { ModelSwitcher } from './ModelSwitcher';
+import type { ModelSelection } from '@shared/contracts/models';
 
 export function App() {
   const [library, setLibrary] = useState<BookmarkLibrary>();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [revision, setRevision] = useState(0);
+  const [modelSelection, setModelSelection] = useState<ModelSelection>();
+  const [modelSaving, setModelSaving] = useState(false);
+  const modelPending = useRef(false);
+  const modelVersion = useRef(0);
   const [activePage, setActivePage] = useState<SystemPage>('reading');
   const [navigationBusy, setNavigationBusy] = useState(false);
   const navigationPending = useRef(false);
@@ -34,6 +40,30 @@ export function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [readBusy, setReadBusy] = useState(false);
   const readPending = useRef(false);
+
+  useEffect(() => {
+    if (modelPending.current) return;
+    const version = ++modelVersion.current;
+    let cancelled = false;
+    void window.huanApp.ai.getSelection().then(result => {
+      if (cancelled || version !== modelVersion.current) return;
+      if (result.ok) setModelSelection(result.value);
+      else setFeedback(result.message);
+    }).catch(() => { if (!cancelled && version === modelVersion.current) setFeedback('无法读取模型配置。'); });
+    return () => { cancelled = true; };
+  }, [revision]);
+
+  async function selectModel(selection: ModelSelection) {
+    if (modelPending.current) return;
+    ++modelVersion.current;
+    modelPending.current = true; setModelSaving(true); setFeedback('');
+    try {
+      const result = await window.huanApp.ai.selectModel(selection);
+      if (result.ok) setModelSelection(result.value);
+      else setFeedback(result.message);
+    } catch { setFeedback('模型切换失败，请重试。'); }
+    finally { modelPending.current = false; setModelSaving(false); }
+  }
 
   useEffect(() => {
     // 设置保存后重新查询主进程结果；主进程负责决定哪些来源需要真正重读。
@@ -87,6 +117,7 @@ export function App() {
   return <div className="workspace-shell">
     <div className="titlebar">
       <span className="window-title">huan-app</span>
+      <ModelSwitcher selection={modelSelection} disabled={modelSaving || settingsOpen} onChange={selection => void selectModel(selection)} />
     </div>
     <div className="application-body">
     <Navigation active={activePage} busy={navigationBusy} settingsDisabled={readBusy || navigationBusy}
@@ -116,10 +147,10 @@ export function App() {
         {...panels.limits.right} direction={-1} onStart={x => panels.start('right', x)} onMove={panels.move}
         onEnd={panels.end} onChange={value => panels.change('right', value)} /> : null}
       <ReadingAssistant collapsed={aiCollapsed} onToggleCollapsed={() => setAICollapsed(value => !value)}
-        settingsRevision={revision} onConfigure={tab => void openSettings(tab)} />
+        settingsRevision={revision} modelSelection={modelSelection} modelChanging={modelSaving} onConfigure={tab => void openSettings(tab)} />
     </div>
     </div>
-    <Translation active={activePage === 'translation'} />
+    <Translation active={activePage === 'translation'} selection={modelSelection} modelChanging={modelSaving} />
     </div>
     </div>
     {settingsOpen ? <SettingsPanel initialTab={settingsTab} onClose={closeSettings} onSaved={() => {

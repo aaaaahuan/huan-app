@@ -9,7 +9,7 @@
 - 权重：`/Users/bytedance/Desktop/llm/model/models/Qwen3.5-4B-Q4_K_M.gguf`。
 - runtime：`/Users/bytedance/Desktop/llm/model/runtime/llama/llama-b11429/llama-server`，使用目录内配套动态库。
 - 初版主进程首次请求启动本地服务；2026-10-07 已改为应用界面加载后后台预热，复验见文末。仍为单 slot、关闭 thinking、非流式单次 Chat Completions；没有伴读 Agent、历史、OCR、字幕翻译、模型下载或云端回退。
-- 路径覆盖、启动命令和打包态边界集中见 [README](../README.md#本地离线翻译)。
+- 路径覆盖、启动命令和打包态边界集中见 [README](../README.md#翻译)。本页保留此前验收事实，统一 Provider 后的行为及验收见 [Provider 验收](provider-review.md)。
 
 ## 实机结果
 

@@ -7,11 +7,31 @@ import type { PageContext } from '@shared/contracts/page-context';
 import type { createPageHost } from '@main/browser/page-host';
 import type { createSettingsStore } from '@main/settings/store';
 import { createConversations } from './conversations';
+import type { createLocalModelRuntime } from './local-model';
+import { LOCAL_MODEL, ONLINE_MODELS, modelSelectionSchema, type ModelTarget } from '@shared/contracts/models';
 
 export function registerAI(window: BrowserWindow, host: ReturnType<typeof createPageHost>, settings: ReturnType<typeof createSettingsStore>,
-  assertTrusted: (event: IpcMainInvokeEvent) => void, subtitleSnapshot: () => PageContext['subtitles']) {
+  assertTrusted: (event: IpcMainInvokeEvent) => void, subtitleSnapshot: () => PageContext['subtitles'], local: ReturnType<typeof createLocalModelRuntime>) {
 
-  const chat = createConversations(settings.getKey, state => {
+  async function getTarget(signal: AbortSignal): Promise<ModelTarget> {
+    const result = await settings.load();
+    if (!result.ok) throw new Error(result.message);
+    signal.throwIfAborted();
+    const selection = result.settings.model;
+    if (selection.mode === 'offline') {
+      const handle = await local.ensure(signal);
+      signal.throwIfAborted();
+      return { provider: 'Qwen-3.5-4B-local', modelId: LOCAL_MODEL.id, baseUrl: `${handle.origin}/v1`, apiKey: handle.token };
+    }
+    const model = ONLINE_MODELS.find(item => item.id === selection.onlineModel);
+    if (!model) throw new Error('在线模型未接入。');
+    if (!result.settings.ai.credentialId) throw new Error('请先配置在线模型 API Key，或切换为离线模式。');
+    const apiKey = await settings.getKey(result.settings.ai.credentialId);
+    signal.throwIfAborted();
+    return { provider: model.provider, modelId: model.id, apiKey };
+  }
+
+  const chat = createConversations(getTarget, state => {
     if (!window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send(IPC_CHANNELS.ai.state, state);
   }, async () => {
     const result = await settings.load();
@@ -29,12 +49,19 @@ export function registerAI(window: BrowserWindow, host: ReturnType<typeof create
     signal.throwIfAborted();
     const latest = await settings.load();
     return answer.response === 1 && latest.ok && latest.settings.notesPath === result.settings.notesPath;
+  }, async signal => {
+    const answer = await dialog.showMessageBox(window, { type: 'question', signal, buttons: ['取消', '允许发送'], defaultId: 0, cancelId: 0,
+      message: '允许向在线模型发送此对话的离线历史？',
+      detail: '继续此对话会把已有提问、回答和工具读取的正文、字幕或笔记内容发送给 DeepSeek，可能计费和留存。取消不会清空历史；也可新开对话避免发送旧内容。' });
+    signal.throwIfAborted();
+    return answer.response === 1;
   });
 
   // 授权期间切页不改变已冻结的本轮上下文。
-  const pageContext = (snapshot: PageContext) => async (signal: AbortSignal) => {
+  const pageContext = (snapshot: PageContext) => async (signal: AbortSignal, target: ModelTarget) => {
     if (!snapshot.pages.length && !snapshot.subtitles) return undefined;
     signal.throwIfAborted();
+    if (target.provider === 'Qwen-3.5-4B-local') return snapshot;
     const result = await settings.load();
     if (!result.ok) return undefined;
     let consent = result.settings.ai.consentVersion;
@@ -57,6 +84,25 @@ export function registerAI(window: BrowserWindow, host: ReturnType<typeof create
     try { return { ok: true, value: await operation() }; }
     catch (error) { return { ok: false, message: error instanceof Error ? error.message : '操作失败，请重试。' }; }
   }
+  ipcMain.handle(IPC_CHANNELS.ai.getSelection, event => {
+    assertTrusted(event);
+    return result(async () => {
+      const current = await settings.load();
+      if (!current.ok) throw new Error(current.message);
+      return current.settings.model;
+    });
+  });
+  ipcMain.handle(IPC_CHANNELS.ai.selectModel, (event, input: unknown) => {
+    assertTrusted(event);
+    return result(async () => {
+      const selection = modelSelectionSchema.parse(input);
+      const current = await settings.load();
+      if (!current.ok) throw new Error(current.message);
+      const saved = await settings.save({ ...current.settings, model: selection }, current.revision);
+      if (!saved.ok) throw new Error(saved.message);
+      return saved.settings.model;
+    });
+  });
   ipcMain.handle(IPC_CHANNELS.ai.get, (event, id: unknown) => {
     assertTrusted(event);
     return result(() => chat.get(ownerSchema.shape.key.parse(id)));
@@ -75,11 +121,11 @@ export function registerAI(window: BrowserWindow, host: ReturnType<typeof create
       const request = sendSchema.parse(input);
       const subtitles = host.isSuspended() ? undefined : subtitleSnapshot();
       const capture = host.freezeSnapshot();
-      return chat.send(request, async signal => {
+      return chat.send(request, async (signal, target) => {
         const snapshot: PageContext = structuredClone(await capture(signal));
         signal.throwIfAborted();
         snapshot.subtitles = subtitles;
-        return pageContext(snapshot)(signal);
+        return pageContext(snapshot)(signal, target);
       });
     });
   });
@@ -107,5 +153,5 @@ export function registerAI(window: BrowserWindow, host: ReturnType<typeof create
       } finally { testing = false; }
     });
   });
-  return chat;
+  return { ...chat, getTarget };
 }

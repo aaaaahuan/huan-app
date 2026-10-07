@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import type { PageContext, PageSource } from './page-context';
+import type { ModelSelection, ModelTarget } from './models';
+import type { TranslationDirection } from './translation';
 
 export const AI_MODEL_NAME = 'DeepSeek Flash';
 export const ownerSchema = z.object({ key: z.string().min(1).max(128), instanceId: z.uuid() }).strict();
@@ -10,6 +12,7 @@ export type AIResult<T = undefined> = { ok: true; value: T } | { ok: false; mess
 export type NoteWrite = { path: string; operation: 'write' | 'edit' };
 export interface ChatEntry {
   id: string; question: string; answer: string;
+  model: string;
   status: 'generating' | 'complete' | 'stopped' | 'failed' | 'truncated';
   error?: string; sources: PageSource[]; contextNotice?: string;
   writes: NoteWrite[];
@@ -22,6 +25,8 @@ export interface ConversationState extends Owner {
   error: string;
 }
 export interface AIAPI {
+  getSelection(): Promise<AIResult<ModelSelection>>;
+  selectModel(selection: ModelSelection): Promise<AIResult<ModelSelection>>;
   get(key: string): Promise<AIResult<ConversationState>>;
   draft(owner: Owner, text: string): Promise<AIResult>;
   send(input: SendInput): Promise<AIResult>;
@@ -33,7 +38,8 @@ export interface AIAPI {
 
 // 文件工具只获得已授权的笔记根目录；写入提案交回主进程确认。
 export type WorkerCommand =
-  | { type: 'start'; instanceId: string; requestId: string; key: string; text: string; context?: PageContext; notesPath: string }
+  | { type: 'start'; instanceId: string; requestId: string; target: ModelTarget; text: string; context?: PageContext; notesPath: string }
+  | { type: 'translate'; instanceId: string; requestId: string; target: ModelTarget; text: string; direction: TranslationDirection }
   | { type: 'note-approval'; instanceId: string; requestId: string; approvalId: string; allowed: boolean }
   | { type: 'cancel'; instanceId: string; requestId: string }
   | { type: 'dispose'; instanceId: string };

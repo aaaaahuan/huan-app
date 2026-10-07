@@ -1,5 +1,6 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
-import { TRANSLATION_MODEL, type TranslationDirection, type TranslationResult, type TranslationStatus } from '@shared/contracts/translation';
+import { type TranslationDirection, type TranslationResult, type TranslationStatus } from '@shared/contracts/translation';
+import { selectedModelName, type ModelSelection } from '@shared/contracts/models';
 import { Button, IconButton } from '@renderer/components/Button';
 import { Select } from '@renderer/components/Select';
 import { Icon } from '@renderer/components/Icon';
@@ -9,7 +10,7 @@ import './translation.css';
 const directions = [{ value: 'en-zh', label: '英语' }, { value: 'zh-en', label: '中文' }] as const;
 const modelLabels = { unloaded: '未加载', loading: '加载中', ready: '就绪', failed: '服务失败' };
 
-export function Translation({ active }: { active: boolean }) {
+export function Translation({ active, selection, modelChanging }: { active: boolean; selection?: ModelSelection; modelChanging: boolean }) {
   const [direction, setDirection] = useState<TranslationDirection>('en-zh');
   const [draft, setDraft] = useState('');
   const [result, setResult] = useState<TranslationResult>();
@@ -17,11 +18,14 @@ export function Translation({ active }: { active: boolean }) {
   const [phase, setPhase] = useState<'idle' | 'generating' | 'stopping'>('idle');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [runningSelection, setRunningSelection] = useState<ModelSelection>();
   const textarea = useRef<HTMLTextAreaElement>(null);
   const request = useRef<{ id: string; cancelled: boolean; draftRevision: number } | undefined>(undefined);
   const draftRevision = useRef(0);
   const modelRevision = useRef(-1);
   const busy = phase !== 'idle';
+  const displayedSelection = busy ? runningSelection : selection;
+  const offline = displayedSelection?.mode === 'offline';
 
   useEffect(() => {
     let disposed = false;
@@ -45,7 +49,7 @@ export function Translation({ active }: { active: boolean }) {
     if (!run) return;
     run.cancelled = true;
     setPhase('stopping');
-    setNotice(leaving ? '' : '已请求停止，正在等待本地请求结束…');
+    setNotice(leaving ? '' : '已请求停止，正在等待请求结束…');
     void window.huanApp.translation.stop(run.id).catch(failure => {
       if (request.current === run) { setError(String(failure)); setPhase('generating'); }
     });
@@ -57,9 +61,9 @@ export function Translation({ active }: { active: boolean }) {
   }, [active]);
 
   async function submit() {
-    if (!active || request.current || !draft.trim()) return;
+    if (!active || !selection || modelChanging || request.current || !draft.trim()) return;
     const run = { id: crypto.randomUUID(), cancelled: false, draftRevision: draftRevision.current };
-    request.current = run; setPhase('generating'); setError(''); setNotice(''); setResult(undefined);
+    request.current = run; setRunningSelection(selection); setPhase('generating'); setError(''); setNotice(''); setResult(undefined);
     try {
       const answer = await window.huanApp.translation.translate({ requestId: run.id, text: draft, direction });
       // 切页或停止后不接纳迟到译文；不将上一请求内容填入新草稿。
@@ -101,8 +105,8 @@ export function Translation({ active }: { active: boolean }) {
     <div className="translation-content">
       <header className="translation-heading">
         <h1 id="translation-title">翻译</h1>
-        <span className={`translation-model translation-model--${model.phase}`} role="status">
-          <span className="translation-model-dot" />离线 · {TRANSLATION_MODEL} · {modelLabels[model.phase]}
+        <span className={`translation-model translation-model--${offline ? model.phase : 'ready'}`} role="status">
+          <span className="translation-model-dot" />{offline ? '离线' : '在线'} · {displayedSelection ? selectedModelName(displayedSelection) : '读取配置中'}{offline ? ` · ${modelLabels[model.phase]}` : ''}
         </span>
       </header>
       <form onSubmit={event => { event.preventDefault(); void submit(); }}>
@@ -131,12 +135,12 @@ export function Translation({ active }: { active: boolean }) {
         </div>
         <div className="translation-actions">
           <div>{busy ? <Button variant="primary" disabled={phase === 'stopping'} onClick={() => stop()}>{phase === 'stopping' ? '正在停止…' : '停止'}</Button>
-            : <Button variant="primary" type="submit" disabled={!draft.trim()}>翻译</Button>}
+            : <Button variant="primary" type="submit" disabled={!selection || modelChanging || !draft.trim()}>翻译</Button>}
             <span className="translation-shortcut">⌘ Enter</span></div>
         </div>
-        {busy ? <LoadingIndicator label={phase === 'stopping' ? '正在停止请求…' : model.phase === 'loading' ? '正在加载本地模型…' : '正在翻译…'} /> : null}
+        {busy ? <LoadingIndicator label={phase === 'stopping' ? '正在停止请求…' : offline && model.phase === 'loading' ? '正在加载本地模型…' : '正在翻译…'} /> : null}
         {error ? <pre className="translation-error" role="alert">{error}</pre> : null}
-        {model.error && !error.endsWith(model.error) ? <pre className="translation-error" role="alert">{model.error}</pre> : null}
+        {offline && model.error && !error.endsWith(model.error) ? <pre className="translation-error" role="alert">{model.error}</pre> : null}
         {notice ? <p className="translation-notice" role="status">{notice}</p> : null}
       </form>
     </div>

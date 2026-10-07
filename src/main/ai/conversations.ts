@@ -2,16 +2,17 @@ import { randomUUID } from 'node:crypto';
 import type { ConversationState, Owner, SendInput, ChatEntry } from '@shared/contracts/ai';
 import type { PageContext } from '@shared/contracts/page-context';
 import { createAIRuntime, type ApproveNote } from './runtime';
+import type { ModelTarget } from '@shared/contracts/models';
 
 // Run 只管理在途操作；结束后释放，模型历史由 Worker 内的 Agent 保存。
 type Run = { id: string; controller: AbortController; done?: Promise<void> };
 type Conversation = { state: ConversationState; submitted: boolean; run?: Run;
-  requests: Map<string, string>; broken: boolean; draftRevision: number; publishTimer?: ReturnType<typeof setTimeout> };
-type ContextProvider = (signal: AbortSignal) => Promise<PageContext | undefined>;
+  privateHistory: boolean; requests: Map<string, string>; broken: boolean; draftRevision: number; publishTimer?: ReturnType<typeof setTimeout> };
+type ContextProvider = (signal: AbortSignal, target: ModelTarget) => Promise<PageContext | undefined>;
 const message = (error: unknown) => error instanceof Error ? error.message : '操作失败，请重试。';
 
-export function createConversations(getKey: () => Promise<string>, publish: (state: ConversationState) => void,
-  getNotesPath: () => Promise<string>, approveNote: ApproveNote) {
+export function createConversations(getTarget: (signal: AbortSignal) => Promise<ModelTarget>, publish: (state: ConversationState) => void,
+  getNotesPath: () => Promise<string>, approveNote: ApproveNote, approveHistory: (signal: AbortSignal) => Promise<boolean>) {
   const sessions = new Map<string, Conversation>();
   const running = new Set<Run>();
   let revision = 0;
@@ -36,7 +37,7 @@ export function createConversations(getKey: () => Promise<string>, publish: (sta
   }
 
   function create(key: string) {
-    const owner: Conversation = { submitted: false, requests: new Map(), broken: false, draftRevision: 0,
+    const owner: Conversation = { submitted: false, privateHistory: false, requests: new Map(), broken: false, draftRevision: 0,
       state: { key, instanceId: randomUUID(), revision: ++revision, phase: 'idle', draft: '', entries: [], error: '' } };
     sessions.set(key, owner);
     return owner;
@@ -57,6 +58,7 @@ export function createConversations(getKey: () => Promise<string>, publish: (sta
   }
   
   return {
+    runtime,
     get(key: string) {
       return (sessions.get(key) ?? create(key)).state;
     },
@@ -78,25 +80,32 @@ export function createConversations(getKey: () => Promise<string>, publish: (sta
       running.add(run); notify(owner);
       let entry: ChatEntry | undefined;
       run.done = (async () => {
-        const key = await getKey();
+        const target = await getTarget(run.controller.signal);
+        if (target.provider !== 'Qwen-3.5-4B-local' && owner.privateHistory) {
+          if (!await approveHistory(run.controller.signal)) throw new Error('未授权发送离线对话历史，请继续离线使用或新开对话。');
+          run.controller.signal.throwIfAborted();
+          owner.privateHistory = false;
+        }
         const notesPath = await getNotesPath();
         run.controller.signal.throwIfAborted();
         let context: PageContext | undefined;
         let contextNotice: string | undefined;
-        try { context = await provideContext?.(run.controller.signal); }
+        try { context = await provideContext?.(run.controller.signal, target); }
         catch (error) {
           run.controller.signal.throwIfAborted();
           contextNotice = `未提供页面上下文，已继续发送问题：${message(error)}`;
         }
         run.controller.signal.throwIfAborted();
-        await runtime.start({ type: 'start', instanceId: owner.state.instanceId, requestId: run.id, key, text: input.text, context, notesPath },
+        await runtime.start({ type: 'start', instanceId: owner.state.instanceId, requestId: run.id, target, text: input.text, context, notesPath },
           run.controller.signal, event => {
             if (sessions.get(input.key) !== owner || owner.run !== run) return;
             if (event.type === 'accepted') {
               owner.submitted = true;
+              if (target.provider === 'Qwen-3.5-4B-local') owner.privateHistory = true;
               const last = owner.state.entries.at(-1);
               if (last?.status === 'failed' && !last.writes.length && last.question === input.text) owner.state.entries.pop();
-              entry = { id: run.id, question: input.text, answer: '', status: 'generating', sources: [], writes: [], contextNotice };
+              entry = { id: run.id, question: input.text, answer: '', model: `${target.provider === 'Qwen-3.5-4B-local' ? '离线' : '在线'} · ${target.modelId}`,
+                status: 'generating', sources: [], writes: [], contextNotice };
               owner.state.entries.push(entry);
               if (owner.draftRevision === draftRevision) owner.state.draft = '';
               if (!run.controller.signal.aborted) owner.state.phase = 'generating';

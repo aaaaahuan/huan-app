@@ -5,6 +5,7 @@ import { youtubeVideoId } from '@shared/contracts/subtitles';
 import { Button, IconButton } from '@renderer/components/Button';
 import { Icon } from '@renderer/components/Icon';
 import './ai-chat.css';
+import type { ModelSelection } from '@shared/contracts/models';
 
 const phases = { idle: '临时对话', preparing: '正在准备…', generating: '正在回答…', stopping: '正在停止…', blocked: '等待停止确认' };
 const pageStatuses = { empty: '未选择页面，可直接聊天', loading: '当前页面正文提取中', ready: '当前页面已缓存，AI 可按需读取',
@@ -12,8 +13,8 @@ const pageStatuses = { empty: '未选择页面，可直接聊天', loading: '当
 const conversationKey = 'main';
 const statuses = { generating: '正在回答', complete: '', stopped: '已停止', failed: '失败', truncated: '回答已达到长度上限' };
 
-export function AIChat({ settingsRevision, collapsed, onConfigure }: {
-  settingsRevision: number; collapsed: boolean; onConfigure(): void;
+export function AIChat({ settingsRevision, collapsed, selection, modelChanging, onConfigure }: {
+  settingsRevision: number; collapsed: boolean; selection?: ModelSelection; modelChanging: boolean; onConfigure(): void;
 }) {
   const [conversation, setConversation] = useState<ConversationState>();
   const [draft, setDraft] = useState('');
@@ -42,11 +43,13 @@ export function AIChat({ settingsRevision, collapsed, onConfigure }: {
 
   useEffect(() => {
     let cancelled = false;
+    if (selection?.mode === 'offline') { setConfigured(true); return; }
+    setConfigured(false);
     void window.huanApp.settings.load().then(result => {
-      if (!cancelled) setConfigured(result.ok && !!result.settings.ai.credentialId);
+      if (!cancelled) setConfigured(!!selection && result.ok && !!result.settings.ai.credentialId);
     }).catch(() => { if (!cancelled) setConfigured(false); });
     return () => { cancelled = true; };
-  }, [settingsRevision]);
+  }, [settingsRevision, selection]);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,7 +106,7 @@ export function AIChat({ settingsRevision, collapsed, onConfigure }: {
   }
   function owner() { return { key: current!.key, instanceId: current!.instanceId }; }
   function send() {
-    if (!current || busy || !configured || !draft.trim()) return;
+    if (!current || busy || modelChanging || !configured || !draft.trim()) return;
     submittedVersion.current = editVersion.current;
     void command(() => window.huanApp.ai.send({ ...owner(), requestId: crypto.randomUUID(), text: draft }));
   }
@@ -115,10 +118,10 @@ export function AIChat({ settingsRevision, collapsed, onConfigure }: {
       return result;
     });
   }
-  if (!configured) return <section id="reading-chat-panel" role="tabpanel" aria-labelledby="reading-chat-tab" className="ai-chat" hidden={collapsed}>
+  if (!configured && !current?.entries.length) return <section id="reading-chat-panel" role="tabpanel" aria-labelledby="reading-chat-tab" className="ai-chat" hidden={collapsed}>
     <div className="ai-unconfigured">
       <Icon name="book" width="48" height="48" />
-      <p>需要配置api-key后可用ai伴读能力</p>
+      <p>在线模式需要配置 API Key，也可切换离线使用。</p>
       <Button onClick={onConfigure}>配置 DeepSeek</Button>
     </div>
   </section>;
@@ -129,6 +132,7 @@ export function AIChat({ settingsRevision, collapsed, onConfigure }: {
     <div className="ai-messages">
       {!current?.entries.length ? <div className="ai-empty"><Icon name="book" width="56" height="56" /><p>开始阅读吧～</p></div> : null}
       {current?.entries.map(entry => <article className="ai-turn" key={entry.id}>
+        <p className="ai-hint">{entry.model}</p>
         <p className="ai-question">{entry.question}</p>
         {entry.contextNotice ? <p className="ai-hint">{entry.contextNotice}</p> : null}
         {entry.tools ? <p className="ai-hint">本轮工具：{entry.tools.join(' / ')}</p> : null}
@@ -145,6 +149,7 @@ export function AIChat({ settingsRevision, collapsed, onConfigure }: {
       </article>)}
     </div>
     <div className="ai-composer">
+      {!configured ? <Button onClick={onConfigure}>配置 DeepSeek</Button> : null}
       {confirmRestart ? <div className="ai-notice"><p>清空当前对话和草稿并新开对话？页面缓存与 API Key 不受影响。</p>
         <Button onClick={() => setConfirmRestart(false)}>取消</Button>{' '}<Button onClick={() => void restart()}>确认新开对话</Button></div> : null}
       <p className="ai-hint" role="status">{youtubeVideoId(page?.url ?? '')
@@ -158,7 +163,7 @@ export function AIChat({ settingsRevision, collapsed, onConfigure }: {
       <div className="ai-actions">
         {current && busy ? <Button disabled={commandBusy || current.phase === 'stopping'}
           onClick={() => void command(() => window.huanApp.ai.stop(owner()))}>停止</Button> : <Button variant="primary"
-          disabled={!current || !configured || !draft.trim() || commandBusy} onClick={() => send()}>发送</Button>}
+          disabled={!current || !configured || modelChanging || !draft.trim() || commandBusy} onClick={() => send()}>发送</Button>}
       </div>
       <p className="ai-hint" role="status">{current ? phases[current.phase] : '正在准备对话'} · ⌘ Enter 发送 · 退出不保留</p>
     </div>

@@ -18,7 +18,7 @@ export function registerSettings(window: BrowserWindow, store: ReturnType<typeof
     const current = await store.load();
     if (parsed.success && parsed.data.notesPath && current.ok && parsed.data.notesPath !== current.settings.notesPath) {
       const answer = await dialog.showMessageBox(window, { type: 'question', buttons: ['取消', '允许访问'], defaultId: 0, cancelId: 0,
-        message: '允许 AI 访问此笔记目录？', detail: `${parsed.data.notesPath}\n\nAI 可读取目录内 Markdown，读取内容会发送到 DeepSeek。每次写入或修改仍需单独确认。不开启命令执行，不允许访问目录外文件。` });
+        message: '允许 AI 访问此笔记目录？', detail: `${parsed.data.notesPath}\n\nAI 可读取目录内 Markdown；离线模式仅在本机处理，在线模式会发送到所选模型服务商（当前为 DeepSeek）。每次写入或修改仍需单独确认。不开启命令执行，不允许访问目录外文件。` });
       if (answer.response !== 1) return { ok: false, message: '未授权笔记目录，设置未保存。' };
     }
     if (typeof subtitleKeyChange === 'string') {

@@ -3,13 +3,14 @@ import type { ReaderState } from '@shared/contracts/browser';
 import { isYouTubeUrl } from '@shared/contracts/subtitles';
 import { Tabs } from '@renderer/components/Tabs';
 import { IconButton } from '@renderer/components/Button';
+import type { ModelSelection } from '@shared/contracts/models';
 import { AIChat } from '@renderer/features/ai-chat/AIChat';
 import { Subtitles } from '@renderer/features/subtitles/Subtitles';
 import './reading-assistant.css';
 
 type ReadingTab = 'reading-chat' | 'reading-subtitles';
-export function ReadingAssistant({ collapsed, settingsRevision, onConfigure, onToggleCollapsed }: {
-  collapsed: boolean; settingsRevision: number; onConfigure(tab: 'ai' | 'subtitles'): void; onToggleCollapsed(): void;
+export function ReadingAssistant({ collapsed, settingsRevision, modelSelection, modelChanging, onConfigure, onToggleCollapsed }: {
+  collapsed: boolean; settingsRevision: number; modelSelection?: ModelSelection; modelChanging: boolean; onConfigure(tab: 'ai' | 'subtitles'): void; onToggleCollapsed(): void;
 }) {
   const [page, setPage] = useState<ReaderState>();
   const [tab, setTab] = useState<ReadingTab>('reading-chat');
@@ -38,7 +39,7 @@ export function ReadingAssistant({ collapsed, settingsRevision, onConfigure, onT
         label={collapsed ? '展开 AI 伴读' : '收起 AI 伴读'} aria-expanded={!collapsed}
         aria-controls="ai-chat" onClick={onToggleCollapsed} />
     </div>
-    <AIChat collapsed={collapsed || active !== 'reading-chat'} settingsRevision={settingsRevision} onConfigure={() => onConfigure('ai')} />
+    <AIChat collapsed={collapsed || active !== 'reading-chat'} settingsRevision={settingsRevision} selection={modelSelection} modelChanging={modelChanging} onConfigure={() => onConfigure('ai')} />
     <Subtitles visible={!collapsed && active === 'reading-subtitles'} hidden={collapsed || active !== 'reading-subtitles'}
       settingsRevision={settingsRevision} onConfigure={() => onConfigure('subtitles')} />
   </aside>;

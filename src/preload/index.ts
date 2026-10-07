@@ -39,6 +39,8 @@ const api: HuanAppAPI = {
   bookmarks: Object.freeze({ get: () => ipcRenderer.invoke(IPC_CHANNELS.bookmarks.get),
     setRead: input => ipcRenderer.invoke(IPC_CHANNELS.bookmarks.setRead, input) } satisfies HuanAppAPI['bookmarks']),
   ai: Object.freeze({
+    getSelection: () => ipcRenderer.invoke(IPC_CHANNELS.ai.getSelection),
+    selectModel: selection => ipcRenderer.invoke(IPC_CHANNELS.ai.selectModel, selection),
     get: (id) => ipcRenderer.invoke(IPC_CHANNELS.ai.get, id),
     draft: (owner, text) => ipcRenderer.invoke(IPC_CHANNELS.ai.draft, owner, text),
     send: (input) => ipcRenderer.invoke(IPC_CHANNELS.ai.send, input),

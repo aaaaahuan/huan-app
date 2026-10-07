@@ -40,7 +40,7 @@ export function createAIRuntime(onCrash: () => void, approveNote: ApproveNote) {
     return ready;
   }
   return {
-    async start(command: Extract<WorkerCommand, { type: 'start' }>, signal: AbortSignal, onEvent: (event: WorkerEvent) => void) {
+    async start(command: Extract<WorkerCommand, { type: 'start' | 'translate' }>, signal: AbortSignal, onEvent: (event: WorkerEvent) => void) {
       await ensure();
       signal.throwIfAborted();
       return new Promise<void>((resolve, reject) => {

@@ -7,6 +7,7 @@ export const IPC_CHANNELS = {
   subtitles: { get: 'huan-app:subtitles:get', ensure: 'huan-app:subtitles:ensure',
     seek: 'huan-app:subtitles:seek', state: 'huan-app:subtitles:state' },
   ai: {
+    getSelection: 'huan-app:ai:get-selection', selectModel: 'huan-app:ai:select-model',
     get: 'huan-app:ai:get', draft: 'huan-app:ai:draft',
     send: 'huan-app:ai:send', stop: 'huan-app:ai:stop',
     restart: 'huan-app:ai:restart', testKey: 'huan-app:ai:test-key', state: 'huan-app:ai:state'

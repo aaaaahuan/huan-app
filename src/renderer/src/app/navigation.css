@@ -3,6 +3,12 @@
 .reading-system{display:flex;flex:1;flex-direction:column;min-height:0}
 .reading-system[hidden]{display:none}
 .window-title{position:absolute;left:50%;transform:translateX(-50%);color:#738577;letter-spacing:.03em;pointer-events:none}
+.model-switcher{display:flex;align-items:center;gap:8px;margin-left:auto;-webkit-app-region:no-drag;letter-spacing:normal}
+.model-switcher .ui-input{height:28px;padding:4px 26px 4px 9px;font-size:11px;background:#f7faf5b3}
+.model-switcher .ui-select>svg{top:6px}
+.model-switcher .ui-select:first-child{width:72px}
+.model-switcher .ui-select:last-child,.local-model-name{width:145px}
+.local-model-name{font-size:11px;color:#65796b;white-space:nowrap;padding-left:9px}
 .system-navigation{width:168px;flex-shrink:0;display:flex;flex-direction:column;padding:26px 12px 18px;border-right:1px solid #dfe7df;background:#fcfdf9d9}
 .navigation-brand{padding:0 15px 28px;font:500 26px "Songti SC","STSong",serif;color:#41624e;letter-spacing:.04em}
 .navigation-pages{display:grid;gap:8px}

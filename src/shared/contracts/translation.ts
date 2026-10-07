@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-export const TRANSLATION_MODEL = 'Qwen3.5-4B';
 export const translationRequestSchema = z.object({
   requestId: z.uuid(),
   direction: z.enum(['en-zh', 'zh-en']),
