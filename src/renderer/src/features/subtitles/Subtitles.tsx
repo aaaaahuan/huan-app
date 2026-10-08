@@ -66,11 +66,13 @@ function SubtitleReader({ document: result, state, visible }: {
   const synchronized = playback?.phase === 'content';
   return <>
     <div className="subtitle-info" role="status">
-      <span>{transcript.language} · {transcript.source === 'caption' ? '已有字幕' : transcript.source === 'extension_upload' ? '已有字幕（浏览器提取）' : transcript.source}</span>
-      <span>{synchronized ? `播放位置 ${subtitleTime(playback.seconds ?? 0)}` : playback?.phase === 'advertisement' ? '广告播放中，字幕暂不推进' : playback ? '暂时无法同步播放位置 · 全文手动阅读' : '正在识别播放位置…'}</span>
-      <span>{following && synchronized ? '跟随播放' : '手动阅读'}</span>
-      {!following && synchronized ? <Button variant="text" onClick={() => setFollowing(true)}>回到当前播放位置</Button> : null}
-      {transcript.quality_warning ? <span>服务提示字幕质量可能存在问题，请核对原视频。</span> : null}
+      <div className="subtitle-reading-state">
+        <span className="subtitle-source">{transcript.language} · {transcript.source === 'caption' ? '已有字幕' : transcript.source === 'extension_upload' ? '已有字幕（浏览器提取）' : transcript.source}</span>
+        <span className={`subtitle-mode${following && synchronized ? ' subtitle-mode--following' : ''}`}>{following && synchronized ? '跟随播放' : '手动阅读'}</span>
+      </div>
+      <p className="subtitle-position">{synchronized ? `播放位置 ${subtitleTime(playback.seconds ?? 0)}` : playback?.phase === 'advertisement' ? '广告播放中，字幕暂不推进' : playback ? '暂时无法同步播放位置 · 全文手动阅读' : '正在识别播放位置…'}</p>
+      {!following && synchronized ? <Button variant="text" className="subtitle-resume" onClick={() => setFollowing(true)}>回到当前播放位置</Button> : null}
+      {transcript.quality_warning ? <p className="subtitle-quality-warning">服务提示字幕质量可能存在问题，请核对原视频。</p> : null}
     </div>
     {notice ? <p className="subtitle-notice" role="status">{notice}</p> : null}
     <div ref={container} className="subtitle-scroll" tabIndex={0} aria-label={job.video_title ? `${job.video_title} 字幕正文` : '字幕正文'}
@@ -87,6 +89,7 @@ function SubtitleReader({ document: result, state, visible }: {
         <div className="subtitle-text">{segment.text}</div>
       </div>)}
     </div>
+    <p className="subtitle-boundary">基于已有字幕，不包含视频画面理解</p>
   </>;
 }
 
@@ -130,7 +133,7 @@ export function Subtitles({ visible, hidden, settingsRevision, onConfigure }: {
   const failureCode = code || state.error?.code;
   return <section id="reading-subtitles-panel" role="tabpanel" aria-labelledby="reading-subtitles-tab" className="subtitles-panel" hidden={hidden}>
     {document ? <SubtitleReader key={state.videoId} document={document} state={state} visible={visible} /> : <div className="subtitle-empty">
-      {!state.videoId ? <p>请打开支持的 YouTube 视频</p> : state.phase === 'loading' ? <p role="status">正在获取字幕…</p> : <>
+      {!state.videoId ? <><h2>打开视频，开始伴读</h2><p>请打开支持的 YouTube 视频</p><p className="subtitle-empty-hint">字幕来自已有文本，不包含画面理解。</p></> : state.phase === 'loading' ? <><h2>正在获取字幕</h2><p className="ui-loading" role="status">正在获取字幕…</p></> : <>
         <p role={message ? 'alert' : 'status'}>{message || '视频开始播放后会自动获取字幕。'}</p>
         {failureCode ? <small>{failureCode}{state.error?.retryAfter ? ` · 请等待至少 ${state.error.retryAfter} 秒` : ''}</small> : null}
         <div className="subtitle-actions">

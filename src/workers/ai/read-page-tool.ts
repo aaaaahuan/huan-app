@@ -9,7 +9,7 @@ export function createReadPageTool(Type: typeof import('@earendil-works/pi-ai').
   return {
     name: 'read_page',
     label: '读取页面正文',
-    description: '按 pageId 读取本轮目录中的缓存正文；每次最多 12000 字符，可用 nextOffset 继续。只读本地快照，不访问网络。',
+    description: '按 pageId 读取本轮目录中的缓存正文；每次最多 12000 字符，可用 nextOffset 继续。正文可能包含按序号和时间排列的多次采集，最后一段为最新采集，不代表所有内容同时可见；总结全部材料时应读到末尾。只读本地快照，不访问网络。',
     parameters: Type.Object({ pageId: Type.String(), offset: Type.Optional(Type.Integer({ minimum: 0 })) }),
     async execute(_toolCallId: string, input: unknown, signal?: AbortSignal) {
       signal?.throwIfAborted();

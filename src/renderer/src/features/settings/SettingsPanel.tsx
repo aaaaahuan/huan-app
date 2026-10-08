@@ -1,7 +1,7 @@
 // 设置编辑器：草稿与已保存值分离，只有点击保存才请求主进程持久化。
 import { useEffect, useRef, useState } from 'react';
 import { PLATFORMS, PLATFORM_NAMES, type Platform, type SessionModes, type SessionMode, type Settings, type SettingsResult } from '@shared/contracts/settings';
-import { Button } from '@renderer/components/Button';
+import { Button, IconButton } from '@renderer/components/Button';
 import { Tabs } from '@renderer/components/Tabs';
 import { SourceCard } from './SourceCard';
 import { SessionCard } from './SessionCard';
@@ -135,11 +135,14 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
       onCancel={(event) => { event.preventDefault(); requestClose(); }}>
       <div className="settings-header">
         <div><h2 id="settings-title">设置</h2></div>
-        <Button aria-label="关闭设置" disabled={busy} onClick={requestClose}>关闭</Button>
+        <IconButton icon="close" label="关闭设置" disabled={busy} onClick={requestClose} />
       </div>
-      <form onSubmit={(event) => { event.preventDefault(); void save(); }}>
-        <Tabs<'sources' | 'sessions' | 'ai' | 'subtitles'> className="settings-tabs" label="设置分类" value={tab} onChange={setTab} disabled={busy || confirmClose}
+      <form className="settings-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+        <div className="settings-layout">
+        <div className="settings-navigation">
+        <Tabs<'sources' | 'sessions' | 'ai' | 'subtitles'> className="settings-tabs" label="设置分类" orientation="vertical" value={tab} onChange={setTab} disabled={busy || confirmClose}
           options={[{ value: 'sources', label: '收藏来源' }, { value: 'sessions', label: '登录与隐私' }, { value: 'ai', label: 'AI 伴读' }, { value: 'subtitles', label: '字幕服务' }]} />
+        </div>
         <div className="settings-body">
           <div id="sources-panel" role="tabpanel" aria-labelledby="sources-tab" hidden={tab !== 'sources'}>
           <p className="settings-description">选择 Obsidian 中各平台的 Markdown 文件。仅手动标记已读/未读时写回“是否已读”列，打开帖子不会改动笔记。</p>
@@ -176,13 +179,14 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
             </fieldset> : <p>正在读取设置…</p>}
           </div>
           {message ? <p role="alert" className="settings-error">{message}</p> : null}
+        </div>
+        </div>
           {confirmClose ? <div className="discard-prompt" role="alert">
             <p>有未保存的修改，确定放弃吗？</p><div>
               <Button onClick={() => setConfirmClose(false)}>继续编辑</Button>
               <Button onClick={onClose}>放弃修改</Button>
             </div></div> : null}
-        </div>
-        <div className="settings-footer"><span>huan-app · 配置仅存本机</span><div>
+        <div className="settings-footer"><span role="status">{loading ? '正在读取配置…' : dirty ? '有未保存修改' : '配置仅存本机'}</span><div>
           <Button disabled={busy || confirmClose} onClick={requestClose}>取消</Button>
           <Button type="submit" variant="primary" disabled={!draft || loading || busy || confirmClose}>
             {busy ? '处理中…' : '保存设置'}</Button>

@@ -45,6 +45,15 @@ export function registerBrowser(window: BrowserWindow, host: ReturnType<typeof c
     const parsedCommand = readerActionSchema.parse(command);
     return enqueue(() => host.action(parsedId, parsedCommand));
   });
+  // 提取不占导航队列，切页和清空可立即取消；只开放固定的本机提取能力。
+  ipcMain.handle(IPC_CHANNELS.browser.captureContext, (event, id: unknown, pageId: unknown) => {
+    assertTrusted(event);
+    return host.captureContext(idSchema.parse(id), z.uuid().parse(pageId));
+  });
+  ipcMain.handle(IPC_CHANNELS.browser.clearContext, (event, id: unknown, pageId: unknown) => {
+    assertTrusted(event);
+    return host.clearContext(idSchema.parse(id), z.uuid().parse(pageId));
+  });
   ipcMain.handle(IPC_CHANNELS.browser.layout, (event, layout: unknown) => {
     assertTrusted(event);
     host.layout(readerLayoutSchema.parse(layout));

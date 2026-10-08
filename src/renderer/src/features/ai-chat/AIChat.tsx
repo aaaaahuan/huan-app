@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AIResult, ConversationState } from '@shared/contracts/ai';
+import type { AIResult, ChatEntry, ConversationState } from '@shared/contracts/ai';
 import type { ReaderState } from '@shared/contracts/browser';
 import { youtubeVideoId } from '@shared/contracts/subtitles';
-import { Button, IconButton } from '@renderer/components/Button';
+import { Button } from '@renderer/components/Button';
 import { Icon } from '@renderer/components/Icon';
 import './ai-chat.css';
 import type { ModelSelection } from '@shared/contracts/models';
@@ -12,6 +12,26 @@ const pageStatuses = { empty: '未选择页面，可直接聊天', loading: '当
   unavailable: '当前页面正文不可用，不影响聊天', unsupported: '当前页面暂不支持提取，可直接聊天' };
 const conversationKey = 'main';
 const statuses = { generating: '正在回答', complete: '', stopped: '已停止', failed: '失败', truncated: '回答已达到长度上限' };
+
+function TurnDetails({ entry }: { entry: ChatEntry }) {
+  return <details className="ai-turn-details">
+    <summary>
+      <span className="ai-turn-model">{entry.model}</span>
+      <span className="ai-record-summary">本轮明细{entry.sources.length ? ` · 来源 ${entry.sources.length}` : ''}{entry.writes.length ? ` · 已写入 ${entry.writes.length} 项` : ''}</span>
+      <Icon name="chevron" />
+    </summary>
+    <div className="ai-record-content">
+      <p className="ai-hint">本轮模型：{entry.model}</p>
+      {entry.tools ? <p className="ai-hint">本轮工具：{entry.tools.join(' / ')}</p> : null}
+      {entry.sources.map(source => <div className="ai-material" key={source.id}>
+        <p className="ai-material-title">{source.kind === 'subtitles' ? '已读取字幕片段' : '已读取'}：{source.title || '页面正文'}</p>
+        <p className="ai-material-url">{source.url}</p>
+        <p>{source.kind === 'subtitles' ? `读取了冻结字幕片段（${source.language} / ${source.subtitleSource}），不包含视频画面。` : '读取了缓存正文片段，不包含图片或视频内容。'}{source.truncated ? '缓存正文已截断。' : ''}</p>
+      </div>)}
+      {entry.writes.map((write, index) => <p className="ai-write" key={index}>{write.operation === 'edit' ? '已更新到本机' : '已保存到本机'}：<span>{write.path}</span></p>)}
+    </div>
+  </details>;
+}
 
 export function AIChat({ settingsRevision, collapsed, selection, modelChanging, onConfigure }: {
   settingsRevision: number; collapsed: boolean; selection?: ModelSelection; modelChanging: boolean; onConfigure(): void;
@@ -120,7 +140,8 @@ export function AIChat({ settingsRevision, collapsed, selection, modelChanging, 
   }
   if (!configured && !current?.entries.length) return <section id="reading-chat-panel" role="tabpanel" aria-labelledby="reading-chat-tab" className="ai-chat" hidden={collapsed}>
     <div className="ai-unconfigured">
-      <Icon name="book" width="48" height="48" />
+      <div className="ai-empty-icon"><Icon name="book" width="36" height="36" /></div>
+      <h2>准备开始伴读</h2>
       <p>在线模式需要配置 API Key，也可切换离线使用。</p>
       <Button onClick={onConfigure}>配置 DeepSeek</Button>
     </div>
@@ -128,44 +149,45 @@ export function AIChat({ settingsRevision, collapsed, selection, modelChanging, 
 
   return <section id="reading-chat-panel" role="tabpanel" aria-labelledby="reading-chat-tab" className="ai-chat" hidden={collapsed}>
     <div className="ai-heading">
-      <IconButton className="ai-new-chat" icon="plus" label="新开对话" disabled={!current || commandBusy} onClick={() => setConfirmRestart(true)} /></div>
+      <span>全局临时对话</span>
+      <Button className="ai-new-chat" title="清空聊天和草稿，开始新对话；不清页面材料" disabled={!current || commandBusy} onClick={() => setConfirmRestart(true)}><Icon name="plus" />新开对话</Button>
+    </div>
     <div className="ai-messages">
-      {!current?.entries.length ? <div className="ai-empty"><Icon name="book" width="56" height="56" /><p>开始阅读吧～</p></div> : null}
+      {!current?.entries.length ? <div className="ai-empty">
+        <div className="ai-empty-icon"><Icon name="book" width="36" height="36" /></div>
+        <h2>从一个问题开始</h2><p>可直接提问，也可围绕当前页面展开讨论。</p>
+      </div> : null}
       {current?.entries.map(entry => <article className="ai-turn" key={entry.id}>
-        <p className="ai-hint">{entry.model}</p>
-        <p className="ai-question">{entry.question}</p>
+        <p className="ai-question"><span className="visually-hidden">你的提问：</span>{entry.question}</p>
         {entry.contextNotice ? <p className="ai-hint">{entry.contextNotice}</p> : null}
-        {entry.tools ? <p className="ai-hint">本轮工具：{entry.tools.join(' / ')}</p> : null}
-        {entry.toolError ? <p className="ai-error">{entry.toolError}</p> : null}
-        {entry.sources.map(source => <details className="ai-material" key={source.id}>
-          <summary>{source.kind === 'subtitles' ? '已读取字幕片段' : '已读取'}：{source.title || '页面正文'}</summary>
-          <p>{source.url}</p>
-          <p>{source.kind === 'subtitles' ? `读取了冻结字幕片段（${source.language} / ${source.subtitleSource}），不包含视频画面。` : '读取了缓存正文片段，不包含图片或视频内容。'}{source.truncated ? '缓存正文已截断。' : ''}</p>
-        </details>)}
-        <div className="ai-answer">{entry.answer || (entry.status === 'generating' ? '正在等待回复…' : '')}</div>
-        {entry.writes.map((write, index) => <p className="ai-hint" key={index}>已保存到本机：{write.path}</p>)}
-        {statuses[entry.status] ? <small>{statuses[entry.status]}</small> : null}
-        {entry.error ? <p className="ai-error">{entry.error}</p> : null}
+        {entry.toolError ? <p className="ai-error" role="alert">{entry.toolError}</p> : null}
+        <div className={`ai-answer${!entry.answer && entry.status === 'generating' ? ' ai-answer--waiting' : ''}`}>{entry.answer || (entry.status === 'generating' ? '正在等待回复…' : '')}</div>
+        {statuses[entry.status] ? <p className="ai-turn-status" role="status">{statuses[entry.status]}</p> : null}
+        {entry.error ? <p className="ai-error" role="alert">{entry.error}</p> : null}
+        <TurnDetails entry={entry} />
       </article>)}
     </div>
     <div className="ai-composer">
       {!configured ? <Button onClick={onConfigure}>配置 DeepSeek</Button> : null}
       {confirmRestart ? <div className="ai-notice"><p>清空当前对话和草稿并新开对话？页面缓存与 API Key 不受影响。</p>
-        <Button onClick={() => setConfirmRestart(false)}>取消</Button>{' '}<Button onClick={() => void restart()}>确认新开对话</Button></div> : null}
-      <p className="ai-hint" role="status">{youtubeVideoId(page?.url ?? '')
+        <div className="ai-notice-actions"><Button onClick={() => setConfirmRestart(false)}>取消</Button><Button variant="primary" onClick={() => void restart()}>确认新开对话</Button></div></div> : null}
+      <p className="ai-context-status" role="status">{youtubeVideoId(page?.url ?? '')
         ? '视频问答使用提问时已获取的字幕，不包含视频画面。播放后自动获取，可在「实时字幕」查看。'
         : pageStatuses[page?.contentStatus ?? 'empty']}</p>
       {error || current?.error ? <p className="ai-error" role="alert">{error || current?.error}</p> : null}
-      <label className="visually-hidden" htmlFor="ai-question">向 AI 提问</label>
-      <textarea id="ai-question" placeholder="向 AI 提问…" value={draft} maxLength={8000}
-        disabled={!current || !configured} onChange={event => edit(event.target.value)}
-        onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); send(); } }} />
-      <div className="ai-actions">
-        {current && busy ? <Button disabled={commandBusy || current.phase === 'stopping'}
-          onClick={() => void command(() => window.huanApp.ai.stop(owner()))}>停止</Button> : <Button variant="primary"
-          disabled={!current || !configured || modelChanging || !draft.trim() || commandBusy} onClick={() => send()}>发送</Button>}
+      <div className="ai-input-box">
+        <label className="visually-hidden" htmlFor="ai-question">向 AI 提问</label>
+        <textarea id="ai-question" placeholder={current?.entries.length ? '继续提问…' : '向 AI 提问…'} value={draft} maxLength={8000}
+          disabled={!current || !configured} onChange={event => edit(event.target.value)}
+          onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); send(); } }} />
+        <div className="ai-actions">
+          <span className="ai-shortcut">⌘ / Ctrl Enter 发送</span>
+          {current && busy ? <Button className="ai-stop" disabled={commandBusy || current.phase === 'stopping'}
+            onClick={() => void command(() => window.huanApp.ai.stop(owner()))}>停止</Button> : <Button variant="primary"
+            disabled={!current || !configured || modelChanging || !draft.trim() || commandBusy} onClick={() => send()}>发送</Button>}
+        </div>
       </div>
-      <p className="ai-hint" role="status">{current ? phases[current.phase] : '正在准备对话'} · ⌘ Enter 发送 · 退出不保留</p>
+      <div className="ai-composer-status"><span role="status">{current ? phases[current.phase] : '正在准备对话'}</span><span>退出不保留</span></div>
     </div>
   </section>;
 }

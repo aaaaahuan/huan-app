@@ -5,10 +5,13 @@ import type { Platform, SessionModes } from './settings';
 export const readerStateSchema = z.object({
   revision: z.number().int().nonnegative(),
   bookmarkId: z.string().nullable(),
+  pageId: z.uuid().nullable(),
   phase: z.enum(['empty', 'loading', 'ready', 'stopped', 'error']),
   url: z.string(), title: z.string(), message: z.string(), notice: z.string(),
   canGoBack: z.boolean(), canGoForward: z.boolean(),
-  contentStatus: z.enum(['empty', 'loading', 'ready', 'unavailable', 'unsupported'])
+  contentStatus: z.enum(['empty', 'loading', 'ready', 'unavailable', 'unsupported']),
+  captureCount: z.number().int().nonnegative(), capturedAt: z.number().finite().optional(),
+  capturing: z.boolean(), captureMessage: z.string()
 });
 export type ReaderState = z.infer<typeof readerStateSchema>;
 export const readerLayoutSchema = z.object({
@@ -25,6 +28,8 @@ export interface BrowserAPI {
   select(bookmarkId: string | null): Promise<ReaderState>;
   get(): Promise<ReaderState>;
   action(bookmarkId: string, action: ReaderAction): Promise<ReaderState>;
+  captureContext(bookmarkId: string, pageId: string): Promise<ReaderState>;
+  clearContext(bookmarkId: string, pageId: string): Promise<ReaderState>;
   layout(layout: ReaderLayout): Promise<void>;
   suspend(value: boolean): Promise<void>;
   onState(listener: (state: ReaderState) => void): () => void;

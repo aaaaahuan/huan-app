@@ -1,227 +1,85 @@
-/* 全局基础样式与初始页面视觉：统一字体、浅色背景、按钮和窗口拖拽区域。 */
 :root {
-  font-family: "PingFang SC", "Hiragino Sans GB", sans-serif;
-  color: #293d36;
-  background: #f5f7f4;
+  --bg: #eef4f0;
+  --surface: #ffffff;
+  --surface-muted: #f4f8f5;
+  --text: #25342c;
+  --muted: #61736a;
+  --accent: #2c6244;
+  --accent-soft: #e4efe7;
+  --border: #dde6e0;
+  --danger: #a34736;
+  --focus: #2c6244;
+  font-family: "PingFang SC", "Hiragino Sans GB", "Helvetica Neue", sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  color-scheme: light;
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
 }
-* {
-  box-sizing: border-box;
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, input, select, textarea { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: default; }
+button:focus-visible, summary:focus-visible, input:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
 }
-body {
-  margin: 0;
+[hidden] { display: none !important; }
+h1, h2, h3, p { overflow-wrap: anywhere; }
+h1, h2, h3 { color: var(--text); }
+h2 { margin: 0; font-size: 16px; font-weight: 600; }
+textarea { color: var(--text); }
+::selection { background: #cde3d4; color: var(--text); }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 8px; background: #bfcec3; background-clip: padding-box; }
+::-webkit-scrollbar-track { background: transparent; }
+.workspace-shell {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: radial-gradient(ellipse at 80% 0, #e4eee7 0, transparent 65%), var(--bg);
+  overflow: hidden;
 }
-button {
-  font: inherit;
-}
-button:focus-visible {
-  outline: 3px solid #86b7a2;
-  outline-offset: 4px;
-}
-.shell {
-  min-height: 100vh;
-  background:
-    radial-gradient(ellipse at 75% 15%, #e1eee5 0, transparent 48%),
-    linear-gradient(125deg, #fbfcf9, #f1f5f1);
-}
+.workspace { display: flex; flex: 1; min-width: 0; min-height: 0; }
 .titlebar {
-  height: 40px;
-  padding: 0 28px 0 92px;
+  height: 58px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid #dfe7df;
+  gap: 18px;
+  padding: 0 16px 0 92px;
   -webkit-app-region: drag;
+}
+.titlebar button, .titlebar select, .titlebar .ui-select { -webkit-app-region: no-drag; }
+.library-alert {
+  margin: 0 16px 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #f7ede1;
+  color: #875e36;
   font-size: 12px;
-  letter-spacing: 0.1em;
+  line-height: 1.7;
 }
-.stage {
-  color: #7b8a81;
-  font-size: 11px;
-  letter-spacing: 0.05em;
-}
-main {
-  max-width: 910px;
-  margin: auto;
-  padding: 42px 48px 24px;
-}
-.eyebrow {
-  font-size: 10px;
-  letter-spacing: 0.22em;
-  color: #71847a;
-}
-.intro {
-  position: relative;
-  margin: 42px 0 36px;
-}
-.kicker {
+.library-alert p { margin: 3px 0; }
+.library-alert .ui-button { padding: 4px 9px; margin-top: 4px; }
+.settings-feedback {
+  margin: 0 16px 8px;
+  padding: 9px 14px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
   font-size: 12px;
-  color: #71847a;
-  letter-spacing: 0.15em;
+  line-height: 1.6;
 }
-h1 {
-  font-family: "Songti SC", "STSong", serif;
-  font-size: 42px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  margin: 12px 0 20px;
-}
-.description {
-  font-size: 14px;
-  color: #74827b;
-  line-height: 1.9;
-}
-.book {
+.visually-hidden {
   position: absolute;
-  right: 36px;
-  top: 15px;
-  width: 108px;
-  height: 100px;
-  transform: rotate(-8deg);
-}
-.book span {
-  position: absolute;
-  top: 0;
-  width: 51px;
-  height: 90px;
-  background: linear-gradient(135deg, #b2d2ba, #85b69d);
-  border-radius: 8px 4px 4px 8px;
-  box-shadow: 0 18px 28px #54746013;
-}
-.book span:first-child {
-  left: 0;
-  transform: skewY(13deg);
-}
-.book span:last-child {
-  right: 0;
-  transform: skewY(-13deg);
-  background: linear-gradient(135deg, #cae1cc, #a2cab1);
-  border-radius: 4px 8px 8px 4px;
-}
-.status-panel {
-  background: #ffffffb8;
-  border: 1px solid #dde5dd;
-  border-radius: 14px;
-  padding: 24px 28px;
-  box-shadow: 0 12px 35px #263c3004;
-}
-.status-heading {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-h2 {
-  font-size: 15px;
-  font-weight: 500;
-  margin: 0;
-}
-.dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 100%;
-  background: #bbac75;
-}
-.dot.ready {
-  background: #5e997b;
-}
-.local {
-  margin-left: auto;
-  color: #839188;
-  font-size: 11px;
-}
-dl {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
-  padding: 28px 0;
-  margin: 0;
-}
-dt {
-  font-size: 11px;
-  color: #849187;
-}
-dd {
-  font-size: 14px;
-  margin: 10px 0 0;
-}
-.panel-footer {
-  border-top: 1px solid #e6ebe4;
-  padding-top: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 11px;
-  color: #95a096;
-}
-button {
-  border: 1px solid #c6d8cd;
-  background: #edf4ee;
-  border-radius: 7px;
-  padding: 8px 14px;
-  color: #41624e;
-  cursor: pointer;
-  font-size: 12px;
-}
-button:hover {
-  background: #e3eee5;
-}
-button:disabled {
-  cursor: wait;
-  opacity: 0.5;
-}
-footer {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  font-size: 10px;
-  color: #8c9a91;
-  margin-top: 22px;
-  line-height: 1.8;
-}
-.review {
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
   white-space: nowrap;
-  letter-spacing: 0.08em;
-}
-@media (max-width: 760px) {
-  main {
-    padding: 32px 28px;
-  }
-  h1 {
-    font-size: 32px;
-  }
-  .book {
-    right: 0;
-    opacity: 0.5;
-    width: 85px;
-    transform: scale(0.8);
-  }
-  dl {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .local {
-    display: none;
-  }
-  footer {
-    flex-direction: column;
-  }
-}
-@media (prefers-reduced-motion: no-preference) {
-  .intro,
-  .status-panel {
-    animation: appear 0.5s ease-out both;
-  }
-  .status-panel {
-    animation-delay: 0.08s;
-  }
-  @keyframes appear {
-    from {
-      opacity: 0;
-      transform: translateY(8px);
-    }
-    to {
-      opacity: 1;
-      transform: none;
-    }
-  }
+  border: 0;
 }

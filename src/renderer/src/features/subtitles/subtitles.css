@@ -1,16 +1,93 @@
-.subtitles-panel { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
-.subtitle-empty { margin: auto 0; padding: 24px 18px; color: #7d8c79; font-size: 12px; line-height: 1.9; text-align: center; overflow-wrap: anywhere; }
-.subtitle-empty small { color: #9b705d; font-size: 10px; }
-.subtitle-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
-.subtitle-info { display: flex; flex-wrap: wrap; gap: 5px 12px; padding: 12px 17px; border-bottom: 1px solid #e3eadd; color: #879781; font-size: 10px; line-height: 1.8; }
-.subtitle-info span { overflow-wrap: anywhere; }
-.subtitle-info button { padding: 0; font-size: 10px; color: #497a60; }
-.subtitle-scroll { overflow-y: auto; overflow-x: hidden; flex: 1; min-height: 0; min-width: 0; padding: 10px 17px 24px; }
-.subtitle-scroll:focus-visible { outline: 2px solid #86b7a2; outline-offset: -2px; }
-.subtitle-row { margin: 0 -5px 6px; padding: 4px 5px; border-radius: 6px; }
-.subtitle-row--active { background: #eaf3e5; }
-.subtitle-timestamp, .subtitle-timestamp.ui-button { display: block; font: inherit; font-size: 10px; line-height: 1.8; color: #9aab93; border: 0; background: none; padding: 0; user-select: none; }
-.subtitle-timestamp.ui-button:hover { color: #497a60; background: none; }
-.subtitle-text { font-size: 13px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; user-select: text; }
-.subtitle-wait, .subtitle-notice { color: #879781; font-size: 11px; line-height: 1.8; }
-.subtitle-notice { padding: 0 17px; color: #9b543b; }
+.subtitles-panel {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  color: var(--text);
+}
+.subtitles-panel[hidden] { display: none; }
+.subtitle-empty {
+  min-height: 0;
+  overflow: auto;
+  flex-shrink: 1;
+  margin: auto 0;
+  padding: 32px 24px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.9;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.subtitle-empty h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text);
+}
+.subtitle-empty p { margin: 8px 0; }
+.subtitle-empty .ui-loading { justify-content: center; }
+.subtitle-empty .subtitle-empty-hint { font-size: 11px; }
+.subtitle-empty small { color: #9b543b; font-size: 11px; }
+.subtitle-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.subtitle-info {
+  flex-shrink: 0;
+  margin: 0 16px 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.subtitle-reading-state { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 8px; }
+.subtitle-source { color: var(--text); }
+.subtitle-mode { flex-shrink: 0; font-size: 11px; }
+.subtitle-mode--following { color: var(--accent); }
+.subtitle-position { margin: 5px 0 0; font-variant-numeric: tabular-nums; }
+.subtitle-info .subtitle-resume { padding: 4px 0 0; font-size: 11px; color: var(--accent); }
+.subtitle-quality-warning { margin: 8px 0 0; color: #9b543b; }
+.subtitle-scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  padding: 4px 12px 16px;
+  scrollbar-gutter: stable;
+}
+.subtitle-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 8px; }
+.subtitle-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  margin: 0 0 4px;
+  padding: 10px 8px;
+  border-radius: 9px;
+}
+.subtitle-row--active { background: var(--surface-muted); }
+.subtitle-timestamp,
+.subtitle-timestamp.ui-button {
+  display: block;
+  font: inherit;
+  font-size: 11px;
+  line-height: 2.3;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  border: 0;
+  background: none;
+  padding: 0;
+  user-select: none;
+  text-align: left;
+}
+.subtitle-timestamp.ui-button:hover { color: var(--accent); background: none; }
+.subtitle-row--active .subtitle-timestamp { color: var(--accent); }
+.subtitle-text { font-size: 14px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; user-select: text; }
+.subtitle-text::selection { background: #d7e9df; }
+.subtitle-wait,
+.subtitle-notice { color: var(--muted); font-size: 12px; line-height: 1.8; }
+.subtitle-wait { padding: 8px; }
+.subtitle-notice { margin: 0; padding: 0 20px 8px; color: #9b543b; }
+.subtitle-boundary { flex-shrink: 0; margin: 0; padding: 10px 20px 14px; color: var(--muted); font-size: 11px; line-height: 1.7; }

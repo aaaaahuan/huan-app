@@ -30,6 +30,8 @@ export const IPC_CHANNELS = {
     get: 'huan-app:browser:get',
     select: 'huan-app:browser:select',
     action: 'huan-app:browser:action',
+    captureContext: 'huan-app:browser:capture-context',
+    clearContext: 'huan-app:browser:clear-context',
     layout: 'huan-app:browser:layout',
     suspend: 'huan-app:browser:suspend',
     state: 'huan-app:browser:state'

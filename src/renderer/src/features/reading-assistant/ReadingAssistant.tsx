@@ -30,7 +30,7 @@ export function ReadingAssistant({ collapsed, settingsRevision, modelSelection, 
   }, []);
   const youtube = isYouTubeUrl(page?.url ?? '');
   const active = youtube ? tab : 'reading-chat';
-  return <aside id="ai-chat" className={`reading-assistant${collapsed ? ' reading-assistant--collapsed' : ''}`} aria-label="伴读面板">
+  return <aside id="ai-chat" className={`reading-assistant${collapsed ? ' reading-assistant--collapsed' : ''}`} aria-label="伴读面板" hidden={collapsed}>
     <div className="reading-assistant-header">
       <Tabs<ReadingTab> className="reading-tabs" label="伴读视图" value={active} onChange={setTab}
         options={youtube ? [{ value: 'reading-chat', label: 'AI 伴读' }, { value: 'reading-subtitles', label: '实时字幕' }]

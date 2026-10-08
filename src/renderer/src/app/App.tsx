@@ -6,10 +6,10 @@ import { SettingsPanel } from '@renderer/features/settings/SettingsPanel';
 import { BookmarkList } from '@renderer/features/bookmarks/BookmarkList';
 import { Reader } from '@renderer/features/reader/Reader';
 import { ReadingPlaceholder } from '@renderer/features/reader/ReadingPlaceholder';
-import { Button } from '@renderer/components/Button';
+import { Button, IconButton } from '@renderer/components/Button';
 import { ReadingAssistant } from '@renderer/features/reading-assistant/ReadingAssistant';
 import { PanelDivider } from '@renderer/components/PanelDivider';
-import { usePanelWidths } from './usePanelWidths';
+import { usePanelWidths, type PanelSide } from './usePanelWidths';
 import { Navigation, type SystemPage } from './Navigation';
 import { Translation } from '@renderer/features/translation/Translation';
 import '@renderer/components/controls.css';
@@ -36,7 +36,9 @@ export function App() {
   const [feedback, setFeedback] = useState('');
   const [collapsed, setCollapsed] = useState(false);
   const [aiCollapsed, setAICollapsed] = useState(false);
-  const panels = usePanelWidths(collapsed, aiCollapsed);
+  const [panelPriority, setPanelPriority] = useState<PanelSide>('right');
+  const [focusLayout, setFocusLayout] = useState<{ left: boolean; right: boolean }>();
+  const panels = usePanelWidths(collapsed, aiCollapsed, panelPriority);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [readBusy, setReadBusy] = useState(false);
   const readPending = useRef(false);
@@ -114,14 +116,40 @@ export function App() {
     } catch { setFeedback('未能确认已读状态写入结果，请重新加载后核对。'); }
     finally { readPending.current = false; setReadBusy(false); }
   }
+  function togglePanel(side: PanelSide) {
+    setFocusLayout(undefined);
+    setPanelPriority(side);
+    if (side === 'left') {
+      setCollapsed(!panels.hideLeft);
+      if (panels.compact) setAICollapsed(true);
+    } else {
+      setAICollapsed(!panels.hideRight);
+      if (panels.compact) setCollapsed(true);
+    }
+    requestAnimationFrame(() => document.getElementById(side === 'left' ? 'reading-collection-toggle' : 'reading-assistant-toggle')?.focus());
+  }
+  function toggleFocus() {
+    if (focusLayout) {
+      setCollapsed(focusLayout.left); setAICollapsed(focusLayout.right); setFocusLayout(undefined);
+    } else {
+      setFocusLayout({ left: panels.hideLeft, right: panels.hideRight });
+      setCollapsed(true); setAICollapsed(true);
+    }
+  }
   return <div className="workspace-shell">
     <div className="titlebar">
-      <span className="window-title">huan-app</span>
-      <ModelSwitcher selection={modelSelection} disabled={modelSaving || settingsOpen} onChange={selection => void selectModel(selection)} />
+      <span className="navigation-brand">huan</span>
+      <Navigation active={activePage} busy={navigationBusy || settingsOpen} onChange={page => void navigate(page)} />
+      <div className="titlebar-actions">
+        <ModelSwitcher selection={modelSelection} disabled={modelSaving || settingsOpen} onChange={selection => void selectModel(selection)} />
+        {activePage === 'reading' ? <Button className="focus-toggle" aria-label={focusLayout ? '恢复阅读布局' : '进入专注阅读'}
+          aria-pressed={!!focusLayout} disabled={settingsOpen || navigationBusy} onClick={toggleFocus}>
+          {focusLayout ? '恢复布局' : '专注'}</Button> : null}
+        <IconButton className="settings-toggle" icon="settings" label="设置" disabled={readBusy || navigationBusy || settingsOpen}
+          onClick={() => void openSettings()} />
+      </div>
     </div>
     <div className="application-body">
-    <Navigation active={activePage} busy={navigationBusy} settingsDisabled={readBusy || navigationBusy}
-      onChange={page => void navigate(page)} onSettings={() => void openSettings()} />
     <div className="application-content">
     {feedback ? <div className="settings-feedback" role="status">{feedback}</div> : null}
     <div className="reading-system" hidden={activePage !== 'reading'}>
@@ -130,25 +158,30 @@ export function App() {
       {failures.map((source) => <p key={source.platform}>{PLATFORM_NAMES[source.platform]}：{source.message}</p>)}
       <Button onClick={() => void openSettings()}>检查来源设置</Button>
     </div> : null}
-    <div ref={panels.workspace} className={`workspace${panels.dragging ? ' workspace-resizing' : ''}`}
-      style={{ '--left-panel-width': `${panels.left}px`, '--right-panel-width': `${panels.right}px` } as CSSProperties}>
-      <BookmarkList library={library} loading={loading} collapsed={collapsed} selectedId={selectedId}
-        onToggleCollapsed={() => setCollapsed(value => !value)}
-        readBusy={readBusy} onToggleRead={item => void toggleRead(item)}
-        onSelect={(item) => setSelectedId(item.id)} />
-      {!collapsed ? <PanelDivider label="调整收藏列表宽度" controls="bookmark-sidebar" value={panels.left}
-        {...panels.limits.left} direction={1} onStart={x => panels.start('left', x)} onMove={panels.move}
-        onEnd={panels.end} onChange={value => panels.change('left', value)} /> : null}
-      <Reader selected={selected} suspended={settingsOpen || activePage !== 'reading'} layoutKey={`${activePage}:${collapsed}:${aiCollapsed}:${panels.left}:${panels.right}:${feedback}:${error}:${library?.warning}:${failures.length}`}>
+      <Reader selected={selected} suspended={settingsOpen || activePage !== 'reading'}
+        layoutKey={`${activePage}:${panels.hideLeft}:${panels.hideRight}:${panels.left}:${panels.right}:${feedback}:${error}:${library?.warning}:${failures.length}`}
+        workspaceRef={panels.workspace} dragging={panels.dragging}
+        workspaceStyle={{ '--left-panel-width': `${panels.left}px`, '--right-panel-width': `${panels.right}px` } as CSSProperties}
+        leftCollapsed={panels.hideLeft} rightCollapsed={panels.hideRight}
+        onToggleLeft={() => togglePanel('left')} onToggleRight={() => togglePanel('right')}
+        leadingPanel={<>
+          <BookmarkList library={library} loading={loading} collapsed={panels.hideLeft} selectedId={selectedId}
+            onToggleCollapsed={() => togglePanel('left')} readBusy={readBusy} onToggleRead={item => void toggleRead(item)}
+            onSelect={(item) => setSelectedId(item.id)} />
+          {!panels.hideLeft ? <PanelDivider label="调整收藏列表宽度" controls="bookmark-sidebar" value={panels.left}
+            {...panels.limits.left} direction={1} onStart={x => panels.start('left', x)} onMove={panels.move}
+            onEnd={panels.end} onChange={value => panels.change('left', value)} /> : null}
+        </>}
+        trailingPanel={<>
+          {!panels.hideRight ? <PanelDivider label="调整 AI 对话宽度" controls="ai-chat" value={panels.right}
+            {...panels.limits.right} direction={-1} onStart={x => panels.start('right', x)} onMove={panels.move}
+            onEnd={panels.end} onChange={value => panels.change('right', value)} /> : null}
+          <ReadingAssistant collapsed={panels.hideRight} onToggleCollapsed={() => togglePanel('right')}
+            settingsRevision={revision} modelSelection={modelSelection} modelChanging={modelSaving} onConfigure={tab => void openSettings(tab)} />
+        </>}>
         <ReadingPlaceholder loading={loading} enabled={!!enabled} hasItems={!!hasItems}
           failed={!!(error || failures.length || library?.warning)} onConfigure={() => void openSettings()} />
       </Reader>
-      {!aiCollapsed ? <PanelDivider label="调整 AI 对话宽度" controls="ai-chat" value={panels.right}
-        {...panels.limits.right} direction={-1} onStart={x => panels.start('right', x)} onMove={panels.move}
-        onEnd={panels.end} onChange={value => panels.change('right', value)} /> : null}
-      <ReadingAssistant collapsed={aiCollapsed} onToggleCollapsed={() => setAICollapsed(value => !value)}
-        settingsRevision={revision} modelSelection={modelSelection} modelChanging={modelSaving} onConfigure={tab => void openSettings(tab)} />
-    </div>
     </div>
     <Translation active={activePage === 'translation'} selection={modelSelection} modelChanging={modelSaving} />
     </div>

@@ -1,14 +1,17 @@
 import { Button } from './Button';
 
-export function Tabs<T extends string>({ label, value, options, disabled, onChange, className = '' }: {
-  label: string; value: T; options: readonly { value: T; label: string }[]; disabled?: boolean; className?: string; onChange(value: T): void;
+export function Tabs<T extends string>({ label, value, options, disabled, onChange, className = '', orientation = 'horizontal' }: {
+  label: string; value: T; options: readonly { value: T; label: string }[]; disabled?: boolean; className?: string;
+  orientation?: 'horizontal' | 'vertical'; onChange(value: T): void;
 }) {
-  return <div className={`ui-tabs ${className}`} role="tablist" aria-label={label} onKeyDown={(event) => {
-    if (disabled || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+  const previousKey = orientation === 'vertical' ? 'ArrowUp' : 'ArrowLeft';
+  const nextKey = orientation === 'vertical' ? 'ArrowDown' : 'ArrowRight';
+  return <div className={`ui-tabs ${className}`} role="tablist" aria-label={label} aria-orientation={orientation} onKeyDown={(event) => {
+    if (disabled || ![previousKey, nextKey, 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();
     const index = options.findIndex((option) => option.value === value);
     const nextIndex = event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1
-      : (index + (event.key === 'ArrowRight' ? 1 : -1) + options.length) % options.length;
+      : (index + (event.key === nextKey ? 1 : -1) + options.length) % options.length;
     const next = options[nextIndex];
     if (!next) return;
     onChange(next.value);

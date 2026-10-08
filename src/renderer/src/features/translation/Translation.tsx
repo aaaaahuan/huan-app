@@ -110,7 +110,7 @@ export function Translation({ active, selection, modelChanging }: { active: bool
         </span>
       </header>
       <form onSubmit={event => { event.preventDefault(); void submit(); }}>
-        <div className="translation-languages">
+        <div className="translation-languages" role="group" aria-label="翻译方向">
           <Select<TranslationDirection> aria-label="原文语言" value={direction} options={directions} disabled={busy} onValueChange={changeDirection} />
           <IconButton icon="swap" label="交换语言" disabled={busy} onClick={swap} />
           <Select<TranslationDirection> aria-label="译文语言" value={direction}
@@ -130,13 +130,14 @@ export function Translation({ active, selection, modelChanging }: { active: bool
             <div className="translation-panel-heading"><label htmlFor="translation-output">译文</label>
               <Button className="translation-copy" disabled={busy || !result?.text} onClick={() => void copy()}>
                 <Icon name="copy" />复制</Button></div>
-            <textarea id="translation-output" placeholder="译文将显示在这里" value={result?.text ?? ''} readOnly />
+            <textarea id="translation-output" placeholder={busy ? '翻译完成后，译文将显示在这里…' : '译文将显示在这里'} value={result?.text ?? ''} readOnly />
           </div>
         </div>
         <div className="translation-actions">
+          <span className="translation-shortcut"><kbd>⌘ Enter</kbd> 翻译 <span aria-hidden="true">·</span> Enter 换行</span>
           <div>{busy ? <Button variant="primary" disabled={phase === 'stopping'} onClick={() => stop()}>{phase === 'stopping' ? '正在停止…' : '停止'}</Button>
             : <Button variant="primary" type="submit" disabled={!selection || modelChanging || !draft.trim()}>翻译</Button>}
-            <span className="translation-shortcut">⌘ Enter</span></div>
+          </div>
         </div>
         {busy ? <LoadingIndicator label={phase === 'stopping' ? '正在停止请求…' : offline && model.phase === 'loading' ? '正在加载本地模型…' : '正在翻译…'} /> : null}
         {error ? <pre className="translation-error" role="alert">{error}</pre> : null}
