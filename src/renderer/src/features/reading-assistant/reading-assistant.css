@@ -17,8 +17,7 @@
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  gap: 8px;
-  padding: 14px 16px 12px;
+  padding: 12px 16px 8px;
 }
 .reading-tabs {
   display: flex;
@@ -29,11 +28,10 @@
   border-radius: 10px;
   background: var(--surface-muted);
 }
-.right-panel-toggle svg { transform: scaleX(-1); }
 .reading-tabs .ui-button {
   flex: 1;
   min-width: 0;
-  padding: 7px 5px;
+  padding: 6px 5px;
   border: 0;
   border-radius: 7px;
   background: transparent;

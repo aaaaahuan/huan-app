@@ -33,8 +33,8 @@ function TurnDetails({ entry }: { entry: ChatEntry }) {
   </details>;
 }
 
-export function AIChat({ settingsRevision, collapsed, selection, modelChanging, onConfigure }: {
-  settingsRevision: number; collapsed: boolean; selection?: ModelSelection; modelChanging: boolean; onConfigure(): void;
+export function AIChat({ settingsRevision, collapsed, tabbed, selection, modelChanging, onConfigure }: {
+  settingsRevision: number; collapsed: boolean; tabbed: boolean; selection?: ModelSelection; modelChanging: boolean; onConfigure(): void;
 }) {
   const [conversation, setConversation] = useState<ConversationState>();
   const [draft, setDraft] = useState('');
@@ -138,7 +138,7 @@ export function AIChat({ settingsRevision, collapsed, selection, modelChanging, 
       return result;
     });
   }
-  if (!configured && !current?.entries.length) return <section id="reading-chat-panel" role="tabpanel" aria-labelledby="reading-chat-tab" className="ai-chat" hidden={collapsed}>
+  if (!configured && !current?.entries.length) return <section id="reading-chat-panel" role={tabbed ? 'tabpanel' : 'region'} aria-labelledby={tabbed ? 'reading-chat-tab' : undefined} aria-label={tabbed ? undefined : 'AI 对话'} className="ai-chat" hidden={collapsed}>
     <div className="ai-unconfigured">
       <div className="ai-empty-icon"><Icon name="book" width="36" height="36" /></div>
       <h2>准备开始伴读</h2>
@@ -147,9 +147,8 @@ export function AIChat({ settingsRevision, collapsed, selection, modelChanging, 
     </div>
   </section>;
 
-  return <section id="reading-chat-panel" role="tabpanel" aria-labelledby="reading-chat-tab" className="ai-chat" hidden={collapsed}>
+  return <section id="reading-chat-panel" role={tabbed ? 'tabpanel' : 'region'} aria-labelledby={tabbed ? 'reading-chat-tab' : undefined} aria-label={tabbed ? undefined : 'AI 对话'} className="ai-chat" hidden={collapsed}>
     <div className="ai-heading">
-      <span>全局临时对话</span>
       <Button className="ai-new-chat" title="清空聊天和草稿，开始新对话；不清页面材料" disabled={!current || commandBusy} onClick={() => setConfirmRestart(true)}><Icon name="plus" />新开对话</Button>
     </div>
     <div className="ai-messages">

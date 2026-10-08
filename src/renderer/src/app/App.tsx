@@ -176,7 +176,7 @@ export function App() {
           {!panels.hideRight ? <PanelDivider label="调整 AI 对话宽度" controls="ai-chat" value={panels.right}
             {...panels.limits.right} direction={-1} onStart={x => panels.start('right', x)} onMove={panels.move}
             onEnd={panels.end} onChange={value => panels.change('right', value)} /> : null}
-          <ReadingAssistant collapsed={panels.hideRight} onToggleCollapsed={() => togglePanel('right')}
+          <ReadingAssistant collapsed={panels.hideRight}
             settingsRevision={revision} modelSelection={modelSelection} modelChanging={modelSaving} onConfigure={tab => void openSettings(tab)} />
         </>}>
         <ReadingPlaceholder loading={loading} enabled={!!enabled} hasItems={!!hasItems}

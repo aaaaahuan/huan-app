@@ -1,16 +1,16 @@
 /* 收藏是阅读入口，不额外切分连续工作台；收起后的空间由宿主完全让出。 */
-.bookmark-sidebar{width:var(--left-panel-width,280px);flex-shrink:0;display:flex;flex-direction:column;min-width:0;min-height:0;background:transparent}
+.bookmark-sidebar{width:var(--left-panel-width,280px);flex-shrink:0;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;background:transparent}
 .bookmark-sidebar[hidden]{display:none}
-.library-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 12px 12px}
+.library-header{display:flex;flex-shrink:0;align-items:center;justify-content:space-between;gap:12px;padding:8px 12px 12px}
 .library-heading{display:flex;align-items:baseline;gap:8px;min-width:0}
 .library-heading h2{margin:0;font-size:14px;line-height:22px;font-weight:600;color:var(--text)}
 .library-count{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
 .library-header .bookmark-panel-toggle{flex-shrink:0;padding:6px;color:var(--muted);background:transparent;border-color:transparent}
 .library-content{display:flex;flex:1;flex-direction:column;min-height:0}
-.library-controls{padding:0 12px 12px;display:grid;grid-template-columns:minmax(0,1fr) 96px;gap:8px}
+.library-controls{flex-shrink:0;padding:0 12px 12px;display:grid;grid-template-columns:minmax(0,1fr) 96px;gap:8px}
 .library-controls .ui-icon-input{min-width:0;background:var(--surface)}
 .library-controls .ui-select{width:100%;min-width:0;background:var(--surface)}
-.bookmark-scroll{flex:1;overflow:auto;min-height:0;padding:0 6px 16px;scrollbar-gutter:stable}
+.bookmark-scroll{flex:1;overflow-y:auto;overflow-x:hidden;overscroll-behavior:none;min-height:0;padding:0 6px 8px;scrollbar-gutter:stable}
 .bookmark-items{list-style:none;padding:0;margin:0;display:grid;gap:3px}
 .bookmark-items li{min-width:0;content-visibility:auto;contain-intrinsic-size:auto 84px}
 .bookmark-date-divider{padding:16px 10px 8px;color:var(--muted);font-size:11px;line-height:16px;font-weight:500;font-variant-numeric:tabular-nums}

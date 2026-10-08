@@ -1,6 +1,6 @@
 /* 原生网页与 DOM 控件各占独立矩形，工具栏始终在网页上方。 */
 .reader { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: 0 16px 16px; }
-.reader-toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 0 14px; min-width: 0; }
+.reader-toolbar { display: flex; flex-shrink: 0; align-items: center; gap: 8px; padding: 8px 0 14px; min-width: 0; }
 .reader-toolbar .ui-button { flex-shrink: 0; height: 36px; }
 .reader-browser-actions { display: flex; align-items: center; gap: 3px; }
 .reader-browser-actions .ui-button { background: transparent; border-color: transparent; padding: 7px; color: var(--muted); }

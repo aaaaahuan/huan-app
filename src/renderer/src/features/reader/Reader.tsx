@@ -64,7 +64,7 @@ export function Reader({ selected, suspended, layoutKey, children, leadingPanel,
     function report() {
       const rect = element!.getBoundingClientRect();
       void window.huanApp.browser.layout({ x: rect.x, y: rect.y, width: rect.width, height: rect.height,
-        visible: !!id && !suspended && !dragging }).catch(() => setError('网页区域定位失败，请重启应用。'));
+        visible: !!id && !suspended }).catch(() => setError('网页区域定位失败，请重启应用。'));
     }
     report();
     const observer = new ResizeObserver(report);
