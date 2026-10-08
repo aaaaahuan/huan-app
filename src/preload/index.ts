@@ -6,6 +6,12 @@ import type { HuanAppAPI } from '@shared/contracts/app';
 // 通道名固定在这里；页面不能自行指定任意 IPC 通道或直接调用文件系统。
 const api: HuanAppAPI = {
   app: Object.freeze({ getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.app.status) }),
+  algorithms: Object.freeze({
+    get: () => ipcRenderer.invoke(IPC_CHANNELS.algorithms.get),
+    refresh: () => ipcRenderer.invoke(IPC_CHANNELS.algorithms.refresh),
+    setCompleted: input => ipcRenderer.invoke(IPC_CHANNELS.algorithms.setCompleted, input),
+    open: id => ipcRenderer.invoke(IPC_CHANNELS.algorithms.open, id)
+  } satisfies HuanAppAPI['algorithms']),
   translation: Object.freeze({
     getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.translation.getStatus),
     translate: request => ipcRenderer.invoke(IPC_CHANNELS.translation.translate, request),

@@ -19,6 +19,8 @@ import { createYouTubePlayback } from '@main/browser/youtube-playback';
 import { youtubeVideoId } from '@shared/contracts/subtitles';
 import { registerTranslation } from '@main/translation';
 import { createLocalModelRuntime } from '@main/ai/local-model';
+import { createAlgorithmLibrary } from '@main/algorithms/library';
+import { registerAlgorithms } from '@main/algorithms/ipc';
 
 // 协议权限必须在 app ready 前声明；生产界面通过 app:// 加载，不依赖开发服务器。
 protocol.registerSchemesAsPrivileged([
@@ -90,6 +92,10 @@ if (!app.requestSingleInstanceLock()) {
 
     // 注册设置模块和浏览器模块的 IPC 事件处理函数。
     const settings = createSettingsStore(app.getPath('userData'));
+    // 算法清单只使用约定的本机 Obsidian 文件，renderer 不能指定任意读写路径。
+    const algorithms = createAlgorithmLibrary(join(app.getPath('home'), 'Library', 'Mobile Documents',
+      'iCloud~md~obsidian', 'Documents', 'huan-space', 'raw', 'leetcode-raw.md'));
+    registerAlgorithms(algorithms, assertTrusted);
     const bookmarks = createBookmarkLibrary(app.getPath('userData'), settings.load);
     const initialSettings = await settings.load();
     // 配置损坏时只使用内存会话，不猜测用户是否同意保存登录态。

@@ -12,6 +12,7 @@ import { PanelDivider } from '@renderer/components/PanelDivider';
 import { usePanelWidths, type PanelSide } from './usePanelWidths';
 import { Navigation, type SystemPage } from './Navigation';
 import { Translation } from '@renderer/features/translation/Translation';
+import { AlgorithmTraining } from '@renderer/features/algorithms/AlgorithmTraining';
 import '@renderer/components/controls.css';
 import '@renderer/features/bookmarks/bookmarks.css';
 import './navigation.css';
@@ -184,6 +185,7 @@ export function App() {
       </Reader>
     </div>
     <Translation active={activePage === 'translation'} selection={modelSelection} modelChanging={modelSaving} />
+    <AlgorithmTraining active={activePage === 'algorithms'} blocked={settingsOpen || navigationBusy} />
     </div>
     </div>
     {settingsOpen ? <SettingsPanel initialTab={settingsTab} onClose={closeSettings} onSaved={() => {

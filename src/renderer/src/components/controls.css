@@ -37,8 +37,12 @@
   font-size: 12px;
 }
 .ui-input::placeholder { color: #829288; }
-.ui-input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.ui-input:focus:not(:disabled) { outline: none; border-color: var(--focus); box-shadow: var(--focus-ring); }
 .ui-input[aria-invalid=true] { border-color: var(--danger); }
+.ui-input[aria-invalid=true]:focus:not(:disabled) { border-color: var(--danger); box-shadow: var(--focus-error-ring); }
+/* 组合输入只在文字区域聚焦时描边，内部按钮保留自己的键盘焦点。 */
+.ui-input-surface:has(textarea:focus:not(:disabled)) { border-color: var(--focus); box-shadow: var(--focus-ring); }
+.ui-input-surface textarea:focus { outline: none; box-shadow: none; }
 .ui-icon-input, .ui-select { position: relative; display: block; min-width: 0; }
 .ui-icon-input>svg, .ui-select>svg { position: absolute; top: 11px; width: 16px; height: 16px; color: var(--muted); pointer-events: none; }
 .ui-icon-input>svg { left: 11px; }
@@ -50,10 +54,19 @@
 .ui-secret-input>.ui-input { padding-right: 42px; }
 .ui-secret-input>.ui-icon-button { position: absolute; right: 4px; top: 4px; padding: 6px; border-color: transparent; background: transparent; color: var(--muted); }
 .ui-secret-input>.ui-icon-button:hover { background: var(--accent-soft); }
+.ui-secret-input>.ui-icon-button:focus-visible { outline-offset: -2px; }
 .ui-loading { display: flex; align-items: center; gap: 8px; font-size: 12px; line-height: 1.8; color: var(--muted); margin: 6px 0; }
 .ui-loading::before { content: ""; width: 12px; height: 12px; flex-shrink: 0; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: ui-loading-spin .8s linear infinite; }
 @keyframes ui-loading-spin { to { transform: rotate(360deg); } }
 .ui-truncated { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-checkbox { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; cursor: pointer; }
+.ui-checkbox input { width: 17px; height: 17px; margin: 0; flex-shrink: 0; accent-color: var(--accent); cursor: pointer; }
+.ui-checkbox:has(input:disabled), .ui-checkbox input:disabled { cursor: default; }
+.ui-external-link { display: flex; align-items: center; gap: 14px; min-width: 0; color: var(--accent); text-decoration: none; }
+.ui-external-link:hover .ui-truncated { text-decoration: underline; text-underline-offset: 3px; }
+.ui-external-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; border-radius: 3px; }
+.ui-external-link svg { width: 16px; height: 16px; flex-shrink: 0; margin-left: auto; color: var(--muted); }
+.ui-external-link[aria-disabled=true] { cursor: default; }
 .panel-divider { width: 12px; flex-shrink: 0; cursor: col-resize; touch-action: none; background: transparent; position: relative; outline: none; }
 .panel-divider::after { content: ""; position: absolute; top: 12px; bottom: 12px; left: 5px; width: 2px; border-radius: 2px; background: transparent; }
 .panel-divider:hover::after, .panel-divider:focus-visible::after { background: var(--focus); }

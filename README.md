@@ -1,6 +1,6 @@
 # huan-app
 
-独立 macOS 桌面应用，顶部导航切换阅读和翻译，右上角打开全局设置，通过紧凑菜单选择在线或离线 AI。工作台统一灰绿底色、白色阅读表面与深绿操作色。基础阅读与 AI 独立；已实现本地收藏、原页容器、分平台会话策略、Readability 页面缓存、Pi SDK 工具式伴读、YouTube 字幕阅读，以及中英互译。聊天和翻译共用模型选择：在线 DeepSeek Flash，离线 Qwen3.5-4B。字幕获取使用官方 REST API，自动检测原语言并在提交前预检费用。
+独立 macOS 桌面应用，顶部导航切换阅读、翻译和算法训练，右上角打开全局设置，通过紧凑菜单选择在线或离线 AI。工作台统一灰绿底色、白色阅读表面与深绿操作色。基础阅读与 AI 独立；已实现本地收藏、原页容器、分平台会话策略、Readability 页面缓存、Pi SDK 工具式伴读、YouTube 字幕阅读、中英互译，以及 Obsidian 算法清单。聊天和翻译共用模型选择：在线 DeepSeek Flash，离线 Qwen3.5-4B。字幕获取使用官方 REST API，自动检测原语言并在提交前预检费用。
 
 ## 开发与验证
 
@@ -33,21 +33,25 @@ pnpm pack:arm64
 | `src/main/app` | 窗口、生命周期、资源协议与 IPC 安全 |
 | `src/main/settings` | 配置加载、校验、原子保存与文件选择 IPC |
 | `src/main/bookmarks` | Markdown 解析、来源读取与最近成功副本 |
+| `src/main/algorithms` | 算法清单解析、源文件刷新、完成状态原子写回与外链 IPC |
 | `src/main/browser` | 原生网页容器、导航、页面状态与受限 IPC |
 | `src/main/subtitles` | 字幕服务费用预检、内存缓存、凭据隔离与受限 IPC |
 | `src/main/translation` | 包外模型进程、单次本地翻译请求与取消 |
-| `src/preload` | 暴露有限的 app、settings、bookmarks、browser、AI、subtitles 与 translation API |
+| `src/preload` | 暴露有限的 app、settings、bookmarks、browser、AI、subtitles、translation 与 algorithms API |
 | `src/renderer/src/app` | React 应用外壳 |
 | `src/renderer/src/components` | 无业务状态的图标、按钮、输入、下拉、标签页与截断文本 |
 | `src/renderer/src/features/settings` | 设置表单、草稿、保存与取消 |
 | `src/renderer/src/features/bookmarks` | 收藏列表、搜索、平台筛选、全量滚动与折叠 |
 | `src/renderer/src/features/reader` | 阅读工具栏、原生容器定位与失败占位 |
 | `src/renderer/src/features/translation` | 翻译草稿、语言切换、提交、停止与结果展示 |
+| `src/renderer/src/features/algorithms` | 本地分类导航、题目清单、未完成筛选与手动勾选 |
 | `src/shared/contracts` | 按功能定义通信契约 |
 
 后续模块与数据格式见 [实施约定](docs/implementation-plan.md)。不提前创建空模块、插件框架或通用服务层。
 
 收藏列表统一为平台图标、最多两行标题与单行 URL，超出省略并通过原生 tooltip 提供全文。共享控件由 props 驱动，来源卡片、会话卡片和阅读空状态留在对应功能模块；IPC 与业务状态不进入通用组件。
+
+输入聚焦统一由共享控件样式维护：搜索、路径、API Key、只读地址以及模型/平台选择使用绿色细边框和 3px 淡绿光晕，错误输入保留红色边框及光晕，聚焦不改变尺寸。AI 提问框只高亮外层输入表面，不给文字区重复描边；发送按钮与 Key 显隐按钮保留独立键盘焦点。复选框保持键盘轮廓，隐藏的会话单选框只高亮可见选项。翻译页沿用已确认的原样式，包括原文/译文表面和语言选择器。当前 CSS 的浏览器样本校验通过，原生 Electron 窗口验收因 computer-use 超时未完成。
 
 两侧边界默认不显示竖线，悬浮或键盘聚焦时显示调宽拖柄；支持拖拽与左右方向键（Home / End 到最小 / 最大宽度）。收藏栏 240–420px，AI 栏 280–520px，默认 280 / 320px，为中间阅读列预留至少 520px。窗口不足以同时展开双侧时，优先保留最近操作的一侧；缩窗不覆盖宽度偏好。折叠后宽度与分隔条真正归零，展开恢复本轮偏好，不写入设置。拖拽期间原生网页保持可见，并随布局变化更新矩形，不调用 suspend、取消采集或重新加载网页。
 
@@ -80,6 +84,22 @@ Review：打开右上角设置，为平台选择符合收藏表格格式（兼�
 这里的“离线”只控制 AI 推理，不是全应用断网开关：原页浏览、视频字幕获取及字幕用量查询保持原有网络行为。本地已有正文、字幕和已授权笔记可用于离线问答，不能离线获取尚未缓存的网络内容。
 
 最小 Provider 适配在 `src/workers/ai/providers.ts`，候选模型在 `src/shared/contracts/models.ts`。两端均通过 Pi AI 的 OpenAI Chat Completions 适配器（不是 Responses API），聊天和翻译共用原有 Worker 和一个驻留 llama-server；单 slot 会排队，不是同时推理两份请求。当前不提供任意 endpoint、动态模型发现、下载器或额外代理服务。未来增加同供应商模型需更新候选列表；增加供应商还需明确接入凭据、端点和 Provider，不能只改一个下拉选项。
+
+## 算法训练
+
+顶部“算法训练”读取当前用户 `~/Library/Mobile Documents/iCloud~md~obsidian/Documents/huan-space/raw/leetcode-raw.md`，不依赖 AI 笔记工具授权，不联网抓题、不复制题面或自动检测 LeetCode 提交。首批清单由人工核验的 8 个分类、每类 5 道中等题组成；分类不是应用内置枚举，后续修改、增删、排序均直接在 Obsidian 维护。应用只提供刷新笔记、只看未完成、原链接与完成勾选，没有编辑源文件、分类总结或下一题按钮。
+
+表格必须包含以下四列，可调整列顺序。分类按首次出现顺序，题目按源文件行顺序显示；完成进度按完整分类计算，不受筛选影响。题目标题与帖子链接均在系统默认浏览器打开原链接，支持普通 URL、尖括号 URL 和 Markdown 链接，仅接受不携带用户名/密码的 HTTP(S)。页面切换保留本轮分类及筛选，不重建阅读区。
+
+```md
+| 分类 | 题目 | 帖子链接 | 是否已完成 |
+| --- | --- | --- | --- |
+| 数组与哈希 | 49. 字母异位词分组 | https://leetcode.com/problems/group-anagrams/ | 否 |
+```
+
+“是否已完成”只接受“是 / 否”，勾选只改该题单元格，保留其他内容、链接、BOM、换行和顺序。身份由分类及原 URL 决定；同分类重复链接只展示第一次，完成状态必须一致，勾选同步修改所有重复行；不同分类的同链接独立管理。代码块内的示例表格不读取。缺表格、坏链接、缺列或非法状态会明确报错；合法空表清空列表。读取失败保留本轮最近有效清单，但禁用链接和勾选，刷新成功后恢复。
+
+首次进入读取笔记，修改 Obsidian 后点击“刷新笔记”。读取限普通 UTF-8 文件、8 MB、10 秒；不读写符号链接、不创建备用数据库。写入前重读、核对该题期望完成状态，再做文件元信息和全文冲突检查，以同目录临时文件同步后原子替换。失败不先勾选，不自动重试。该机制不是跨应用锁；不要在勾选写入期间同时编辑同一文件。本地保存不等于 iCloud 同步完成。验收记录见 [算法清单验收](docs/algorithms-review.md)。
 
 ## 翻译
 

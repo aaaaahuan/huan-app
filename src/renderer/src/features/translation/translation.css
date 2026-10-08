@@ -13,6 +13,8 @@
 .translation-languages{display:flex;align-items:center;justify-content:center;gap:12px}
 .translation-languages .ui-select{width:156px}
 .translation-languages .ui-input{height:40px;background:var(--surface,#fff);border-color:var(--border,#dde6e0)}
+.translation-languages .ui-input:focus:not(:disabled){border-color:var(--border,#dde6e0);box-shadow:none}
+.translation-languages .ui-input:focus-visible:not(:disabled){outline:2px solid var(--focus);outline-offset:2px}
 .translation-languages .ui-icon-button{height:40px;width:40px;background:var(--surface,#fff);border-color:var(--border,#dde6e0)}
 .translation-content>form>.translation-panels{display:grid;flex:1;min-height:260px;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}
 .translation-panel{display:flex;flex-direction:column;min-width:0;min-height:0;border:1px solid var(--border,#dde6e0);border-radius:14px;background:var(--surface,#fff);overflow:hidden}

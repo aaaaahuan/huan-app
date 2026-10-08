@@ -9,6 +9,8 @@
   --border: #dde6e0;
   --danger: #a34736;
   --focus: #2c6244;
+  --focus-ring: 0 0 0 3px #2c624412;
+  --focus-error-ring: 0 0 0 3px #a3473612;
   font-family: "PingFang SC", "Hiragino Sans GB", "Helvetica Neue", sans-serif;
   color: var(--text);
   background: var(--bg);
@@ -22,9 +24,13 @@ body { margin: 0; }
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: default; }
-button:focus-visible, summary:focus-visible, input:focus-visible, textarea:focus-visible {
+button:focus-visible, summary:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 3px;
+}
+input[type=checkbox]:focus-visible:not(:disabled) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 [hidden] { display: none !important; }
 h1, h2, h3, p { overflow-wrap: anywhere; }

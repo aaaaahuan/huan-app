@@ -47,7 +47,8 @@
 .session-options input{position:absolute;opacity:0;width:1px;height:1px}
 .session-options span{display:block;text-align:center;padding:8px;border:1px solid var(--border,#dde6e0);border-radius:8px;color:var(--muted,#61736a);font-size:12px;background:var(--surface-muted,#f4f8f5)}
 .session-options input:checked+span{border-color:#a6bfad;background:#e6efe9;color:var(--accent,#2c6244)}
-.session-options input:focus-visible+span{outline:2px solid var(--accent,#2c6244);outline-offset:2px}
+.session-options input:focus-visible{outline:none}
+.session-options input:focus-visible:not(:disabled)+span{border-color:var(--focus);box-shadow:var(--focus-ring)}
 .session-options input:disabled+span{opacity:.6;cursor:default}
 .session-actions{display:flex;align-items:center;justify-content:space-between;margin-top:10px;gap:8px}
 .session-actions .ui-button{white-space:nowrap}

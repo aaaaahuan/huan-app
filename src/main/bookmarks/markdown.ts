@@ -9,7 +9,7 @@ export const bookmarkId = (platform: Platform, url: string) =>
   createHash('sha256').update(JSON.stringify([platform, url])).digest('hex');
 
 // 拆分单行表格，保留转义管道符；不能直接 split('|')，否则会误切单元格内容。
-function cells(line: string): string[] {
+export function cells(line: string): string[] {
   let text = line.trim();
   if (text.startsWith('|')) text = text.slice(1);
   if (text.endsWith('|') && !text.endsWith('\\|')) text = text.slice(0, -1);
@@ -25,7 +25,7 @@ function cells(line: string): string[] {
 }
 
 // 将约定的换行和实体还原为纯文本；最终仍由 React 以文本节点显示。
-function plain(text: string): string {
+export function plain(text: string): string {
   return text.replace(/<br\s*\/?\s*>/gi, '\n').replace(/&(amp|lt|gt|quot|apos|#\d+|#x[\da-f]+);/gi, (match, code: string) => {
     const entities: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
     if (!code.startsWith('#')) return entities[code.toLowerCase()] ?? match;
@@ -44,7 +44,7 @@ export function validBookmarkUrl(text: string): boolean {
 }
 
 // 解包普通 URL、尖括号 URL 和 Markdown 链接，不进行网络请求。
-function link(text: string): string | null {
+export function link(text: string): string | null {
   let url = text.trim();
   if (url.startsWith('<') && url.endsWith('>')) url = url.slice(1, -1);
   else {
@@ -126,7 +126,7 @@ export function parseBookmarks(markdown: string, platform: Platform): { items: B
 }
 
 // 按原始字符位置替换一个单元格，保留其他列的链接写法、转义和空白。
-function replaceCell(line: string, column: number, value: string) {
+export function replaceCell(line: string, column: number, value: string) {
   const pipes: number[] = [];
   for (let i = 0; i < line.length; i++) {
     if (line[i] === '\\' && (line[i + 1] === '|' || line[i + 1] === '\\')) i++;

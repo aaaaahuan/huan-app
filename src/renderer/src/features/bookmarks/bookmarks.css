@@ -21,7 +21,6 @@
 .bookmark-card .bookmark-item:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .bookmark-card.is-read .bookmark-title{color:var(--muted);font-weight:400}
 .bookmark-card .bookmark-read-toggle{position:absolute;right:12px;top:50%;transform:translateY(-50%);width:16px;height:16px;margin:0;accent-color:var(--accent);cursor:pointer}
-.bookmark-read-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .bookmark-read-toggle:disabled{cursor:not-allowed;opacity:.5}
 .platform-icon{width:28px;height:28px;flex-shrink:0;display:grid;place-items:center;border-radius:8px;background:var(--surface)}
 .platform-icon img{display:block;width:20px;height:20px;object-fit:contain}

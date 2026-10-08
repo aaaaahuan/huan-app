@@ -2,6 +2,8 @@
 // 请求使用 invoke/handle，browser.state 使用 send/on 推送状态；处理函数仍归属各业务模块。
 export const IPC_CHANNELS = {
   app: { status: 'huan-app:app:status' },
+  algorithms: { get: 'huan-app:algorithms:get', refresh: 'huan-app:algorithms:refresh',
+    setCompleted: 'huan-app:algorithms:set-completed', open: 'huan-app:algorithms:open' },
   translation: { getStatus: 'huan-app:translation:get-status', translate: 'huan-app:translation:translate',
     stop: 'huan-app:translation:stop', copy: 'huan-app:translation:copy', status: 'huan-app:translation:status' },
   subtitles: { get: 'huan-app:subtitles:get', ensure: 'huan-app:subtitles:ensure',

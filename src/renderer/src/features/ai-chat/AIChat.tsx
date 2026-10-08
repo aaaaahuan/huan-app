@@ -174,7 +174,7 @@ export function AIChat({ settingsRevision, collapsed, tabbed, selection, modelCh
         ? '视频问答使用提问时已获取的字幕，不包含视频画面。播放后自动获取，可在「实时字幕」查看。'
         : pageStatuses[page?.contentStatus ?? 'empty']}</p>
       {error || current?.error ? <p className="ai-error" role="alert">{error || current?.error}</p> : null}
-      <div className="ai-input-box">
+      <div className="ai-input-box ui-input-surface">
         <label className="visually-hidden" htmlFor="ai-question">向 AI 提问</label>
         <textarea id="ai-question" placeholder={current?.entries.length ? '继续提问…' : '向 AI 提问…'} value={draft} maxLength={8000}
           disabled={!current || !configured} onChange={event => edit(event.target.value)}

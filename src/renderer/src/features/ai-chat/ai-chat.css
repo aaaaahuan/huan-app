@@ -126,10 +126,6 @@
   border-radius: 12px;
   background: var(--surface);
 }
-.ai-input-box:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px #2c624414;
-}
 .ai-composer textarea {
   display: block;
   width: 100%;

@@ -6,9 +6,10 @@ import type { BrowserAPI } from './browser';
 import type { AIAPI } from './ai';
 import type { SubtitlesAPI } from './subtitles';
 import type { TranslationAPI } from './translation';
+import type { AlgorithmsAPI } from './algorithms';
 
 export const appStatusSchema = z.object({
   state: z.literal('ready'), appName: z.literal('huan-app'), version: z.string().min(1)
 });
 export type AppStatus = z.infer<typeof appStatusSchema>;
-export interface HuanAppAPI { app: { getStatus(): Promise<AppStatus> }; settings: SettingsAPI; bookmarks: BookmarksAPI; browser: BrowserAPI; ai: AIAPI; subtitles: SubtitlesAPI; translation: TranslationAPI }
+export interface HuanAppAPI { app: { getStatus(): Promise<AppStatus> }; settings: SettingsAPI; bookmarks: BookmarksAPI; browser: BrowserAPI; ai: AIAPI; subtitles: SubtitlesAPI; translation: TranslationAPI; algorithms: AlgorithmsAPI }
