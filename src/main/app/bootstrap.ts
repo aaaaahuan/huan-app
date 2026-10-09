@@ -21,6 +21,7 @@ import { registerTranslation } from '@main/translation';
 import { createLocalModelRuntime } from '@main/ai/local-model';
 import { createAlgorithmLibrary } from '@main/algorithms/library';
 import { registerAlgorithms } from '@main/algorithms/ipc';
+import { createAlgorithmNotes } from '@main/algorithms/notes';
 
 // 协议权限必须在 app ready 前声明；生产界面通过 app:// 加载，不依赖开发服务器。
 protocol.registerSchemesAsPrivileged([
@@ -93,9 +94,13 @@ if (!app.requestSingleInstanceLock()) {
     // 注册设置模块和浏览器模块的 IPC 事件处理函数。
     const settings = createSettingsStore(app.getPath('userData'));
     // 算法清单只使用约定的本机 Obsidian 文件，renderer 不能指定任意读写路径。
-    const algorithms = createAlgorithmLibrary(join(app.getPath('home'), 'Library', 'Mobile Documents',
-      'iCloud~md~obsidian', 'Documents', 'huan-space', 'raw', 'leetcode-raw.md'));
-    registerAlgorithms(algorithms, assertTrusted);
+    const algorithmVault = join(app.getPath('home'), 'Library', 'Mobile Documents',
+      'iCloud~md~obsidian', 'Documents', 'huan-space');
+    const algorithms = createAlgorithmLibrary(join(algorithmVault, 'raw', 'leetcode-raw.md'));
+    const algorithmNotes = createAlgorithmNotes(algorithmVault, () => {
+      if (!contents.isDestroyed()) contents.send(IPC_CHANNELS.algorithms.notesChanged);
+    });
+    registerAlgorithms(algorithms, algorithmNotes, assertTrusted);
     const bookmarks = createBookmarkLibrary(app.getPath('userData'), settings.load);
     const initialSettings = await settings.load();
     // 配置损坏时只使用内存会话，不猜测用户是否同意保存登录态。
@@ -129,7 +134,7 @@ if (!app.requestSingleInstanceLock()) {
         event.preventDefault(); quitting = false;
       }
     });
-    app.on('will-quit', () => { translation.close(); ai.close(); localModel.close(); playback.close(); subtitles.clear(); });
+    app.on('will-quit', () => { algorithmNotes.close(); translation.close(); ai.close(); localModel.close(); playback.close(); subtitles.clear(); });
 
     ipcMain.handle(IPC_CHANNELS.bookmarks.get, (event) => {
       assertTrusted(event);
@@ -144,11 +149,11 @@ if (!app.requestSingleInstanceLock()) {
       return { state: 'ready', appName: 'huan-app', version: app.getVersion() };
     });
     
-    // 设置页通过 beforeunload 阻止丢失草稿，再由主进程显示原生确认框。
+    // 设置或心得通过 beforeunload 保护草稿，再由主进程显示原生确认框。
     contents.on('will-prevent-unload', (event) => {
       const choice = dialog.showMessageBoxSync(window!, {
         type: 'question', buttons: ['继续编辑', '放弃并离开'], defaultId: 0, cancelId: 0,
-        message: '设置尚未保存', detail: '离开将丢失未保存的修改。正在保存时请继续等待。'
+        message: '修改尚未保存', detail: '离开将丢失未保存的设置或心得。正在保存时请继续等待。'
       });
       // 这里取消的是“阻止卸载”，因此 preventDefault 表示允许离开页面。
       if (choice === 1) event.preventDefault();

@@ -10,7 +10,18 @@ const api: HuanAppAPI = {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.algorithms.get),
     refresh: () => ipcRenderer.invoke(IPC_CHANNELS.algorithms.refresh),
     setCompleted: input => ipcRenderer.invoke(IPC_CHANNELS.algorithms.setCompleted, input),
-    open: id => ipcRenderer.invoke(IPC_CHANNELS.algorithms.open, id)
+    open: id => ipcRenderer.invoke(IPC_CHANNELS.algorithms.open, id),
+    getNote: id => ipcRenderer.invoke(IPC_CHANNELS.algorithms.getNote, id),
+    noteIndex: () => ipcRenderer.invoke(IPC_CHANNELS.algorithms.noteIndex),
+    saveNote: input => ipcRenderer.invoke(IPC_CHANNELS.algorithms.saveNote, input),
+    copyNote: input => ipcRenderer.invoke(IPC_CHANNELS.algorithms.copyNote, input),
+    openNote: id => ipcRenderer.invoke(IPC_CHANNELS.algorithms.openNote, id),
+    openNoteLink: url => ipcRenderer.invoke(IPC_CHANNELS.algorithms.openNoteLink, url),
+    onNotesChanged: listener => {
+      const handler = () => listener();
+      ipcRenderer.on(IPC_CHANNELS.algorithms.notesChanged, handler);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.algorithms.notesChanged, handler);
+    }
   } satisfies HuanAppAPI['algorithms']),
   translation: Object.freeze({
     getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.translation.getStatus),

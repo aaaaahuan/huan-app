@@ -37,6 +37,18 @@
   font-size: 12px;
 }
 .ui-input::placeholder { color: #829288; }
+.ui-textarea { height: auto; resize: vertical; line-height: 1.8; }
+.ui-markdown { font-size: 14px; line-height: 1.9; overflow-wrap: anywhere; }
+.ui-markdown h1 { font-size: 24px; }
+.ui-markdown h2 { margin: 24px 0 10px; font-size: 18px; }
+.ui-markdown h3 { margin: 20px 0 8px; font-size: 16px; }
+.ui-markdown p, .ui-markdown ul, .ui-markdown ol { margin: 10px 0; }
+.ui-markdown pre { overflow-x: auto; padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-muted); }
+.ui-markdown code { font-family: "SFMono-Regular", Menlo, monospace; font-size: .9em; background: var(--surface-muted); padding: 2px 4px; border-radius: 3px; }
+.ui-markdown pre code { background: transparent; padding: 0; }
+.ui-markdown blockquote { margin: 12px 0; padding-left: 16px; border-left: 3px solid var(--border); color: var(--muted); }
+.ui-markdown a { color: var(--accent); text-underline-offset: 3px; }
+.ui-markdown-image { color: var(--muted); font-size: 12px; }
 .ui-input:focus:not(:disabled) { outline: none; border-color: var(--focus); box-shadow: var(--focus-ring); }
 .ui-input[aria-invalid=true] { border-color: var(--danger); }
 .ui-input[aria-invalid=true]:focus:not(:disabled) { border-color: var(--danger); box-shadow: var(--focus-error-ring); }

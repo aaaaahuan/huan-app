@@ -11,6 +11,16 @@ function problemId(category: string, url: string) {
   return createHash('sha256').update(JSON.stringify([category, url])).digest('hex');
 }
 
+// 心得身份不含分类或标题；中英文站的同一道 LeetCode 题共用笔记。
+export function algorithmNoteKey(url: string) {
+  const source = new URL(url);
+  const slug = /^\/problems\/([a-z0-9-]+)(?:\/|$)/.exec(source.pathname)?.[1];
+  if (['leetcode.cn', 'leetcode.com', 'www.leetcode.cn', 'www.leetcode.com'].includes(source.hostname) && slug)
+    return `leetcode:${slug}`;
+  source.hash = '';
+  return `url:${createHash('sha256').update(source.href).digest('hex')}`;
+}
+
 function scan(markdown: string) {
   const lines = markdown.replace(/^\uFEFF/, '').split(/\r?\n/);
   const items: AlgorithmProblem[] = [];
@@ -56,7 +66,7 @@ function scan(markdown: string) {
       if (!url) throw new Error(`第 ${i + 1} 行：帖子链接必须是有效的 HTTP(S) 链接。`);
       const completion = get('是否已完成');
       if (!['是', '否'].includes(completion)) throw new Error(`第 ${i + 1} 行：是否已完成请填写“是”或“否”。`);
-      const item = { id: problemId(category, url), category, title, url, completed: completion === '是' };
+      const item = { id: problemId(category, url), noteKey: algorithmNoteKey(url), category, title, url, completed: completion === '是' };
       rows.push({ line: i, column: header.indexOf('是否已完成'), id: item.id });
       const previous = seen.get(item.id);
       if (previous && previous.completed !== item.completed)
