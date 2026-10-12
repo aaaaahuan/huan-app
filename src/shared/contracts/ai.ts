@@ -19,8 +19,10 @@ export interface ChatEntry {
   toolError?: string;
 }
 export interface ConversationState extends Owner {
-  revision: number; phase: 'idle' | 'preparing' | 'generating' | 'stopping' | 'blocked';
-  draft: string; entries: ChatEntry[];
+  revision: number; 
+  phase: 'idle' | 'preparing' | 'generating' | 'stopping' | 'blocked';
+  draft: string; 
+  entries: ChatEntry[];
   error: string;
 }
 export interface AIAPI {

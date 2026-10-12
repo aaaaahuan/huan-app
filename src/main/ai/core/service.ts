@@ -17,6 +17,7 @@ export function createAIService(dependencies: AgentDependencies): AIService {
       handles.set(config.key, handle);
       return handle;
     },
+    
     async close() {
       if (closed) return;
       closed = true;

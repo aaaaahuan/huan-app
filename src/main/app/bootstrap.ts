@@ -1,5 +1,5 @@
 // 桌面应用的组装层：管理窗口、可信页面、IPC 和 macOS 生命周期。
-import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, session, type IpcMainInvokeEvent } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, session, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron';
 import { mkdir, readFile } from 'node:fs/promises';
 import { join, extname } from 'node:path';
 import { IPC_CHANNELS } from '@shared/ipc-channels';
@@ -11,7 +11,8 @@ import { createPageHost } from '@main/browser/page-host';
 import { registerBrowser } from '@main/browser/ipc';
 import { createPlatformSessions } from '@main/browser/sessions';
 import { defaultSessionModes, defaultSettings } from '@shared/contracts/settings';
-import { registerAI } from '@main/ai/core/ipc';
+import { registerReading } from '@main/ai/agent/reading-ipc';
+import { registerModelControls } from '@main/ai/core/model-controls-ipc';
 import { setReadSchema } from '@shared/contracts/bookmarks';
 import { createSubtitleService } from '@main/subtitles/service';
 import { registerSubtitles } from '@main/subtitles/ipc';
@@ -140,11 +141,14 @@ if (!app.requestSingleInstanceLock()) {
       piAdapter, records, resolveModelTarget: createModelTargetResolver({ settings, localModel })
     });
     const keyTestKeys = new Map<string, string>();
+
+    // 创建不同模块专用的agent
     const readingAgent = aiService.createAgent(createReadingAgentConfig());
     const translateAgent = aiService.createAgent(createTranslateAgentConfig());
     const keyTestAgent = aiService.createAgent(createKeyTestAgentConfig(runId => keyTestKeys.get(runId)));
-    const ai = registerAI(window, pageHost, settings, assertTrusted, subtitles.snapshot,
-      readingAgent, keyTestAgent, keyTestKeys);
+
+    registerModelControls(window, settings, assertTrusted, keyTestAgent, keyTestKeys);
+    const reading = registerReading(window, pageHost, settings, assertTrusted, subtitles.snapshot, readingAgent);
     const translation = registerTranslation(contents, assertTrusted, localModel, translateAgent);
     registerSettings(window, settings, assertTrusted, async value => {
       await subtitles.configure(value);
@@ -152,7 +156,7 @@ if (!app.requestSingleInstanceLock()) {
     }, subtitles.usage);
 
     app.on('before-quit', (event) => {
-      if ((ai.hasWork() || translation.hasWork()) && dialog.showMessageBoxSync(window!, { type: 'question', buttons: ['继续使用', '退出'],
+      if ((reading.hasWork() || translation.hasWork()) && dialog.showMessageBoxSync(window!, { type: 'question', buttons: ['继续使用', '退出'],
         defaultId: 0, cancelId: 0, message: 'AI 任务仍在进行，确定退出？', detail: '退出会中断任务，临时聊天不会保存。' }) !== 1) {
         event.preventDefault(); quitting = false;
       }
@@ -163,7 +167,7 @@ if (!app.requestSingleInstanceLock()) {
       finalizingQuit ??= (async () => {
         try { translation.close(); }
         catch (error) { console.error('Translation shutdown failed', error); }
-        await ai.close().catch(error => console.error('AI conversations close failed', error));
+        await reading.close().catch(error => console.error('Reading conversations close failed', error));
         await aiService.close().catch(error => console.error('AI service shutdown failed', error));
         await records.flush().catch(error => console.error('AI records flush failed', error));
         await records.close().catch(error => console.error('AI records close failed', error));
@@ -210,11 +214,19 @@ if (!app.requestSingleInstanceLock()) {
     window.on('ready-to-show', () => {
       if (window && !window.isDestroyed()) window.show();
     });
-    Menu.setApplicationMenu(Menu.buildFromTemplate([
+    const menuTemplate: MenuItemConstructorOptions[] = [
       { label: 'huan-app', submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'hide' }, { role: 'quit' }] },
       { label: '编辑', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] }
-    ]));
+    ];
+    if (devUrl) menuTemplate.push({
+      label: '开发', submenu: [{
+        label: '打开开发者工具', accelerator: 'Alt+CommandOrControl+I',
+        click: () => { if (!contents.isDestroyed()) contents.openDevTools({ mode: 'detach' }); }
+      }]
+    });
+    Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate));
     await window.loadURL(devUrl ?? UI_URL);
+    if (devUrl) contents.openDevTools({ mode: 'detach' });
     localModel.warmup();
   }).catch((error: unknown) => {
     console.error('Application startup failed', error);

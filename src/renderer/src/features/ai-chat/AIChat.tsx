@@ -125,11 +125,13 @@ export function AIChat({ settingsRevision, collapsed, tabbed, selection, modelCh
       .catch(() => setError('草稿同步失败。'));
   }
   function owner() { return { key: current!.key, instanceId: current!.instanceId }; }
+
   function send() {
     if (!current || busy || modelChanging || !configured || !draft.trim()) return;
     submittedVersion.current = editVersion.current;
     void command(() => window.huanApp.ai.send({ ...owner(), requestId: crypto.randomUUID(), text: draft }));
   }
+  
   async function restart() {
     if (!current) return;
     await command(async () => {
