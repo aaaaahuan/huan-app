@@ -13,7 +13,7 @@ export function errorText(error: unknown): string {
   return error instanceof Error ? `${error.name}: ${error.message}${error.cause ? `\n${errorText(error.cause)}` : ''}` : String(error);
 }
 
-// 聊天与翻译共用一个本地进程；等待/取消单次请求不关闭驻留模型。
+// 伴读与翻译共用本地模型进程；单次 Run 的等待和取消保留驻留模型。
 export function createLocalModelRuntime(contents: WebContents) {
   let status: TranslationStatus = { revision: 0, phase: 'unloaded' };
   let server: Server | undefined;
@@ -91,6 +91,7 @@ export function createLocalModelRuntime(contents: WebContents) {
       .finally(() => { starting = undefined; });
     return starting;
   }
+
   return {
     status: () => status,
     ensure(signal: AbortSignal) {

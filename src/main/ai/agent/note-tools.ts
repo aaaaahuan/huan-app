@@ -2,19 +2,27 @@ import { constants } from 'node:fs';
 import { link, lstat, mkdir, open, realpath, rename, unlink } from 'node:fs/promises';
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { AgentTool } from '@earendil-works/pi-agent-core';
+import type { AgentHarnessTool, AgentTool } from '@earendil-works/pi-agent-core';
+import type { TSchema } from '@earendil-works/pi-ai';
 import type { NoteWrite } from '@shared/contracts/ai';
+import type { ReaderToolContext } from './reading-agent';
 
 export type NoteProposal = NoteWrite & { root: string; content: string };
 const MAX_BYTES = 64 * 1024;
 const missing = (error: unknown) => (error as NodeJS.ErrnoException)?.code === 'ENOENT';
 
-// 复用 Pi 的参数、分段读取和精确编辑；只替换其文件 I/O，集中约束笔记目录。
-export async function createNoteTools(directory: string,
-  approve: (proposal: NoteProposal, signal?: AbortSignal) => Promise<boolean>,
-  onWritten: (write: NoteWrite) => void): Promise<AgentTool[]> {
+function nativeTool<P extends TSchema, D>(tool: AgentTool<P, D>): AgentHarnessTool<ReaderToolContext, P, D> {
+  return {
+    ...tool,
+    execute(callId, params, onUpdate, _scope, _invocation, context) {
+      return tool.execute(callId, params, context.abortSignal, onUpdate);
+    }
+  };
+}
+
+export async function createReaderNoteTools(scope: ReaderToolContext): Promise<AgentHarnessTool<ReaderToolContext>[]> {
   const { createReadTool, createWriteTool, createEditTool } = await import('@earendil-works/pi-coding-agent');
-  const root = await realpath(directory);
+  const root = await realpath(scope.notesPath);
   if (!(await lstat(root)).isDirectory()) throw new Error('笔记库目录不存在。');
 
   async function checked(path: string): Promise<string> {
@@ -56,7 +64,7 @@ export async function createNoteTools(directory: string,
   }
 
   async function commit(path: string, content: string, original: Buffer | undefined,
-    operation: NoteWrite['operation'], signal?: AbortSignal) {
+    operation: NoteWrite['operation'], invocationId: string, signal?: AbortSignal) {
     signal?.throwIfAborted();
     const target = await checked(path);
     if (Buffer.byteLength(content) > MAX_BYTES) throw new Error('单次笔记写入不能超过 64 KB。');
@@ -70,7 +78,8 @@ export async function createNoteTools(directory: string,
       }
     };
     await assertUnchanged();
-    if (!await approve({ root, path: relative(root, target), content, operation }, signal)) throw new Error('用户取消了保存，文件未写入。');
+    if (!await scope.approveNoteWrite({ root, path: relative(root, target), content, operation }, invocationId, signal))
+      throw new Error('用户取消了保存，文件未写入。');
     signal?.throwIfAborted();
     await checked(target);
     await mkdir(dirname(target), { recursive: true });
@@ -83,11 +92,11 @@ export async function createNoteTools(directory: string,
       await checked(target);
       await assertUnchanged();
       signal?.throwIfAborted();
-      // 新建用 link 防止覆盖同时出现的同名文件；更新用原子替换，保留乐观冲突检查。
       if (original) await rename(temporary, target);
       else await link(temporary, target);
-      // 提交后即使模型停止，也必须先发回执，不能声称已撤销文件写入。
-      onWritten({ path: target, operation });
+      const write = { path: target, operation };
+      scope.onNoteWritten(write);
+      return write;
     } finally { await unlink(temporary).catch(() => undefined); }
   }
 
@@ -95,26 +104,33 @@ export async function createNoteTools(directory: string,
     access: async path => { await checked(path); }, detectImageMimeType: async () => null } });
   const writeTool = createWriteTool(root);
   const editTool = createEditTool(root);
-  const guardedWrite: typeof writeTool = {
-    ...writeTool, description: '在笔记库内新建 Markdown 文件，不覆盖已有文件。保存前需用户确认。',
-    execute(id, input, signal, update) {
-      return createWriteTool(root, { operations: {
-        // 目录创建也延后到用户确认之后。
+  const guardedWrite: AgentHarnessTool<ReaderToolContext, typeof writeTool.parameters> = {
+    ...writeTool,
+    description: '在笔记库内新建 Markdown 文件，不覆盖已有文件。保存前需用户确认。',
+    async execute(callId, params, onUpdate, _context, invocation, execution) {
+      const signal = execution.abortSignal;
+      let write: NoteWrite | undefined;
+      const result = await createWriteTool(root, { operations: {
         mkdir: async () => {},
-        writeFile: (path, content) => commit(path, content, undefined, 'write', signal)
-      } }).execute(id, input, signal, update);
+        writeFile: async (path, content) => { write = await commit(path, content, undefined, 'write', invocation.invocationId, signal); }
+      } }).execute(callId, params, signal, onUpdate);
+      return { ...result, details: { write } };
     }
   };
-  const guardedEdit: typeof editTool = {
-    ...editTool, description: editTool.description + ' 仅允许笔记库内 Markdown，保存前需用户确认。',
-    execute(id, input, signal, update) {
+  const guardedEdit: AgentHarnessTool<ReaderToolContext, typeof editTool.parameters> = {
+    ...editTool,
+    description: editTool.description + ' 仅允许笔记库内 Markdown，保存前需用户确认。',
+    async execute(callId, params, onUpdate, _context, invocation, execution) {
+      const signal = execution.abortSignal;
       let original: Buffer | undefined;
-      return createEditTool(root, { operations: {
+      let write: NoteWrite | undefined;
+      const result = await createEditTool(root, { operations: {
         access: async path => { await checked(path); },
         readFile: async path => { original = await read(path); return original; },
-        writeFile: (path, content) => commit(path, content, original, 'edit', signal)
-      } }).execute(id, input, signal, update);
+        writeFile: async (path, content) => { write = await commit(path, content, original, 'edit', invocation.invocationId, signal); }
+      } }).execute(callId, params, signal, onUpdate);
+      return { ...result, details: { result: result.details ?? null, write } };
     }
   };
-  return [readTool, guardedWrite, guardedEdit];
+  return [nativeTool(readTool), guardedWrite, guardedEdit];
 }

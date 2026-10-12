@@ -1,37 +1,26 @@
 import { dialog, ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron';
 import { z } from 'zod';
 import { realpath } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { IPC_CHANNELS } from '@shared/ipc-channels';
 import { ownerSchema, sendSchema, type AIResult } from '@shared/contracts/ai';
+import type { ModelIdentity } from '@shared/contracts/ai-execution';
 import type { PageContext } from '@shared/contracts/page-context';
 import type { createPageHost } from '@main/browser/page-host';
 import type { createSettingsStore } from '@main/settings/store';
 import { createConversations } from './conversations';
-import type { createLocalModelRuntime } from './local-model';
-import { LOCAL_MODEL, ONLINE_MODELS, modelSelectionSchema, type ModelTarget } from '@shared/contracts/models';
+import { modelSelectionSchema } from '@shared/contracts/models';
+import type { AgentHandle, RecordApprovalDecision } from '../agent/agent';
+import type { ReaderToolContext } from '../agent/reading-agent';
 
+// AI 对话 IPC 保留现有边界，内部委托给阅读 Agent。
 export function registerAI(window: BrowserWindow, host: ReturnType<typeof createPageHost>, settings: ReturnType<typeof createSettingsStore>,
-  assertTrusted: (event: IpcMainInvokeEvent) => void, subtitleSnapshot: () => PageContext['subtitles'], local: ReturnType<typeof createLocalModelRuntime>) {
+  assertTrusted: (event: IpcMainInvokeEvent) => void, subtitleSnapshot: () => PageContext['subtitles'],
+  readingAgent: AgentHandle<ReaderToolContext>,
+  keyTestAgent: AgentHandle<Record<string, never>>,
+  keyTestKeys: Map<string, string>) {
 
-  async function getTarget(signal: AbortSignal): Promise<ModelTarget> {
-    const result = await settings.load();
-    if (!result.ok) throw new Error(result.message);
-    signal.throwIfAborted();
-    const selection = result.settings.model;
-    if (selection.mode === 'offline') {
-      const handle = await local.ensure(signal);
-      signal.throwIfAborted();
-      return { provider: 'Qwen-3.5-4B-local', modelId: LOCAL_MODEL.id, baseUrl: `${handle.origin}/v1`, apiKey: handle.token };
-    }
-    const model = ONLINE_MODELS.find(item => item.id === selection.onlineModel);
-    if (!model) throw new Error('在线模型未接入。');
-    if (!result.settings.ai.credentialId) throw new Error('请先配置在线模型 API Key，或切换为离线模式。');
-    const apiKey = await settings.getKey(result.settings.ai.credentialId);
-    signal.throwIfAborted();
-    return { provider: model.provider, modelId: model.id, apiKey };
-  }
-
-  const chat = createConversations(getTarget, state => {
+  const chat = createConversations(readingAgent, state => {
     if (!window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send(IPC_CHANNELS.ai.state, state);
   }, async () => {
     const result = await settings.load();
@@ -58,10 +47,12 @@ export function registerAI(window: BrowserWindow, host: ReturnType<typeof create
   });
 
   // 授权期间切页不改变已冻结的本轮上下文。
-  const pageContext = (snapshot: PageContext) => async (signal: AbortSignal, target: ModelTarget) => {
+  const pageContext = (snapshot: PageContext) => async (
+    signal: AbortSignal, model: ModelIdentity, recordApprovalDecision: RecordApprovalDecision
+  ) => {
     if (!snapshot.pages.length && !snapshot.subtitles) return undefined;
     signal.throwIfAborted();
-    if (target.provider === 'Qwen-3.5-4B-local') return snapshot;
+    if (model.mode === 'offline') return snapshot;
     const result = await settings.load();
     if (!result.ok) return undefined;
     let consent = result.settings.ai.consentVersion;
@@ -72,6 +63,8 @@ export function registerAI(window: BrowserWindow, host: ReturnType<typeof create
           defaultId: 0, cancelId: 0, message: '允许向 DeepSeek 发送阅读材料？',
           detail: '将向 DeepSeek 提供本轮页面目录、视频信息及提问时播放位置，并允许 AI 按需读取已有页面正文和完整字幕。可能计费和留存；拒绝时保留此前已授权的文章材料，普通聊天继续。不会自动获取字幕或发送音频。' });
         signal.throwIfAborted();
+        await recordApprovalDecision({ invocationId: randomUUID(),
+          decision: answer.response === 1 ? 'approved' : 'declined', scope: 'preflight' });
         if (answer.response === 1) { await settings.allowMaterials(required); consent = Math.max(consent, required); }
       } catch { /* 弹窗或保存失败按原授权过滤；停止仍由下方 signal 检查传播。 */ }
     }
@@ -80,10 +73,12 @@ export function registerAI(window: BrowserWindow, host: ReturnType<typeof create
       currentPageId: consent >= 2 ? snapshot.currentPageId : undefined, subtitles: consent >= 3 ? snapshot.subtitles : undefined };
     return filtered.pages.length || filtered.subtitles ? filtered : undefined;
   };
+
   async function result<T>(operation: () => T | Promise<T>): Promise<AIResult<T>> {
     try { return { ok: true, value: await operation() }; }
     catch (error) { return { ok: false, message: error instanceof Error ? error.message : '操作失败，请重试。' }; }
   }
+
   ipcMain.handle(IPC_CHANNELS.ai.getSelection, event => {
     assertTrusted(event);
     return result(async () => {
@@ -117,15 +112,16 @@ export function registerAI(window: BrowserWindow, host: ReturnType<typeof create
   });
   ipcMain.handle(IPC_CHANNELS.ai.send, (event, input: unknown) => {
     assertTrusted(event);
+
     return result(() => {
       const request = sendSchema.parse(input);
       const subtitles = host.isSuspended() ? undefined : subtitleSnapshot();
       const capture = host.freezeSnapshot();
-      return chat.send(request, async (signal, target) => {
+      return chat.send(request, async (signal, model, recordApprovalDecision) => {
         const snapshot: PageContext = structuredClone(await capture(signal));
         signal.throwIfAborted();
         snapshot.subtitles = subtitles;
-        return pageContext(snapshot)(signal, target);
+        return pageContext(snapshot)(signal, model, recordApprovalDecision);
       });
     });
   });
@@ -141,17 +137,21 @@ export function registerAI(window: BrowserWindow, host: ReturnType<typeof create
           cancelId: 0, message: '测试 DeepSeek 连接？', detail: '会发送一条不含页面内容的短请求，可能产生少量费用。' });
         if (answer.response !== 1) return '已取消测试。';
         const key = supplied || await settings.getKey();
-        let response: Response;
+        const runId = randomUUID();
+        keyTestKeys.set(runId, key);
         try {
-          response = await fetch('https://api.deepseek.com/chat/completions', { method: 'POST', redirect: 'error',
-            signal: AbortSignal.timeout(20000), headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: 'deepseek-flash', messages: [{ role: 'user', content: 'Reply OK.' }], max_tokens: 8, thinking: { type: 'disabled' } }) });
-        } catch { throw new Error('无法连接 DeepSeek，请检查网络；未自动重试。'); }
-        await response.body?.cancel();
-        if (!response.ok) throw new Error(`DeepSeek 返回 HTTP ${response.status}，请检查 Key、额度或稍后再试。`);
-        return '连接成功。测试没有保存未保存的 API Key。';
+          const execution = await keyTestAgent.execute({
+            runId, prompt: 'Reply OK.', toolContext: {}
+          }, { signal: AbortSignal.timeout(20000) });
+          if (execution.status === 'completed') return '连接成功。测试没有保存未保存的 API Key。';
+          if (execution.failure?.httpStatus)
+            throw new Error('DeepSeek 返回 HTTP ' + execution.failure.httpStatus + '，请检查 Key、额度或稍后再试。');
+          throw new Error('无法连接 DeepSeek，请检查网络；未自动重试。');
+        } finally {
+          keyTestKeys.delete(runId);
+        }
       } finally { testing = false; }
     });
   });
-  return { ...chat, getTarget };
+  return chat;
 }

@@ -95,6 +95,7 @@ export function Translation({ active, selection, modelChanging }: { active: bool
     changeDirection(direction === 'en-zh' ? 'zh-en' : 'en-zh');
   }
   function clear() { draftRevision.current++; setDraft(''); setResult(undefined); setError(''); setNotice(''); textarea.current?.focus(); }
+
   async function copy() {
     if (!result?.text) return;
     try { await window.huanApp.translation.copy(result.text); setNotice('已复制译文。'); }

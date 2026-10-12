@@ -11,14 +11,21 @@ import { createPageHost } from '@main/browser/page-host';
 import { registerBrowser } from '@main/browser/ipc';
 import { createPlatformSessions } from '@main/browser/sessions';
 import { defaultSessionModes, defaultSettings } from '@shared/contracts/settings';
-import { registerAI } from '@main/ai/ipc';
+import { registerAI } from '@main/ai/core/ipc';
 import { setReadSchema } from '@shared/contracts/bookmarks';
 import { createSubtitleService } from '@main/subtitles/service';
 import { registerSubtitles } from '@main/subtitles/ipc';
 import { createYouTubePlayback } from '@main/browser/youtube-playback';
 import { youtubeVideoId } from '@shared/contracts/subtitles';
 import { registerTranslation } from '@main/translation';
-import { createLocalModelRuntime } from '@main/ai/local-model';
+import { createLocalModelRuntime } from '@main/ai/core/local-model';
+import { createExecutionRecordStore } from '@main/ai/core/records';
+import { createPiAdapter } from '@main/ai/core/pi-adapter';
+import { createAIService } from '@main/ai/core/service';
+import { createModelTargetResolver } from '@main/ai/core/model-target';
+import { createReadingAgentConfig } from '@main/ai/agent/reading-agent';
+import { createTranslateAgentConfig } from '@main/ai/agent/translate-agent';
+import { createKeyTestAgentConfig } from '@main/ai/agent/key-test-agent';
 import { createAlgorithmLibrary } from '@main/algorithms/library';
 import { registerAlgorithms } from '@main/algorithms/ipc';
 import { createAlgorithmNotes } from '@main/algorithms/notes';
@@ -38,8 +45,12 @@ let quitting = false;
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', () => { window?.show(); window?.focus(); });
-  app.on('activate', () => { window?.show(); });
+  app.on('second-instance', () => {
+    if (window && !window.isDestroyed()) { window.show(); window.focus(); }
+  });
+  app.on('activate', () => {
+    if (window && !window.isDestroyed()) window.show();
+  });
   app.on('before-quit', () => { quitting = true; });
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
@@ -120,9 +131,21 @@ if (!app.requestSingleInstanceLock()) {
     currentVideo = playback.currentVideo;
     registerSubtitles(subtitles, playback, assertTrusted);
     pageHost.observeSessionClear(platform => { if (platform === 'youtube') subtitles.clear(); });
+
     const localModel = createLocalModelRuntime(contents);
-    const ai = registerAI(window, pageHost, settings, assertTrusted, subtitles.snapshot, localModel);
-    const translation = registerTranslation(contents, assertTrusted, localModel, ai.runtime, ai.getTarget);
+    const recordRoot = join(app.getPath('userData'), 'ai');
+    const records = await createExecutionRecordStore({ root: recordRoot });
+    const piAdapter = await createPiAdapter({ records, recordRoot });
+    const aiService = createAIService({
+      piAdapter, records, resolveModelTarget: createModelTargetResolver({ settings, localModel })
+    });
+    const keyTestKeys = new Map<string, string>();
+    const readingAgent = aiService.createAgent(createReadingAgentConfig());
+    const translateAgent = aiService.createAgent(createTranslateAgentConfig());
+    const keyTestAgent = aiService.createAgent(createKeyTestAgentConfig(runId => keyTestKeys.get(runId)));
+    const ai = registerAI(window, pageHost, settings, assertTrusted, subtitles.snapshot,
+      readingAgent, keyTestAgent, keyTestKeys);
+    const translation = registerTranslation(contents, assertTrusted, localModel, translateAgent);
     registerSettings(window, settings, assertTrusted, async value => {
       await subtitles.configure(value);
       await bookmarks.update(value);
@@ -134,7 +157,28 @@ if (!app.requestSingleInstanceLock()) {
         event.preventDefault(); quitting = false;
       }
     });
-    app.on('will-quit', () => { algorithmNotes.close(); translation.close(); ai.close(); localModel.close(); playback.close(); subtitles.clear(); });
+    let finalizingQuit: Promise<void> | undefined;
+    app.on('will-quit', event => {
+      event.preventDefault();
+      finalizingQuit ??= (async () => {
+        try { translation.close(); }
+        catch (error) { console.error('Translation shutdown failed', error); }
+        await ai.close().catch(error => console.error('AI conversations close failed', error));
+        await aiService.close().catch(error => console.error('AI service shutdown failed', error));
+        await records.flush().catch(error => console.error('AI records flush failed', error));
+        await records.close().catch(error => console.error('AI records close failed', error));
+        try { algorithmNotes.close(); }
+        catch (error) { console.error('Algorithm notes shutdown failed', error); }
+        try { localModel.close(); }
+        catch (error) { console.error('Local model shutdown failed', error); }
+        try { playback.close(); }
+        catch (error) { console.error('Playback shutdown failed', error); }
+        try { subtitles.clear(); }
+        catch (error) { console.error('Subtitles shutdown failed', error); }
+      })().finally(() => {
+        app.exit(0);
+      });
+    });
 
     ipcMain.handle(IPC_CHANNELS.bookmarks.get, (event) => {
       assertTrusted(event);
@@ -163,7 +207,9 @@ if (!app.requestSingleInstanceLock()) {
     window.on('close', (event) => {
       if (!quitting && process.platform === 'darwin') { event.preventDefault(); window?.hide(); }
     });
-    window.on('ready-to-show', () => window?.show());
+    window.on('ready-to-show', () => {
+      if (window && !window.isDestroyed()) window.show();
+    });
     Menu.setApplicationMenu(Menu.buildFromTemplate([
       { label: 'huan-app', submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'hide' }, { role: 'quit' }] },
       { label: '编辑', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] }

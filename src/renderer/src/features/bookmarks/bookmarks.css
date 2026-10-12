@@ -8,8 +8,9 @@
 .library-header .bookmark-panel-toggle{flex-shrink:0;padding:6px;color:var(--muted);background:transparent;border-color:transparent}
 .library-content{display:flex;flex:1;flex-direction:column;min-height:0}
 .library-controls{flex-shrink:0;padding:0 12px 12px;display:grid;grid-template-columns:minmax(0,1fr) 96px;gap:8px}
-.library-controls .ui-icon-input{min-width:0;background:var(--surface)}
-.library-controls .ui-select{width:100%;min-width:0;background:var(--surface)}
+.library-controls .ui-icon-input{min-width:0}
+.library-controls .ui-select{width:100%;min-width:0}
+.library-controls .ui-input{background:var(--surface-muted)}
 .bookmark-scroll{flex:1;overflow-y:auto;overflow-x:hidden;overscroll-behavior:none;min-height:0;padding:0 6px 8px;scrollbar-gutter:stable}
 .bookmark-items{list-style:none;padding:0;margin:0;display:grid;gap:3px}
 .bookmark-items li{min-width:0;content-visibility:auto;contain-intrinsic-size:auto 84px}

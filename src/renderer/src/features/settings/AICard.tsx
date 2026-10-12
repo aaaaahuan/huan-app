@@ -55,7 +55,7 @@ export function AICard({ credentialId, value, active, onChange, onTest, message,
       <div><Button onClick={onTest} disabled={value === null || (!hasKey && !value)}>测试连接</Button>{' '}
         <Button disabled={!hasKey && !value} onClick={() => onChange(null)}>清除 Key</Button></div>
     </div>
-    <p className="settings-note">点击下方“保存设置”后生效。Key 加密存储于本机，不写入笔记；聊天只保留到退出应用。连接测试需确认，可能产生少量费用。</p>
+    <p className="settings-note">点击下方“保存设置”后生效。Key 加密存储于本机，不写入笔记；对话界面退出后清空，Pi Session 与执行记录保存在本机 ~/.huan-app/ai。连接测试需确认，可能产生少量费用。</p>
     {message ? <p className="session-feedback" role="status">{message}</p> : null}
     <label className="source-path-label" htmlFor="notes-path">Obsidian 笔记库目录</label>
     <Input id="notes-path" value={notesPath} placeholder="填写笔记库绝对路径；留空关闭文件工具"

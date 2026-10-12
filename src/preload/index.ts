@@ -6,6 +6,8 @@ import type { HuanAppAPI } from '@shared/contracts/app';
 // 通道名固定在这里；页面不能自行指定任意 IPC 通道或直接调用文件系统。
 const api: HuanAppAPI = {
   app: Object.freeze({ getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.app.status) }),
+
+  // 算法训练服务
   algorithms: Object.freeze({
     get: () => ipcRenderer.invoke(IPC_CHANNELS.algorithms.get),
     refresh: () => ipcRenderer.invoke(IPC_CHANNELS.algorithms.refresh),
@@ -23,6 +25,8 @@ const api: HuanAppAPI = {
       return () => ipcRenderer.removeListener(IPC_CHANNELS.algorithms.notesChanged, handler);
     }
   } satisfies HuanAppAPI['algorithms']),
+
+  // 翻译服务
   translation: Object.freeze({
     getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.translation.getStatus),
     translate: request => ipcRenderer.invoke(IPC_CHANNELS.translation.translate, request),
@@ -34,6 +38,8 @@ const api: HuanAppAPI = {
       return () => ipcRenderer.removeListener(IPC_CHANNELS.translation.status, handler);
     }
   } satisfies HuanAppAPI['translation']),
+
+  // 设置服务
   settings: Object.freeze({
     load: () => ipcRenderer.invoke(IPC_CHANNELS.settings.load),
     save: (settings, revision, keyChange, subtitleKeyChange) => ipcRenderer.invoke(IPC_CHANNELS.settings.save, settings, revision, keyChange, subtitleKeyChange),
@@ -43,6 +49,8 @@ const api: HuanAppAPI = {
     openSubtitleAccount: () => ipcRenderer.invoke(IPC_CHANNELS.settings.openSubtitleAccount),
     chooseFile: () => ipcRenderer.invoke(IPC_CHANNELS.settings.chooseFile)
   } satisfies HuanAppAPI['settings']),
+
+  // 字幕服务
   subtitles: Object.freeze({
     get: () => ipcRenderer.invoke(IPC_CHANNELS.subtitles.get),
     ensure: input => ipcRenderer.invoke(IPC_CHANNELS.subtitles.ensure, input),
@@ -53,8 +61,12 @@ const api: HuanAppAPI = {
       return () => ipcRenderer.removeListener(IPC_CHANNELS.subtitles.state, handler);
     }
   } satisfies HuanAppAPI['subtitles']),
+
+  // 书签服务
   bookmarks: Object.freeze({ get: () => ipcRenderer.invoke(IPC_CHANNELS.bookmarks.get),
     setRead: input => ipcRenderer.invoke(IPC_CHANNELS.bookmarks.setRead, input) } satisfies HuanAppAPI['bookmarks']),
+
+  // AI对话 服务
   ai: Object.freeze({
     getSelection: () => ipcRenderer.invoke(IPC_CHANNELS.ai.getSelection),
     selectModel: selection => ipcRenderer.invoke(IPC_CHANNELS.ai.selectModel, selection),

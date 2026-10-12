@@ -7,7 +7,7 @@ import { Icon } from '@renderer/components/Icon';
 import './ai-chat.css';
 import type { ModelSelection } from '@shared/contracts/models';
 
-const phases = { idle: '临时对话', preparing: '正在准备…', generating: '正在回答…', stopping: '正在停止…', blocked: '等待停止确认' };
+const phases = { idle: '本轮对话', preparing: '正在准备…', generating: '正在回答…', stopping: '正在停止…', blocked: '等待停止确认' };
 const pageStatuses = { empty: '未选择页面，可直接聊天', loading: '当前页面正文提取中', ready: '当前页面已缓存，AI 可按需读取',
   unavailable: '当前页面正文不可用，不影响聊天', unsupported: '当前页面暂不支持提取，可直接聊天' };
 const conversationKey = 'main';
@@ -186,7 +186,7 @@ export function AIChat({ settingsRevision, collapsed, tabbed, selection, modelCh
             disabled={!current || !configured || modelChanging || !draft.trim() || commandBusy} onClick={() => send()}>发送</Button>}
         </div>
       </div>
-      <div className="ai-composer-status"><span role="status">{current ? phases[current.phase] : '正在准备对话'}</span><span>退出不保留</span></div>
+      <div className="ai-composer-status"><span role="status">{current ? phases[current.phase] : '正在准备对话'}</span><span>执行记录留本机</span></div>
     </div>
   </section>;
 }

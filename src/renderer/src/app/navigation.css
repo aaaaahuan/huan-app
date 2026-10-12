@@ -40,7 +40,6 @@
 .titlebar-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; -webkit-app-region: no-drag; }
 .model-switcher { min-width: 0; width: 210px; }
 .model-switcher .ui-input { height: 32px; padding-top: 5px; padding-bottom: 5px; background: #ffffff90; font-size: 12px; }
-.model-switcher .ui-select>svg { top: 8px; }
 .focus-toggle.ui-button { min-width: 50px; height: 32px; padding: 5px 10px; background: transparent; border-color: transparent; }
 .focus-toggle.ui-button[aria-pressed=true] { background: var(--accent-soft); color: var(--accent); }
 .settings-toggle.ui-button { width: 32px; height: 32px; background: transparent; border-color: transparent; }

@@ -1,18 +1,18 @@
 import { clipboard, ipcMain, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import { z } from 'zod';
-import { randomUUID } from 'node:crypto';
 import { IPC_CHANNELS } from '@shared/ipc-channels';
 import { translationRequestSchema, type TranslationResult } from '@shared/contracts/translation';
-import type { ModelTarget } from '@shared/contracts/models';
-import type { createAIRuntime } from '@main/ai/runtime';
-import { errorText, type createLocalModelRuntime } from '@main/ai/local-model';
+import type { AgentHandle } from '@main/ai/agent/agent';
+import type { TranslateToolContext } from '@main/ai/agent/translate-agent';
+import { errorText, type createLocalModelRuntime } from '@main/ai/core/local-model';
 
-// 翻译只调用一次模型，不进入 Agent 工具循环；与聊天共用 Provider 和 Worker。
+// 翻译作为独立 Run 执行，保留原有单请求和停止语义。
 export function registerTranslation(contents: WebContents, assertTrusted: (event: IpcMainInvokeEvent) => void,
-  local: ReturnType<typeof createLocalModelRuntime>, runtime: ReturnType<typeof createAIRuntime>,
-  getTarget: (signal: AbortSignal) => Promise<ModelTarget>) {
+  local: ReturnType<typeof createLocalModelRuntime>, agent: AgentHandle<TranslateToolContext>) {
+
   let active: { requestId: string; controller: AbortController } | undefined;
   let closed = false;
+
   async function translate(input: unknown): Promise<TranslationResult> {
     let run: typeof active;
     try {
@@ -21,19 +21,27 @@ export function registerTranslation(contents: WebContents, assertTrusted: (event
       if (active) throw new Error('已有翻译请求正在处理，请先停止或等待完成。');
       run = { requestId: request.requestId, controller: new AbortController() };
       active = run;
-      const target = await getTarget(run.controller.signal);
-      run.controller.signal.throwIfAborted();
-      let answer: TranslationResult | undefined;
-      await runtime.start({ type: 'translate', instanceId: randomUUID(), ...request, target }, run.controller.signal, event => {
-        if (event.type === 'settled') answer = { status: event.status === 'generating' ? 'failed' : event.status, text: event.text, error: event.error };
-      });
+      const result = await agent.execute({
+        runId: request.requestId, prompt: request.text, toolContext: { direction: request.direction }
+      }, { signal: run.controller.signal });
       if (run.controller.signal.aborted) return { status: 'stopped', text: '' };
-      return answer ?? { status: 'failed', text: '', error: '模型请求未确认结束。' };
+      let final = result.messages.at(-1);
+      if (final?.role !== 'assistant') final = [...result.messages].reverse().find(message => message.role === 'assistant');
+      const text = final?.role === 'assistant'
+        ? final.content.filter(block => block.type === 'text').map(block => block.text).join('') : '';
+      const status: TranslationResult['status'] = result.status === 'aborted' || (final?.role === 'assistant' && final.stopReason === 'aborted')
+        ? 'stopped' : result.status === 'completed' && final?.role === 'assistant' && final.stopReason === 'length'
+          ? 'truncated' : result.status === 'completed' && final?.role === 'assistant' && final.stopReason === 'stop' && text.trim()
+            ? 'complete' : 'failed';
+      return { status, text, error: status === 'truncated' ? 'finish_reason=length（引擎未完整生成译文）'
+        : status === 'failed' ? (final?.role === 'assistant' ? final.errorMessage : undefined) ??
+          result.failure?.code ?? '模型未返回有效译文。' : undefined };
     } catch (error) {
       if (run?.controller.signal.aborted) return { status: 'stopped', text: '' };
       return { status: 'failed', text: '', error: errorText(error) };
     } finally { if (run && active === run) active = undefined; }
   }
+
   ipcMain.handle(IPC_CHANNELS.translation.getStatus, event => { assertTrusted(event); return local.status(); });
   ipcMain.handle(IPC_CHANNELS.translation.translate, (event, input: unknown) => { assertTrusted(event); return translate(input); });
   ipcMain.handle(IPC_CHANNELS.translation.stop, (event, input: unknown) => {

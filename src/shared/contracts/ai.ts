@@ -1,7 +1,6 @@
 import { z } from 'zod';
-import type { PageContext, PageSource } from './page-context';
-import type { ModelSelection, ModelTarget } from './models';
-import type { TranslationDirection } from './translation';
+import type { PageSource } from './page-context';
+import type { ModelSelection } from './models';
 
 export const AI_MODEL_NAME = 'DeepSeek Flash';
 export const ownerSchema = z.object({ key: z.string().min(1).max(128), instanceId: z.uuid() }).strict();
@@ -35,21 +34,3 @@ export interface AIAPI {
   testKey(key: string): Promise<AIResult<string>>;
   onState(listener: (state: ConversationState) => void): () => void;
 }
-
-// 文件工具只获得已授权的笔记根目录；写入提案交回主进程确认。
-export type WorkerCommand =
-  | { type: 'start'; instanceId: string; requestId: string; target: ModelTarget; text: string; context?: PageContext; notesPath: string }
-  | { type: 'translate'; instanceId: string; requestId: string; target: ModelTarget; text: string; direction: TranslationDirection }
-  | { type: 'note-approval'; instanceId: string; requestId: string; approvalId: string; allowed: boolean }
-  | { type: 'cancel'; instanceId: string; requestId: string }
-  | { type: 'dispose'; instanceId: string };
-export type WorkerEvent = { instanceId: string; requestId: string } & (
-  | { type: 'delta'; text: string; reset?: boolean }
-  | { type: 'page-read'; source: PageSource }
-  | { type: 'subtitles-read'; source: PageSource }
-  | { type: 'note-proposal'; approvalId: string; root: string; path: string; content: string; operation: 'write' | 'edit' }
-  | { type: 'note-written'; write: NoteWrite }
-  | { type: 'tools-ready'; tools: string[]; error?: string }
-  | { type: 'accepted' }
-  | { type: 'settled'; status: ChatEntry['status']; text: string; error?: string }
-);

@@ -4,7 +4,7 @@
 .reader-toolbar .ui-button { flex-shrink: 0; height: 36px; }
 .reader-browser-actions { display: flex; align-items: center; gap: 3px; }
 .reader-browser-actions .ui-button { background: transparent; border-color: transparent; padding: 7px; color: var(--muted); }
-.reader-browser-actions .ui-button:hover { background: var(--accent-soft); }
+.reader-browser-actions .ui-button:hover:where(:not(:disabled)) { background: var(--accent-soft); }
 .reader-browser-actions .ui-icon-button { width: 30px; }
 .reader-toolbar .reader-address { flex: 1; width: 0; height: 36px; padding: 8px 12px; min-width: 100px; color: var(--muted); background: #ffffffc9; }
 .reader-panel-toggle { color: var(--muted); }

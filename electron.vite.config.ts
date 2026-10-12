@@ -16,7 +16,6 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve('src/main/index.ts'),
-          'ai-worker': resolve('src/workers/ai/index.ts'),
         },
         output: {
           format: 'cjs',
