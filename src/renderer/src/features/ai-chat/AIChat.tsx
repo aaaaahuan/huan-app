@@ -3,6 +3,7 @@ import type { AIResult, ChatEntry, ConversationState } from '@shared/contracts/a
 import type { ReaderState } from '@shared/contracts/browser';
 import { youtubeVideoId } from '@shared/contracts/subtitles';
 import { Button } from '@renderer/components/Button';
+import { ExecutionMetrics } from '@renderer/components/ExecutionMetrics';
 import { Icon } from '@renderer/components/Icon';
 import './ai-chat.css';
 import type { ModelSelection } from '@shared/contracts/models';
@@ -165,6 +166,7 @@ export function AIChat({ settingsRevision, collapsed, tabbed, selection, modelCh
         <div className={`ai-answer${!entry.answer && entry.status === 'generating' ? ' ai-answer--waiting' : ''}`}>{entry.answer || (entry.status === 'generating' ? '正在等待回复…' : '')}</div>
         {statuses[entry.status] ? <p className="ai-turn-status" role="status">{statuses[entry.status]}</p> : null}
         {entry.error ? <p className="ai-error" role="alert">{entry.error}</p> : null}
+        {entry.metrics ? <ExecutionMetrics metrics={entry.metrics} className="ai-turn-metrics" /> : null}
         <TurnDetails entry={entry} />
       </article>)}
     </div>
@@ -176,6 +178,7 @@ export function AIChat({ settingsRevision, collapsed, tabbed, selection, modelCh
         ? '视频问答使用提问时已获取的字幕，不包含视频画面。播放后自动获取，可在「实时字幕」查看。'
         : pageStatuses[page?.contentStatus ?? 'empty']}</p>
       {error || current?.error ? <p className="ai-error" role="alert">{error || current?.error}</p> : null}
+      {current?.lastMetrics ? <ExecutionMetrics metrics={current.lastMetrics} label="上次请求用量" /> : null}
       <div className="ai-input-box ui-input-surface">
         <label className="visually-hidden" htmlFor="ai-question">向 AI 提问</label>
         <textarea id="ai-question" placeholder={current?.entries.length ? '继续提问…' : '向 AI 提问…'} value={draft} maxLength={8000}

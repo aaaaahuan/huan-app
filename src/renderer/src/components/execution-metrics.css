@@ -1,0 +1,22 @@
+.execution-metrics {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+.execution-metrics summary { width: fit-content; max-width: 100%; cursor: pointer; }
+.execution-metrics summary:focus-visible { border-radius: 3px; }
+.execution-metrics-content {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-muted);
+}
+.execution-metrics dl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 12px;
+  margin: 0;
+}
+.execution-metrics dd { margin: 0; font-variant-numeric: tabular-nums; text-align: right; }
+.execution-metrics p { margin: 8px 0 0; }

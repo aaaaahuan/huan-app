@@ -133,7 +133,11 @@ if (!app.requestSingleInstanceLock()) {
     registerSubtitles(subtitles, playback, assertTrusted);
     pageHost.observeSessionClear(platform => { if (platform === 'youtube') subtitles.clear(); });
 
-    const localModel = createLocalModelRuntime(contents);
+    const localModel = createLocalModelRuntime(contents, async () => {
+      const result = await settings.load();
+      if (!result.ok) throw new Error(result.message);
+      return result.settings.localModel;
+    });
     const recordRoot = join(app.getPath('userData'), 'ai');
     const records = await createExecutionRecordStore({ root: recordRoot });
     const piAdapter = await createPiAdapter({ records, recordRoot });

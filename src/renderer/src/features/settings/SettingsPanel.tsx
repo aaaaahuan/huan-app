@@ -170,6 +170,9 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
             {draft ? <fieldset className="settings-sources" disabled={busy || confirmClose}>
               <AICard credentialId={draft.ai.credentialId} value={keyChange} active={tab === 'ai'} onChange={setKeyChange}
                 notesPath={draft.notesPath} onNotesPathChange={notesPath => setDraft({ ...draft, notesPath })}
+                localModel={draft.localModel} onLocalModelChange={change => setDraft(previous => previous ? {
+                  ...previous, localModel: { ...previous.localModel, ...change }
+                } : previous)}
                 onTest={() => void testKey()} message={aiMessage} />
             </fieldset> : <p>正在读取设置…</p>}
           </div>

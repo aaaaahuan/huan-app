@@ -20,6 +20,9 @@ export const settingsSchema = z.object({
   sessions: sessionModesSchema.default(defaultSessionModes),
   notesPath: z.string().trim().max(4096).default(''),
   model: modelSelectionSchema.default(defaultModelSelection),
+  localModel: z.object({ modelPath: z.string().trim().max(4096), serverPath: z.string().trim().max(4096) })
+    .strict().refine(paths => !paths.modelPath.includes('\0') && !paths.serverPath.includes('\0'), '本地模型路径包含无效字符。')
+    .default({ modelPath: '', serverPath: '' }),
   ai: z.object({ credentialId: z.uuid().nullable(), consentVersion: z.number().int().min(0).max(3) })
     .default({ credentialId: null, consentVersion: 0 }),
   subtitles: z.object({ credentialId: z.uuid().nullable(), consentVersion: z.number().int().min(0).max(1) })
@@ -32,7 +35,8 @@ export function defaultSettings(): Settings {
   return { version: 1, sources: {
     x: { enabled: false, path: '' }, reddit: { enabled: false, path: '' },
     youtube: { enabled: false, path: '' }, wechat: { enabled: false, path: '' }, other: { enabled: false, path: '' }
-  }, sessions: defaultSessionModes(), notesPath: '', model: defaultModelSelection(), ai: { credentialId: null, consentVersion: 0 },
+  }, sessions: defaultSessionModes(), notesPath: '', model: defaultModelSelection(), localModel: { modelPath: '', serverPath: '' },
+  ai: { credentialId: null, consentVersion: 0 },
   subtitles: { credentialId: null, consentVersion: 0 } };
 }
 // revision 为磁盘内容摘要；null 表示尚无配置文件，不是配置读取失败。

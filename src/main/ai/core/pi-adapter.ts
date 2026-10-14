@@ -5,7 +5,7 @@ import type {
 } from '@earendil-works/pi-agent-core';
 import type { ModelTarget } from '@shared/contracts/models';
 import type {
-  ExecutionEvent, ExecutionFailure, ExecutionResult
+  ExecutionEvent, ExecutionFailure, ExecutionResult, TokenUsage
 } from '@shared/contracts/ai-execution';
 import type { AgentConfig, PiHistoryReader, PreparedInput } from '../agent/agent';
 import type { ExecutionRecordStore, RunRecorder } from './records';
@@ -22,8 +22,9 @@ export interface AdapterExecution<C extends object> {
   recorder: RunRecorder;
 }
 
-export type PiRunResult = Omit<ExecutionResult, 'record'> & {
+export type PiRunResult = Omit<ExecutionResult, 'record' | 'metrics'> & {
   metadata?: JsonlSessionMetadata;
+  observedUsage?: { responses: number; usage?: TokenUsage };
 };
 
 export interface PiAdapter {
@@ -102,9 +103,15 @@ function recordTool<C extends object>(
 function installEventProjection<C extends object>(
   harness: AgentHarness<C>, execution: AdapterExecution<C>,
   onEvent: ((event: ExecutionEvent) => void) | undefined
-): { emit(type: ExecutionEvent['type'], data: ExecutionEvent['data']): void; dispose(): void } {
+): {
+  emit(type: ExecutionEvent['type'], data: ExecutionEvent['data']): void;
+  usage(): NonNullable<PiRunResult['observedUsage']>;
+  dispose(): void;
+} {
   let seq = 0;
   const dispose: Array<() => void> = [];
+  const responseIds = new Set<string>();
+  const reported = new Map<string, TokenUsage>();
   function emit(type: ExecutionEvent['type'], data: ExecutionEvent['data']) {
     try {
       onEvent?.({
@@ -122,6 +129,22 @@ function installEventProjection<C extends object>(
   dispose.push(harness.events.on('message_update', event => {
     if (event.runId === execution.runId && event.event.type === 'text_delta')
       emit('message_delta', { text: event.event.delta });
+  }));
+  dispose.push(harness.events.on('message_end', event => {
+    if (event.runId === execution.runId && event.message.role === 'assistant' && event.entryId)
+      responseIds.add(event.entryId);
+  }));
+  dispose.push(harness.events.on('usage', ({ row }) => {
+    // usage 在提交后发出；用本轮 assistant ID 关联，避免累计 Session 历史或重复计算。
+    if (!row.entryId || !responseIds.has(row.entryId) || row.adjustment || reported.has(row.id)) return;
+    const { input, output, cacheRead, cacheWrite, totalTokens, reasoning } = row.usage;
+    const counts = [input, output, cacheRead, cacheWrite, totalTokens];
+    if (!counts.every(value => Number.isSafeInteger(value) && value >= 0) ||
+        (reasoning !== undefined && (!Number.isSafeInteger(reasoning) || reasoning < 0))) return;
+    // 当前固定的 completions 适配器收到 usage 才设置 reasoning，初始化全零不代表零消费。
+    if (reasoning === undefined && counts.every(value => value === 0)) return;
+    reported.set(row.id, { input, output, cacheRead, cacheWrite, totalTokens,
+      ...(reasoning === undefined ? {} : { reasoning }) });
   }));
   dispose.push(harness.events.on('tool_start', event => {
     if (event.runId === execution.runId)
@@ -143,7 +166,25 @@ function installEventProjection<C extends object>(
         result: event.result, isError: event.isError, terminate: event.terminate
       });
   }));
-  return { emit, dispose: () => { for (const unsubscribe of dispose) unsubscribe(); } };
+  return {
+    emit,
+    usage() {
+      const values = [...reported.values()];
+      if (!values.length) return { responses: 0 };
+      const usage: TokenUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0 };
+      for (const value of values) {
+        usage.input += value.input;
+        usage.output += value.output;
+        usage.cacheRead += value.cacheRead;
+        usage.cacheWrite += value.cacheWrite;
+        usage.totalTokens += value.totalTokens;
+      }
+      if (values.every(value => value.reasoning !== undefined))
+        usage.reasoning = values.reduce((sum, value) => sum + (value.reasoning ?? 0), 0);
+      return { responses: values.length, usage };
+    },
+    dispose: () => { for (const unsubscribe of dispose) unsubscribe(); }
+  };
 }
 
 async function runMessages(
@@ -356,6 +397,7 @@ export async function createPiAdapter(options: {
       }
       if (!result) throw new Error('PI_RESULT_MISSING');
       result.metadata ??= session.metadata;
+      result.observedUsage = projection?.usage();
       return result;
     },
     inspectSession: inspectActive,

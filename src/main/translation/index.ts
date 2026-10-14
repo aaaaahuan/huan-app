@@ -24,7 +24,7 @@ export function registerTranslation(contents: WebContents, assertTrusted: (event
       const result = await agent.execute({
         runId: request.requestId, prompt: request.text, toolContext: { direction: request.direction }
       }, { signal: run.controller.signal });
-      if (run.controller.signal.aborted) return { status: 'stopped', text: '' };
+      if (run.controller.signal.aborted) return { status: 'stopped', text: '', metrics: result.metrics };
       let final = result.messages.at(-1);
       if (final?.role !== 'assistant') final = [...result.messages].reverse().find(message => message.role === 'assistant');
       const text = final?.role === 'assistant'
@@ -33,9 +33,9 @@ export function registerTranslation(contents: WebContents, assertTrusted: (event
         ? 'stopped' : result.status === 'completed' && final?.role === 'assistant' && final.stopReason === 'length'
           ? 'truncated' : result.status === 'completed' && final?.role === 'assistant' && final.stopReason === 'stop' && text.trim()
             ? 'complete' : 'failed';
-      return { status, text, error: status === 'truncated' ? 'finish_reason=length（引擎未完整生成译文）'
+      return { status, text, metrics: result.metrics, error: status === 'truncated' ? 'finish_reason=length（引擎未完整生成译文）'
         : status === 'failed' ? (final?.role === 'assistant' ? final.errorMessage : undefined) ??
-          result.failure?.code ?? '模型未返回有效译文。' : undefined };
+          result.warning ?? result.failure?.code ?? '模型未返回有效译文。' : undefined };
     } catch (error) {
       if (run?.controller.signal.aborted) return { status: 'stopped', text: '' };
       return { status: 'failed', text: '', error: errorText(error) };

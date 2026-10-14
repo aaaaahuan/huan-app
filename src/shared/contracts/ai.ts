@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { PageSource } from './page-context';
 import type { ModelSelection } from './models';
+import type { ExecutionMetrics } from './ai-execution';
 
 export const AI_MODEL_NAME = 'DeepSeek Flash';
 export const ownerSchema = z.object({ key: z.string().min(1).max(128), instanceId: z.uuid() }).strict();
@@ -17,6 +18,7 @@ export interface ChatEntry {
   writes: NoteWrite[];
   tools?: string[];
   toolError?: string;
+  metrics?: ExecutionMetrics;
 }
 export interface ConversationState extends Owner {
   revision: number; 
@@ -24,6 +26,7 @@ export interface ConversationState extends Owner {
   draft: string; 
   entries: ChatEntry[];
   error: string;
+  lastMetrics?: ExecutionMetrics;
 }
 export interface AIAPI {
   getSelection(): Promise<AIResult<ModelSelection>>;

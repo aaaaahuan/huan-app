@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ExecutionMetrics } from './ai-execution';
 
 export const translationRequestSchema = z.object({
   requestId: z.uuid(),
@@ -16,6 +17,7 @@ export interface TranslationResult {
   status: 'complete' | 'truncated' | 'stopped' | 'failed';
   text: string;
   error?: string;
+  metrics?: ExecutionMetrics;
 }
 export interface TranslationAPI {
   getStatus(): Promise<TranslationStatus>;

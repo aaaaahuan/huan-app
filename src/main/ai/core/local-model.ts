@@ -1,12 +1,13 @@
 import { app, type WebContents } from 'electron';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { access, constants } from 'node:fs/promises';
+import { access, constants, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join } from 'node:path';
 import { createServer } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { IPC_CHANNELS } from '@shared/ipc-channels';
 import type { TranslationStatus } from '@shared/contracts/translation';
+import type { Settings } from '@shared/contracts/settings';
 
 type Server = { child: ChildProcess; origin: string; token: string; exited: boolean; error: string };
 export function errorText(error: unknown): string {
@@ -14,7 +15,7 @@ export function errorText(error: unknown): string {
 }
 
 // 伴读与翻译共用本地模型进程；单次 Run 的等待和取消保留驻留模型。
-export function createLocalModelRuntime(contents: WebContents) {
+export function createLocalModelRuntime(contents: WebContents, getPaths: () => Promise<Settings['localModel']>) {
   let status: TranslationStatus = { revision: 0, phase: 'unloaded' };
   let server: Server | undefined;
   let starting: Promise<Server> | undefined;
@@ -23,15 +24,33 @@ export function createLocalModelRuntime(contents: WebContents) {
     status = { revision: status.revision + 1, phase, error };
     if (!contents.isDestroyed()) contents.send(IPC_CHANNELS.translation.status, status);
   }
+  async function resourcePath(label: string, configured: string, parts: string[], permission: number) {
+    if (configured && (!isAbsolute(configured) || configured.includes('\0')))
+      throw new Error(`${label}必须使用绝对路径，请检查设置或环境变量。`);
+    // 开发目录可多一层 huan 分组；只查两个约定位置，显式配置失败时直接报错。
+    const candidates = configured ? [configured] : app.isPackaged ? [] : [
+      join(app.getAppPath(), '..', 'model', ...parts),
+      join(app.getAppPath(), '..', '..', 'model', ...parts)
+    ];
+    for (const path of candidates) {
+      try {
+        if (!(await stat(path)).isFile()) throw new Error('路径不是普通文件。');
+        await access(path, permission);
+        return path;
+      } catch (error) {
+        if (!configured && (error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+        throw new Error(`${label}不可用：${path}`, { cause: error });
+      }
+    }
+    throw new Error(`未找到${label}。请在“设置 → AI 伴读 → 离线模型”填写本机绝对路径并保存。`);
+  }
   async function launch(): Promise<Server> {
     publish('loading');
-    const directory = join(app.getAppPath(), '..', 'model');
-    const modelPath = process.env.HUAN_MODEL_PATH || (!app.isPackaged ? join(directory, 'models', 'Qwen3.5-4B-Q4_K_M.gguf') : '');
-    const executable = process.env.HUAN_LLAMA_SERVER_PATH || (!app.isPackaged ? join(directory, 'runtime', 'llama', 'llama-b11429', 'llama-server') : '');
-    if (!isAbsolute(modelPath) || !isAbsolute(executable))
-      throw new Error('请通过 HUAN_MODEL_PATH 和 HUAN_LLAMA_SERVER_PATH 指定包外权重与 llama-server 的绝对路径。');
-    await access(modelPath, constants.R_OK);
-    await access(executable, constants.X_OK);
+    const configured = await getPaths();
+    const modelPath = await resourcePath('离线模型权重', process.env.HUAN_MODEL_PATH || configured.modelPath,
+      ['models', 'Qwen3.5-4B-Q4_K_M.gguf'], constants.R_OK);
+    const executable = await resourcePath('llama-server 程序', process.env.HUAN_LLAMA_SERVER_PATH || configured.serverPath,
+      ['runtime', 'llama', 'llama-b11429', 'llama-server'], constants.X_OK);
     if (closed) throw new Error('本地模型服务已关闭。');
     const port = await new Promise<number>((resolve, reject) => {
       const socket = createServer();

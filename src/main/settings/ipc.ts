@@ -2,6 +2,7 @@
 import { IPC_CHANNELS } from '@shared/ipc-channels';
 import { dialog, ipcMain, shell, type BrowserWindow, type IpcMainInvokeEvent } from 'electron';
 import { z } from 'zod';
+import { isAbsolute } from 'node:path';
 import type { createSettingsStore } from './store';
 import { settingsSchema, type SavedKeyResult, type Settings, type SubtitleUsage } from '@shared/contracts/settings';
 
@@ -15,7 +16,19 @@ export function registerSettings(window: BrowserWindow, store: ReturnType<typeof
   ipcMain.handle(IPC_CHANNELS.settings.save, async (event, input: unknown, revision: unknown, keyChange: unknown, subtitleKeyChange: unknown) => {
     assertTrusted(event);
     const parsed = settingsSchema.safeParse(input);
+    if (parsed.success) {
+      const { modelPath, serverPath } = parsed.data.localModel;
+      if ((modelPath && !isAbsolute(modelPath)) || (serverPath && !isAbsolute(serverPath)))
+        return { ok: false, message: '本地模型权重与 llama-server 程序请填写绝对路径。' };
+    }
     const current = await store.load();
+    if (parsed.success && parsed.data.localModel.serverPath && current.ok &&
+        parsed.data.localModel.serverPath !== current.settings.localModel.serverPath) {
+      const answer = await dialog.showMessageBox(window, { type: 'warning', buttons: ['取消', '允许执行'], defaultId: 0, cancelId: 0,
+        message: '允许执行此本地 llama-server 程序？',
+        detail: `${parsed.data.localModel.serverPath}\n\n该本地程序会以当前用户权限运行，用于加载离线模型。请仅选择可信的 llama-server。保存后，下次离线调用会尝试启动；已驻留模型更换路径需 Cmd+Q 完全退出并重启。` });
+      if (answer.response !== 1) return { ok: false, message: '未授权本地程序执行，设置未保存。' };
+    }
     if (parsed.success && parsed.data.notesPath && current.ok && parsed.data.notesPath !== current.settings.notesPath) {
       const answer = await dialog.showMessageBox(window, { type: 'question', buttons: ['取消', '允许访问'], defaultId: 0, cancelId: 0,
         message: '允许 AI 访问此笔记目录？', detail: `${parsed.data.notesPath}\n\nAI 可读取目录内 Markdown；离线模式仅在本机处理，在线模式会发送到所选模型服务商（当前为 DeepSeek）。每次写入或修改仍需单独确认。不开启命令执行，不允许访问目录外文件。` });

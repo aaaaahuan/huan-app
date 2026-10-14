@@ -135,6 +135,7 @@ export function createConversations(
       owner.run = run;
       owner.state.phase = 'preparing';
       owner.state.error = '';
+      owner.state.lastMetrics = undefined;
       owner.requests.set(input.requestId, signature);
       running.add(run);
       notify(owner);
@@ -228,6 +229,7 @@ export function createConversations(
         }, { signal: run.controller.signal, onEvent });
         if (entry && model) {
           entry.answer = assistantText(result);
+          entry.metrics = result.metrics;
           const settled = outcome(result, model);
           entry.status = settled.status;
           entry.error = settled.error;
@@ -236,6 +238,7 @@ export function createConversations(
             owner.state.error = result.record.warning;
           notify(owner);
         } else if (result.status !== 'completed') {
+          owner.state.lastMetrics = result.metrics;
           owner.state.error = run.controller.signal.aborted ? '已停止。'
             : result.warning ?? result.record.warning ?? result.failure?.code ?? 'AI 执行失败。';
         }

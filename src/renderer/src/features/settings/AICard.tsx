@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
+import type { Settings } from '@shared/contracts/settings';
 import { Button } from '@renderer/components/Button';
 import { Input, SecretInput } from '@renderer/components/Input';
 
-export function AICard({ credentialId, value, active, onChange, onTest, message, notesPath, onNotesPathChange }: {
+export function AICard({ credentialId, value, active, onChange, onTest, message, notesPath, onNotesPathChange, localModel, onLocalModelChange }: {
   credentialId: string | null; value: string | null | undefined; active: boolean; onChange(value: string | null | undefined): void;
   onTest(): void; message: string;
   notesPath: string; onNotesPathChange(value: string): void;
+  localModel: Settings['localModel']; onLocalModelChange(value: Partial<Settings['localModel']>): void;
 }) {
   const hasKey = !!credentialId;
   const [visible, setVisible] = useState(false);
@@ -40,7 +42,7 @@ export function AICard({ credentialId, value, active, onChange, onTest, message,
   const savedKey = revealedKey?.credentialId === credentialId ? revealedKey.key : undefined;
   return <section className="source-card">
     <h3>DeepSeek Flash</h3>
-    <p className="settings-description">内置唯一模型，连接 DeepSeek 官方服务。只需填写自己的 API Key。</p>
+    <p className="settings-description">在线模式连接 DeepSeek 官方服务。只需填写自己的 API Key。</p>
     <label className="source-path-label" htmlFor="deepseek-key">API Key</label>
     <SecretInput id="deepseek-key" autoComplete="off" spellCheck={false} maxLength={512}
       visible={active && visible && (value !== undefined || !!savedKey)} revealing={revealing} onToggle={() => void toggleVisibility()}
@@ -61,5 +63,15 @@ export function AICard({ credentialId, value, active, onChange, onTest, message,
     <Input id="notes-path" value={notesPath} placeholder="填写笔记库绝对路径；留空关闭文件工具"
       onChange={event => onNotesPathChange(event.target.value)} />
     <p className="settings-note">允许 AI 读取目录内 Markdown，内容会发送给 DeepSeek；每次写入均需确认。清空并保存后，下次提问不再提供文件工具；已经发送的内容仍在本次对话中。</p>
+    <h3>离线模型</h3>
+    <label className="source-path-label" htmlFor="local-model-path">Qwen3.5-4B 权重文件</label>
+    <Input id="local-model-path" value={localModel.modelPath} autoComplete="off" spellCheck={false} maxLength={4096}
+      placeholder="填写 .gguf 权重文件的绝对路径"
+      onChange={event => onLocalModelChange({ modelPath: event.target.value })} />
+    <label className="source-path-label" htmlFor="local-server-path">llama-server 程序</label>
+    <Input id="local-server-path" value={localModel.serverPath} autoComplete="off" spellCheck={false} maxLength={4096}
+      placeholder="填写可信 llama-server 可执行文件的绝对路径"
+      onChange={event => onLocalModelChange({ serverPath: event.target.value })} />
+    <p className="settings-note">模型资源保留在应用包外。保存后，下次离线调用会尝试加载；启动失败时，可修正路径并保存后再次调用。已驻留模型更换路径需 Cmd+Q 完全退出并重启。只选择可信的 llama-server，程序会以当前用户权限运行。</p>
   </section>;
 }

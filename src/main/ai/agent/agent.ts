@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import type {
   AgentHarnessOptions, AgentHarnessTool, AgentMessage, HookHandler, Entry, OperationResultRecord
 } from '@earendil-works/pi-agent-core';
 import type { ModelTarget } from '@shared/contracts/models';
 import type {
-  ModelIdentity, ExecutionEvent, ExecutionResult, ExecutionFailure
+  ModelIdentity, ExecutionEvent, ExecutionResult, ExecutionFailure, ExecutionMetrics
 } from '@shared/contracts/ai-execution';
 import type { ExecutionRecordStore, RunRecorder } from '../core/records';
 import type { PiAdapter } from '../core/pi-adapter';
@@ -98,6 +99,13 @@ export function createAgentHandle<C extends object>(config: AgentConfig<C>, depe
     const runId = request.runId;
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(runId))
       throw new Error('INVALID_RUN_ID');
+    const started = performance.now();
+    const metrics = (modelRequests: number, observed?: NonNullable<Awaited<ReturnType<PiAdapter['execute']>>['observedUsage']>): ExecutionMetrics => ({
+      durationMs: Math.max(0, Math.round(performance.now() - started)),
+      modelRequests,
+      usageStatus: !observed?.usage ? 'unavailable' : observed.responses === modelRequests ? 'complete' : 'partial',
+      ...(observed?.usage ? { usage: observed.usage } : {})
+    });
     const logicalSessionId = request.sessionId ?? defaultSessionId;
     const savedSession = config.history === 'session' ? sessions.get(logicalSessionId) : undefined;
     const sessionId = config.history === 'isolated' ? randomUUID() : savedSession?.id ?? logicalSessionId;
@@ -118,7 +126,8 @@ export function createAgentHandle<C extends object>(config: AgentConfig<C>, depe
           }
         });
       } catch (error) {
-        return { runId, sessionId, status: 'failed', messages: [], failure: failure(error), record: partial(error) };
+        return { runId, sessionId, status: 'failed', messages: [], failure: failure(error),
+          metrics: metrics(0), record: partial(error) };
       }
 
       let native: Awaited<ReturnType<PiAdapter['execute']>>;
@@ -160,13 +169,16 @@ export function createAgentHandle<C extends object>(config: AgentConfig<C>, depe
       }
 
       let record: ExecutionResult['record'] = { state: 'complete' };
+      const measured = metrics(recorder.modelRequests, native.observedUsage);
       try {
-        await recorder.recordRunSettled({ status: native.status, failure: native.failure, warning: native.warning });
+        await recorder.recordRunSettled({ status: native.status, failure: native.failure,
+          warning: native.warning, metrics: measured });
       } catch (error) { record = partial(error); }
       try { await recorder.close(); }
       catch (error) { record = partial(error); }
       if (recordFailure) record = { state: 'partial', warning: '执行记录写入失败。' };
-      const result: ExecutionResult = { ...native, record };
+      const result: ExecutionResult = { runId, sessionId, status: native.status, messages: native.messages,
+        failure: native.failure, warning: native.warning, metrics: measured, record };
       try {
         options.onEvent?.({ type: 'settled', agentKey: config.key, sessionId, runId,
           seq: lastEventSeq + 1, data: { status: result.status, record: result.record.state } });

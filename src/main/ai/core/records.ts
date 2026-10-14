@@ -4,7 +4,9 @@ import { lstat, mkdir, mkdtemp, open, readFile, readdir, rename, truncate, unlin
 import type { FileHandle } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { FileError, FileSystem, JsonValue, Result } from '@earendil-works/pi-agent-core';
-import type { ExecutionFailure, ExecutionResult, ModelIdentity } from '@shared/contracts/ai-execution';
+import type {
+  ExecutionFailure, ExecutionMetrics, ExecutionResult, ModelIdentity, TokenUsage
+} from '@shared/contracts/ai-execution';
 
 type PiRuntime = Pick<typeof import('@earendil-works/pi-agent-core'),
   'BACKGROUND_CONTEXT' | 'FileError' | 'err' | 'ok'> & {
@@ -41,7 +43,7 @@ export type ExecutionJournalEntry = JournalBase & (
     details?: JsonValue; failure?: ExecutionFailure;
   } }
   | { type: 'run.settled'; data: {
-    status: RunStatus; failure?: ExecutionFailure; warning?: string;
+    status: RunStatus; failure?: ExecutionFailure; warning?: string; metrics?: ExecutionMetrics;
   } }
 );
 
@@ -61,6 +63,7 @@ export interface RunRecord {
   state: 'preparing' | 'running' | RunStatus;
   model?: ModelIdentity;
   failure?: ExecutionFailure;
+  metrics?: ExecutionMetrics;
   recordState: 'complete' | 'partial';
   lastEventSeq: number;
   lastRequestSeq: number;
@@ -78,6 +81,7 @@ export interface RunRecorder {
   readonly runId: string;
   readonly agentKey: string;
   readonly sessionId: string;
+  readonly modelRequests: number;
   recordModelSelected(model: ModelIdentity): Promise<void>;
   recordRunAccepted(input: { nativeOperationId: string; nativeSessionPath: string }): Promise<void>;
   recordModelRequestPrepared(input: { model: ModelIdentity; body: JsonValue }): Promise<void>;
@@ -89,7 +93,7 @@ export interface RunRecorder {
   }): Promise<void>;
   recordToolResult(input: PendingToolOutcome): Promise<void>;
   recordRunSettled(input: {
-    status: RunStatus; failure?: ExecutionFailure; warning?: string;
+    status: RunStatus; failure?: ExecutionFailure; warning?: string; metrics?: ExecutionMetrics;
   }): Promise<void>;
   pendingToolOutcomes(): readonly PendingToolOutcome[];
   close(): Promise<void>;
@@ -160,6 +164,30 @@ function requireFailure(value: unknown): asserts value is ExecutionFailure {
     throw new Error('Invalid HTTP status');
 }
 
+function requireUsage(value: unknown): asserts value is TokenUsage {
+  if (!isRecord(value)) throw new Error('Invalid token usage');
+  for (const field of ['input', 'output', 'cacheRead', 'cacheWrite', 'totalTokens']) {
+    if (!Number.isSafeInteger(value[field]) || Number(value[field]) < 0)
+      throw new Error('Invalid token usage ' + field);
+  }
+  if (value.reasoning !== undefined &&
+      (!Number.isSafeInteger(value.reasoning) || Number(value.reasoning) < 0))
+    throw new Error('Invalid reasoning token usage');
+}
+
+function requireMetrics(value: unknown): asserts value is ExecutionMetrics {
+  if (!isRecord(value) || !Number.isSafeInteger(value.durationMs) || Number(value.durationMs) < 0 ||
+      !Number.isSafeInteger(value.modelRequests) || Number(value.modelRequests) < 0)
+    throw new Error('Invalid execution metrics');
+  if (value.usageStatus === 'unavailable') {
+    if (value.usage !== undefined) throw new Error('Unavailable metrics contain token usage');
+  } else if (value.usageStatus === 'complete' || value.usageStatus === 'partial') {
+    requireUsage(value.usage);
+  } else {
+    throw new Error('Invalid execution usage status');
+  }
+}
+
 function requireJournal(value: unknown): asserts value is ExecutionJournalEntry {
   if (!isRecord(value) || value.schemaVersion !== 1 || !UUID.test(String(value.eventId)) ||
       !UUID.test(String(value.runId)) || !Number.isSafeInteger(value.seq) || Number(value.seq) < 1 ||
@@ -209,6 +237,7 @@ function requireJournal(value: unknown): asserts value is ExecutionJournalEntry 
       if (!STATUSES.includes(data.status as RunStatus)) throw new Error('Invalid run status');
       if (data.failure !== undefined) requireFailure(data.failure);
       if (data.warning !== undefined && typeof data.warning !== 'string') throw new Error('Invalid run warning');
+      if (data.metrics !== undefined) requireMetrics(data.metrics);
       break;
     default:
       throw new Error('Unknown execution journal event');
@@ -246,6 +275,7 @@ function project(previous: RunRecord | undefined, entry: ExecutionJournalEntry):
       next.state = entry.data.status;
       next.endedAt = entry.at;
       next.failure = entry.data.failure;
+      if (entry.data.metrics !== undefined) next.metrics = structuredClone(entry.data.metrics);
       break;
   }
   return next;
@@ -483,6 +513,10 @@ class Writer implements RunRecorder {
     this.sessionId = input.sessionId;
   }
 
+  get modelRequests(): number {
+    return this.record?.lastRequestSeq ?? 0;
+  }
+
   private fail(error: unknown): void {
     if (this.unhealthy !== undefined) return;
     this.unhealthy = error;
@@ -604,7 +638,7 @@ class Writer implements RunRecorder {
   }
 
   recordRunSettled(input: {
-    status: RunStatus; failure?: ExecutionFailure; warning?: string;
+    status: RunStatus; failure?: ExecutionFailure; warning?: string; metrics?: ExecutionMetrics;
   }): Promise<void> {
     const eventId = randomUUID();
     return this.queue(async () => {
@@ -812,7 +846,7 @@ class RecordStore implements ExecutionRecordStore {
     if (error) throw new Error('Run journal recovery failed', { cause: error });
     const record = this.active.get(runId)?.record ?? this.recovered.get(runId);
     if (!record) throw new Error('Run record not found');
-    return { ...record };
+    return structuredClone(record);
   }
 
   async flush(): Promise<void> {

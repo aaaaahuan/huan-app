@@ -12,6 +12,23 @@ export interface ExecutionFailure {
   httpStatus?: number;
 }
 
+// 沿用 Pi 的 token 分类；input 不含缓存，reasoning 已包含在 output 中。
+export interface TokenUsage {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  reasoning?: number;
+  totalTokens: number;
+}
+
+export interface ExecutionMetrics {
+  durationMs: number;
+  modelRequests: number;
+  usageStatus: 'complete' | 'partial' | 'unavailable';
+  usage?: TokenUsage;
+}
+
 export interface ExecutionResult {
   runId: string;
   sessionId: string;
@@ -19,6 +36,7 @@ export interface ExecutionResult {
   messages: AgentMessage[];
   failure?: ExecutionFailure;
   warning?: string;
+  metrics: ExecutionMetrics;
   record: {
     state: 'complete' | 'partial';
     warning?: string;

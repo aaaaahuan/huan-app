@@ -1,10 +1,12 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { type TranslationDirection, type TranslationResult, type TranslationStatus } from '@shared/contracts/translation';
+import type { ExecutionMetrics as ExecutionMetricsData } from '@shared/contracts/ai-execution';
 import { selectedModelName, type ModelSelection } from '@shared/contracts/models';
 import { Button, IconButton } from '@renderer/components/Button';
 import { Select } from '@renderer/components/Select';
 import { Icon } from '@renderer/components/Icon';
 import { LoadingIndicator } from '@renderer/components/LoadingIndicator';
+import { ExecutionMetrics } from '@renderer/components/ExecutionMetrics';
 import './translation.css';
 
 const directions = [{ value: 'en-zh', label: '英语' }, { value: 'zh-en', label: '中文' }] as const;
@@ -14,12 +16,14 @@ export function Translation({ active, selection, modelChanging }: { active: bool
   const [direction, setDirection] = useState<TranslationDirection>('en-zh');
   const [draft, setDraft] = useState('');
   const [result, setResult] = useState<TranslationResult>();
+  const [lastMetrics, setLastMetrics] = useState<{ value: ExecutionMetricsData; previousDraft: boolean }>();
   const [model, setModel] = useState<TranslationStatus>({ revision: -1, phase: 'unloaded' });
   const [phase, setPhase] = useState<'idle' | 'generating' | 'stopping'>('idle');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [runningSelection, setRunningSelection] = useState<ModelSelection>();
   const textarea = useRef<HTMLTextAreaElement>(null);
+  const mounted = useRef(false);
   const request = useRef<{ id: string; cancelled: boolean; draftRevision: number } | undefined>(undefined);
   const draftRevision = useRef(0);
   const modelRevision = useRef(-1);
@@ -28,6 +32,7 @@ export function Translation({ active, selection, modelChanging }: { active: bool
   const offline = displayedSelection?.mode === 'offline';
 
   useEffect(() => {
+    mounted.current = true;
     let disposed = false;
     const accept = (value: TranslationStatus) => {
       if (disposed || value.revision <= modelRevision.current) return;
@@ -38,6 +43,7 @@ export function Translation({ active, selection, modelChanging }: { active: bool
       if (!disposed) setError(String(failure));
     });
     return () => {
+      mounted.current = false;
       disposed = true; off();
       const run = request.current;
       if (run) { run.cancelled = true; void window.huanApp.translation.stop(run.id).catch(() => undefined); }
@@ -51,7 +57,7 @@ export function Translation({ active, selection, modelChanging }: { active: bool
     setPhase('stopping');
     setNotice(leaving ? '' : '已请求停止，正在等待请求结束…');
     void window.huanApp.translation.stop(run.id).catch(failure => {
-      if (request.current === run) { setError(String(failure)); setPhase('generating'); }
+      if (mounted.current && request.current === run) { setError(String(failure)); setPhase('generating'); }
     });
   }
   const onLeave = useEffectEvent(() => stop(true));
@@ -63,11 +69,14 @@ export function Translation({ active, selection, modelChanging }: { active: bool
   async function submit() {
     if (!active || !selection || modelChanging || request.current || !draft.trim()) return;
     const run = { id: crypto.randomUUID(), cancelled: false, draftRevision: draftRevision.current };
-    request.current = run; setRunningSelection(selection); setPhase('generating'); setError(''); setNotice(''); setResult(undefined);
+    request.current = run; setRunningSelection(selection); setPhase('generating'); setError(''); setNotice(''); setResult(undefined); setLastMetrics(undefined);
     try {
       const answer = await window.huanApp.translation.translate({ requestId: run.id, text: draft, direction });
+      if (!mounted.current || request.current !== run) return;
+      // 统计属于本次请求，停止或编辑原文后仍保留；译文继续遵守取消与草稿版本检查。
+      if (answer.metrics) setLastMetrics({ value: answer.metrics, previousDraft: draftRevision.current !== run.draftRevision });
       // 切页或停止后不接纳迟到译文；不将上一请求内容填入新草稿。
-      if (request.current !== run || run.cancelled) return;
+      if (run.cancelled) return;
       // 生成期间仍可编辑原文，即使改回原内容，也不能展示旧版本的译文。
       if (draftRevision.current !== run.draftRevision) {
         if (answer.error) setError(answer.error);
@@ -78,23 +87,23 @@ export function Translation({ active, selection, modelChanging }: { active: bool
       if (answer.error) setError(answer.error);
       if (answer.status === 'stopped') setNotice('已停止。');
     } catch (failure) {
-      if (request.current === run && !run.cancelled) setError(String(failure));
+      if (mounted.current && request.current === run && !run.cancelled) setError(String(failure));
     } finally {
-      if (request.current === run) { request.current = undefined; setPhase('idle'); if (run.cancelled) setNotice('已停止。'); }
+      if (mounted.current && request.current === run) { request.current = undefined; setPhase('idle'); if (run.cancelled) setNotice('已停止。'); }
     }
   }
 
   function changeDirection(value: TranslationDirection) {
     if (busy) return;
     draftRevision.current++;
-    setDirection(value); setResult(undefined); setError(''); setNotice('');
+    setDirection(value); setResult(undefined); setLastMetrics(undefined); setError(''); setNotice('');
   }
   function swap() {
     if (busy) return;
     if (result?.status === 'complete') setDraft(result.text);
     changeDirection(direction === 'en-zh' ? 'zh-en' : 'en-zh');
   }
-  function clear() { draftRevision.current++; setDraft(''); setResult(undefined); setError(''); setNotice(''); textarea.current?.focus(); }
+  function clear() { draftRevision.current++; setDraft(''); setResult(undefined); setLastMetrics(undefined); setError(''); setNotice(''); textarea.current?.focus(); }
 
   async function copy() {
     if (!result?.text) return;
@@ -122,7 +131,7 @@ export function Translation({ active, selection, modelChanging }: { active: bool
             <div className="translation-panel-heading"><label htmlFor="translation-source">原文</label>
               <IconButton icon="close" label="清空原文" disabled={busy || !draft} onClick={clear} /></div>
             <textarea ref={textarea} id="translation-source" placeholder="输入或粘贴需要翻译的文字…" value={draft}
-              onChange={event => { draftRevision.current++; setDraft(event.target.value); setResult(undefined); setError(''); setNotice(''); }}
+              onChange={event => { draftRevision.current++; setDraft(event.target.value); setResult(undefined); setLastMetrics(undefined); setError(''); setNotice(''); }}
               onKeyDown={event => {
                 if (event.metaKey && event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(); }
               }} />
@@ -134,6 +143,7 @@ export function Translation({ active, selection, modelChanging }: { active: bool
             <textarea id="translation-output" placeholder={busy ? '翻译完成后，译文将显示在这里…' : '译文将显示在这里'} value={result?.text ?? ''} readOnly />
           </div>
         </div>
+        {lastMetrics ? <ExecutionMetrics metrics={lastMetrics.value} label={lastMetrics.previousDraft ? '上次请求用量' : undefined} /> : null}
         <div className="translation-actions">
           <span className="translation-shortcut"><kbd>⌘ Enter</kbd> 翻译 <span aria-hidden="true">·</span> Enter 换行</span>
           <div>{busy ? <Button variant="primary" disabled={phase === 'stopping'} onClick={() => stop()}>{phase === 'stopping' ? '正在停止…' : '停止'}</Button>
