@@ -170,6 +170,7 @@ export function createAgentHandle<C extends object>(config: AgentConfig<C>, depe
 
       let record: ExecutionResult['record'] = { state: 'complete' };
       const measured = metrics(recorder.modelRequests, native.observedUsage);
+      measured.requestTimings = [...recorder.requestTimings];
       try {
         await recorder.recordRunSettled({ status: native.status, failure: native.failure,
           warning: native.warning, metrics: measured });

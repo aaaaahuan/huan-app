@@ -5,7 +5,7 @@ import type { FileHandle } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { FileError, FileSystem, JsonValue, Result } from '@earendil-works/pi-agent-core';
 import type {
-  ExecutionFailure, ExecutionMetrics, ExecutionResult, ModelIdentity, TokenUsage
+  ExecutionFailure, ExecutionMetrics, ExecutionResult, ModelIdentity, ModelRequestTiming, TokenUsage
 } from '@shared/contracts/ai-execution';
 
 type PiRuntime = Pick<typeof import('@earendil-works/pi-agent-core'),
@@ -15,6 +15,15 @@ type PiRuntime = Pick<typeof import('@earendil-works/pi-agent-core'),
 
 type RunStatus = ExecutionResult['status'];
 type ToolState = 'returned' | 'not_started' | 'failed_or_unknown';
+
+export interface ModelRequestProgress {
+  requestSeq: number;
+  stage: 'started' | 'headers' | 'first_content' | 'first_text';
+  at: number;
+  elapsedMs: number;
+  httpStatus?: number;
+  contentKind?: 'text' | 'thinking' | 'tool';
+}
 
 export interface JournalBase {
   schemaVersion: 1;
@@ -31,6 +40,8 @@ export type ExecutionJournalEntry = JournalBase & (
   | { type: 'model.selected'; data: { model: ModelIdentity } }
   | { type: 'run.accepted'; data: { nativeOperationId: string; nativeSessionPath: string } }
   | { type: 'model.request_prepared'; data: { requestSeq: number; model: ModelIdentity; body: JsonValue } }
+  | { type: 'model.request_progress'; data: ModelRequestProgress }
+  | { type: 'model.request_settled'; data: ModelRequestTiming }
   | { type: 'tool.invoked'; data: {
     invocationId: string; attemptId: string; toolCallId: string; name: string; params: JsonValue;
   } }
@@ -67,6 +78,7 @@ export interface RunRecord {
   recordState: 'complete' | 'partial';
   lastEventSeq: number;
   lastRequestSeq: number;
+  requestTimings?: ModelRequestTiming[];
 }
 
 export interface PendingToolOutcome {
@@ -82,9 +94,12 @@ export interface RunRecorder {
   readonly agentKey: string;
   readonly sessionId: string;
   readonly modelRequests: number;
+  readonly requestTimings: readonly ModelRequestTiming[];
   recordModelSelected(model: ModelIdentity): Promise<void>;
   recordRunAccepted(input: { nativeOperationId: string; nativeSessionPath: string }): Promise<void>;
-  recordModelRequestPrepared(input: { model: ModelIdentity; body: JsonValue }): Promise<void>;
+  recordModelRequestPrepared(input: { model: ModelIdentity; body: JsonValue }): Promise<{ requestSeq: number }>;
+  recordModelRequestProgress(input: ModelRequestProgress): Promise<void>;
+  recordModelRequestSettled(input: ModelRequestTiming): Promise<void>;
   recordToolInvocation(input: {
     invocationId: string; toolCallId: string; name: string; params: JsonValue;
   }): Promise<{ attemptId: string }>;
@@ -175,6 +190,35 @@ function requireUsage(value: unknown): asserts value is TokenUsage {
     throw new Error('Invalid reasoning token usage');
 }
 
+function requireRequestSequence(value: unknown): asserts value is number {
+  if (!Number.isSafeInteger(value) || Number(value) < 1) throw new Error('Invalid request sequence');
+}
+
+function requireRequestTiming(value: unknown): asserts value is ModelRequestTiming {
+  if (!isRecord(value) || !['completed', 'failed', 'aborted'].includes(String(value.status)))
+    throw new Error('Invalid request timing');
+  requireRequestSequence(value.requestSeq);
+  for (const field of ['startedAt', 'durationMs', 'httpResponseMs', 'firstContentMs', 'firstTextMs', 'generationMs', 'streamTailMs']) {
+    if (value[field] !== null && (!Number.isSafeInteger(value[field]) || Number(value[field]) < 0))
+      throw new Error('Invalid request timing ' + field);
+  }
+  if (value.httpStatus !== null &&
+      (!Number.isInteger(value.httpStatus) || Number(value.httpStatus) < 100 || Number(value.httpStatus) > 599))
+    throw new Error('Invalid request HTTP status');
+  if ((value.startedAt === null) !== (value.durationMs === null) ||
+      (value.httpStatus === null) !== (value.httpResponseMs === null))
+    throw new Error('Incomplete request timing');
+  for (const field of ['httpResponseMs', 'firstContentMs', 'firstTextMs', 'generationMs', 'streamTailMs']) {
+    if (value[field] !== null && (value.durationMs === null || Number(value[field]) > Number(value.durationMs)))
+      throw new Error('Request timing exceeds duration');
+  }
+  if ((value.firstTextMs === null) !== (value.generationMs === null) ||
+      (value.firstTextMs === null) !== (value.streamTailMs === null) ||
+      (value.firstTextMs !== null &&
+        (value.firstContentMs === null || Number(value.firstTextMs) < Number(value.firstContentMs))))
+    throw new Error('Incomplete request text timing');
+}
+
 function requireMetrics(value: unknown): asserts value is ExecutionMetrics {
   if (!isRecord(value) || !Number.isSafeInteger(value.durationMs) || Number(value.durationMs) < 0 ||
       !Number.isSafeInteger(value.modelRequests) || Number(value.modelRequests) < 0)
@@ -185,6 +229,16 @@ function requireMetrics(value: unknown): asserts value is ExecutionMetrics {
     requireUsage(value.usage);
   } else {
     throw new Error('Invalid execution usage status');
+  }
+  if (value.requestTimings !== undefined) {
+    if (!Array.isArray(value.requestTimings)) throw new Error('Invalid request timings');
+    let previous = 0;
+    for (const timing of value.requestTimings) {
+      requireRequestTiming(timing);
+      if (timing.requestSeq <= previous || timing.requestSeq > Number(value.modelRequests))
+        throw new Error('Invalid request timing sequence');
+      previous = timing.requestSeq;
+    }
   }
 }
 
@@ -208,10 +262,24 @@ function requireJournal(value: unknown): asserts value is ExecutionJournalEntry 
       requireText(data.nativeSessionPath, 'native session path');
       break;
     case 'model.request_prepared':
-      if (!Number.isSafeInteger(data.requestSeq) || Number(data.requestSeq) < 1)
-        throw new Error('Invalid request sequence');
+      requireRequestSequence(data.requestSeq);
       requireModel(data.model);
       requireJson(data.body);
+      break;
+    case 'model.request_progress':
+      requireRequestSequence(data.requestSeq);
+      if (!['started', 'headers', 'first_content', 'first_text'].includes(String(data.stage)) ||
+          !Number.isSafeInteger(data.at) || Number(data.at) < 0 ||
+          !Number.isSafeInteger(data.elapsedMs) || Number(data.elapsedMs) < 0)
+        throw new Error('Invalid request progress');
+      if (data.stage === 'headers' &&
+          (!Number.isInteger(data.httpStatus) || Number(data.httpStatus) < 100 || Number(data.httpStatus) > 599))
+        throw new Error('Invalid request progress HTTP status');
+      if (data.stage === 'first_content' && !['text', 'thinking', 'tool'].includes(String(data.contentKind)))
+        throw new Error('Invalid request content kind');
+      break;
+    case 'model.request_settled':
+      requireRequestTiming(data);
       break;
     case 'tool.invoked':
       requireText(data.invocationId, 'invocation id');
@@ -270,6 +338,15 @@ function project(previous: RunRecord | undefined, entry: ExecutionJournalEntry):
     case 'model.request_prepared':
       if (entry.data.requestSeq !== previous.lastRequestSeq + 1) throw new Error('Invalid request sequence');
       next.lastRequestSeq = entry.data.requestSeq;
+      break;
+    case 'model.request_progress':
+    case 'model.request_settled':
+      if (entry.data.requestSeq > previous.lastRequestSeq ||
+          previous.requestTimings?.some(timing => timing.requestSeq === entry.data.requestSeq))
+        throw new Error('Invalid request timing event order');
+      if (entry.type === 'model.request_settled')
+        next.requestTimings = [...previous.requestTimings ?? [], structuredClone(entry.data)]
+          .sort((left, right) => left.requestSeq - right.requestSeq);
       break;
     case 'run.settled':
       next.state = entry.data.status;
@@ -496,6 +573,7 @@ class Writer implements RunRecorder {
   readonly activeAttempts = new Map<string, string>();
   readonly pending = new Map<string, PendingToolOutcome>();
   readonly committed = new Set<string>();
+  private readonly completedTimings = new Map<number, ModelRequestTiming>();
   record: RunRecord | undefined;
   private tail: Promise<void> = Promise.resolve();
   private unhealthy: unknown;
@@ -515,6 +593,10 @@ class Writer implements RunRecorder {
 
   get modelRequests(): number {
     return this.record?.lastRequestSeq ?? 0;
+  }
+
+  get requestTimings(): readonly ModelRequestTiming[] {
+    return structuredClone([...this.completedTimings.values()].sort((left, right) => left.requestSeq - right.requestSeq));
   }
 
   private fail(error: unknown): void {
@@ -579,11 +661,25 @@ class Writer implements RunRecorder {
     });
   }
 
-  recordModelRequestPrepared(input: { model: ModelIdentity; body: JsonValue }): Promise<void> {
+  recordModelRequestPrepared(input: { model: ModelIdentity; body: JsonValue }): Promise<{ requestSeq: number }> {
     const eventId = randomUUID();
-    return this.queue(() => this.appendLocked('model.request_prepared', {
-      ...input, requestSeq: (this.record?.lastRequestSeq ?? 0) + 1
-    }, eventId));
+    return this.queue(async () => {
+      const requestSeq = (this.record?.lastRequestSeq ?? 0) + 1;
+      await this.appendLocked('model.request_prepared', { ...input, requestSeq }, eventId);
+      return { requestSeq };
+    });
+  }
+
+  recordModelRequestProgress(input: ModelRequestProgress): Promise<void> {
+    return this.append('model.request_progress', { ...input });
+  }
+
+  async recordModelRequestSettled(input: ModelRequestTiming): Promise<void> {
+    try { requireRequestTiming(input); }
+    catch (error) { this.fail(error); throw error; }
+    // 磁盘失败时仍可返回本轮已经采集的指标，record 状态单独标记 partial。
+    this.completedTimings.set(input.requestSeq, structuredClone(input));
+    await this.append('model.request_settled', structuredClone(input));
   }
 
   recordToolInvocation(input: {

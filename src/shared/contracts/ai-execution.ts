@@ -22,11 +22,26 @@ export interface TokenUsage {
   totalTokens: number;
 }
 
+// 均为客户端观测；null 表示该阶段尚未发生，而不是耗时为零。
+export interface ModelRequestTiming {
+  requestSeq: number;
+  status: 'completed' | 'failed' | 'aborted';
+  startedAt: number | null;
+  durationMs: number | null;
+  httpResponseMs: number | null;
+  httpStatus: number | null;
+  firstContentMs: number | null;
+  firstTextMs: number | null;
+  generationMs: number | null;
+  streamTailMs: number | null;
+}
+
 export interface ExecutionMetrics {
   durationMs: number;
   modelRequests: number;
   usageStatus: 'complete' | 'partial' | 'unavailable';
   usage?: TokenUsage;
+  requestTimings?: ModelRequestTiming[];
 }
 
 export interface ExecutionResult {

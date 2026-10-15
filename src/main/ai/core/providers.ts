@@ -2,12 +2,13 @@ import { request } from 'node:http';
 import { Readable } from 'node:stream';
 import type { JsonValue } from '@earendil-works/pi-agent-core';
 import type {
-  Api, AssistantMessageEventStream, Model, Models, ProviderStreams,
+  Api, AssistantMessage, AssistantMessageEventStream, Model, Models, ProviderStreams,
   SimpleStreamOptions, StreamOptions, TranscriptContext
 } from '@earendil-works/pi-ai';
 import type { ModelTarget } from '@shared/contracts/models';
 import type { ExecutionFailure, ModelIdentity } from '@shared/contracts/ai-execution';
 import type { RunRecorder } from './records';
+import { createRequestTiming } from './request-timing';
 
 export interface HarnessModels {
   models: Models;
@@ -122,7 +123,7 @@ export async function createHarnessModels(
   target: ModelTarget,
   options: { recorder: RunRecorder; maxOutputTokens?: number; temperature?: number }
 ): Promise<HarnessModels> {
-  const { createModels, createProvider } = await import('@earendil-works/pi-ai');
+  const { createModels, createProvider, createAssistantMessageEventStream } = await import('@earendil-works/pi-ai');
   const { openAICompletionsApi } = await import('@earendil-works/pi-ai/api/openai-completions.lazy');
   let selectedModel: Model<'openai-completions'> | undefined;
   if (target.provider === 'deepseek') {
@@ -142,7 +143,9 @@ export async function createHarnessModels(
     provider: target.provider, modelId: target.modelId
   };
 
-  function withFrozenOptions<T extends StreamOptions | SimpleStreamOptions>(streamOptions?: T): T {
+  function withFrozenOptions<T extends StreamOptions | SimpleStreamOptions>(
+    timing: ReturnType<typeof createRequestTiming>, streamOptions?: T
+  ): T {
     const frozenSignal = streamOptions?.signal;
     return {
       ...streamOptions,
@@ -150,9 +153,11 @@ export async function createHarnessModels(
         const url = input instanceof Request ? input.url : String(input);
         if (url !== endpoint) throw new Error('ENDPOINT_REJECTED');
         try {
+          timing.started();
           const response = target.provider === 'Qwen-3.5-4B-local'
             ? await localResponse(url, init, frozenSignal)
             : await fetch(input, { ...init, redirect: 'error' });
+          timing.headers(response.status);
           if (!response.ok)
             lastFailure = { kind: 'http', code: 'HTTP_ERROR', httpStatus: response.status };
           return response;
@@ -166,21 +171,67 @@ export async function createHarnessModels(
         const finalBody = preparePayload(
           fromHarness, target, options.maxOutputTokens, options.temperature
         );
-        await options.recorder.recordModelRequestPrepared({
+        const { requestSeq } = await options.recorder.recordModelRequestPrepared({
           model: identity,
           body: safeRequestBody(finalBody)
         });
+        timing.prepared(requestSeq);
         return finalBody;
       }
     } as T;
   }
 
+  function observedStream(
+    model: Model<Api>, streamOptions: StreamOptions | SimpleStreamOptions | undefined,
+    start: (timing: ReturnType<typeof createRequestTiming>) => AssistantMessageEventStream
+  ): AssistantMessageEventStream {
+    const timing = createRequestTiming(options.recorder);
+    const output = createAssistantMessageEventStream();
+    let partial: AssistantMessage | undefined;
+    void (async () => {
+      try {
+        const source = start(timing);
+        for await (const event of source) {
+          if ('partial' in event) partial = event.partial;
+          timing.observe(event);
+          if (event.type === 'done' || event.type === 'error') {
+            await timing.settle(event.type === 'done' ? 'completed'
+              : event.reason === 'aborted' ? 'aborted' : 'failed');
+            output.push(event);
+            output.end(event.type === 'done' ? event.message : event.error);
+            return;
+          }
+          output.push(event);
+        }
+        throw new Error('MODEL_STREAM_ENDED_WITHOUT_RESULT');
+      } catch (error) {
+        const aborted = streamOptions?.signal?.aborted ||
+          (error instanceof Error && error.name === 'AbortError');
+        await timing.settle(aborted ? 'aborted' : 'failed');
+        const message: AssistantMessage = {
+          role: 'assistant', content: [], api: model.api, provider: model.provider,
+          model: model.id, timestamp: Date.now(),
+          usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+          ...partial,
+          stopReason: aborted ? 'aborted' : 'error',
+          errorMessage: error instanceof Error ? error.message : String(error)
+        };
+        output.push({ type: 'error', reason: aborted ? 'aborted' : 'error', error: message });
+        output.end(message);
+      }
+    })();
+    return output;
+  }
+
   const api: ProviderStreams = {
     stream(model: Model<Api>, context: TranscriptContext, streamOptions?: StreamOptions): AssistantMessageEventStream {
-      return sdk.stream(model, context, withFrozenOptions(streamOptions));
+      return observedStream(model, streamOptions, timing =>
+        sdk.stream(model, context, withFrozenOptions(timing, streamOptions)));
     },
     streamSimple(model: Model<Api>, context: TranscriptContext, streamOptions?: SimpleStreamOptions): AssistantMessageEventStream {
-      return sdk.streamSimple(model, context, withFrozenOptions(streamOptions));
+      return observedStream(model, streamOptions, timing =>
+        sdk.streamSimple(model, context, withFrozenOptions(timing, streamOptions)));
     }
   };
   const models = createModels();
