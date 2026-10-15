@@ -80,7 +80,11 @@ PiAdapter 使用 Harness 的 `message_end.runId / entryId` 识别本轮 assistan
 
 独立检查通过旧 metrics 重放、合法 0 ms、6 类非法计时拒绝、写盘失败回调与内存指标保留、深拷贝。React SSR 验证旧记录、无首字取消、未发出、无响应及 0 ms；Computer Use 在本地预览中验证明细展开、300 px 窄栏和旧数据布局。预览使用实际组件与样例数据，不代表真实桌面翻译请求验收。
 
-`pnpm check` 和独立代码审查通过。模型参数保持原值；本次仅更新源码与构建，桌面安装包沿用上一次交付版本。
+`pnpm check` 和独立代码审查通过，模型参数保持原值。源码提交为 `1f4a8b5`。
+
+用户确认已保留临时内容并允许退出后，完成 2026-10-15 桌面交付。常规打包遇到运行时下载的网络解析失败，改用本机相同版本的 Electron 44.4.3：`pnpm exec electron-builder --mac --arm64 --dir --config.electronDist=node_modules/electron/dist`，打包成功。旧安装包备份至 `.cache/app-backups/huan-app-before-request-timing-20261015-1433.app`，新版替换 `/Users/bytedance/Desktop/huan-app.app` 并启动，原有用户设置与凭据保留。
+
+桌面与构建产物的 app.asar SHA-256 均为 `c04ba66e857055d1de4cfae89ff6e40f16858ae3f86835d5f0584d278615b6eb`，包内含请求阶段事件、计时字段及界面明细。已核对新版主进程、渲染器和本地模型子进程；桌面自动化连接超时，替换后的实际点击与真实模型问答尚未验收。
 
 ## 2026-10-14 用量验证与桌面交付
 
