@@ -187,6 +187,16 @@ Pi Agent Core / Pi AI / Pi Coding Agent 固定为 0.87.1，运行于主进程；
 
 实现和当前实机验收边界见 [5.1 Review](docs/subtitles-review.md)，不以静态检查或模拟结果代替真实字幕成功链路。
 
+## AI 网页搜索与抓取
+
+在线伴读按回合向 Pi AgentHarness 注册 `web_search` 和 `web_fetch`，复用本轮在线模型的 DeepSeek API Key。设置好在线模型后可直接提问“搜索 DeepSeek 最新公告并给出来源”或“读取这个公开网页并总结：https://example.com”。工具名单、调用及结果沿用现有对话和 Run 记录，抓取成功的页面显示来源。离线伴读、翻译和 Key 测试保持原有工具范围。
+
+`web_search` 使用 `POST https://api.deepseek.com/v1/tools/search`，默认返回 5 条（可指定 1–50 条），支持可选正文和原始问题；搜索词及原始问题遵循服务端 128 Unicode 字符限制。`web_fetch` 使用同域 `/v1/tools/fetch`，读取单个 HTTP(S) URL 的 Markdown 正文，不携带本机浏览器 Cookie。当前文章与字幕仍优先读取已授权的本地快照。凭据仅保留在主进程闭包，不进入模型上下文和工具记录。
+
+调用会向 DeepSeek 发送搜索词或 URL，可能计费；[官方计费与限制](https://api-docs.deepseek.com/zh-cn/guides/search/)目前分别为每千次成功搜索/抓取 5 元。停止任务会取消在途 HTTP 请求，但不保证撤销服务商已受理的调用或费用。失败展示 HTTP 状态和可操作提示，不自动重试。网页与搜索结果属于不可信资料；仅提交公开检索所需信息。
+
+本轮验证：类型检查、Lint、生产构建通过；临时进程中的模拟响应覆盖参数边界、空搜索、正常抓取、异常响应、鉴权头、取消及不自动重试。随后使用现有加密凭据，在 Electron 进程中直接执行同一 `web_search` 工具，查询 `DeepSeek 网页搜索 抓取 API site:api-docs.deepseek.com`，真实返回 3 条结果，首条为官方中文使用指南；单次工具端到端耗时 490 ms（非性能基准）。真实 Fetch 和完整 Pi 对话链路尚未验收。应用 GUI 验收受 Computer Use 连接超时阻挡，未替换桌面安装包。
+
 ## AI 笔记读写
 
 每回合在对话中显示实际装配的工具名单；加载失败显示具体错误，不将“目录已配置”等同于“工具可用”。本轮名单同时传给模型，避免沿用旧回合的不可用结论。`read` 只读取具体文件，不支持列举目录。

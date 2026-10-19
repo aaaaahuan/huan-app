@@ -189,7 +189,7 @@ export function createConversations(
         const result = await agent.execute({
           runId: run.id,
           sessionId: owner.state.instanceId,
-          async prepare({ signal, model: selectedModel, recordApprovalDecision }) {
+          async prepare({ signal, model: selectedModel, target, recordApprovalDecision }) {
             model = selectedModel;
             if (selectedModel.mode === 'online' && owner.privateHistory) {
               const allowed = await approveHistory(signal);
@@ -222,7 +222,7 @@ export function createConversations(
               },
               onPageRead: onSource, onSubtitlesRead: onSource, onNoteWritten: onWrite
             };
-            const prepared = await prepareReadingInput(input.text, scope);
+            const prepared = await prepareReadingInput(input.text, scope, target);
             tools = prepared.tools?.map(tool => tool.name) ?? [];
             toolError ??= prepared.toolError;
             return { ...prepared, toolError };

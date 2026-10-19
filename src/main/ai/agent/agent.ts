@@ -46,6 +46,7 @@ export type ExecuteRequest<C extends object> = { runId: string; sessionId?: stri
     prepare(input: {
       signal: AbortSignal;
       model: ModelIdentity;
+      target: ModelTarget;
       recordApprovalDecision: RecordApprovalDecision;
     }): Promise<PreparedInput<C>>;
   }
@@ -138,7 +139,7 @@ export function createAgentHandle<C extends object>(config: AgentConfig<C>, depe
         const model = publicModelIdentity(target);
         await recorder.recordModelSelected(model);
         const input = 'prepare' in request
-          ? await request.prepare({ signal, model, recordApprovalDecision: value => recorder.recordApprovalDecision(value) })
+          ? await request.prepare({ signal, model, target, recordApprovalDecision: value => recorder.recordApprovalDecision(value) })
           : request;
         signal.throwIfAborted();
         adapterStarted = true;
