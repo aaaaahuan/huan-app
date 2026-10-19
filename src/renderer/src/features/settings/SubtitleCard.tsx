@@ -38,7 +38,7 @@ export function SubtitleCard({ credentialId, value, active, onChange }: {
       if (keySequence.current !== call) return;
       if (result.ok && result.credentialId === credentialId) { setRevealedKey({ credentialId: result.credentialId, key: result.key }); setVisible(true); }
       else setKeyError(result.ok ? '字幕凭据已变更，请重新打开设置。' : result.message);
-    } catch { if (keySequence.current === call) setKeyError('无法读取字幕 Key，请重试。'); }
+    } catch (error) { if (keySequence.current === call) setKeyError(String(error)); }
     finally { if (keySequence.current === call) setRevealing(false); }
   }
   async function refresh() {
@@ -47,7 +47,7 @@ export function SubtitleCard({ credentialId, value, active, onChange }: {
     try {
       const next = await window.huanApp.settings.subtitleUsage();
       if (sequence.current === call && next.credentialId === credentialId) setUsage(next);
-    } catch { if (sequence.current === call) setError('用量查询失败，请到官方后台查看。'); }
+    } catch (error) { if (sequence.current === call) setError(String(error)); }
     finally { if (sequence.current === call) setLoading(false); }
   }
   useEffect(() => {
@@ -59,7 +59,7 @@ export function SubtitleCard({ credentialId, value, active, onChange }: {
   return <section className="source-card">
     <div className="source-heading"><h4>Transcript Guru</h4></div>
     <label className="source-path-label" htmlFor="subtitle-key">API Key</label>
-    <SecretInput id="subtitle-key" autoComplete="off" spellCheck={false} maxLength={512}
+    <SecretInput id="subtitle-key" autoComplete="off" spellCheck={false}
       visible={active && visible && (value !== undefined || !!savedKey)} revealing={revealing} onToggle={() => void toggleVisibility()}
       placeholder="填写 Transcript Guru API Key" value={value === undefined ? active && visible && savedKey ? savedKey : credentialId ? '********' : '' : value ?? ''}
       onFocus={event => { if (value === undefined && credentialId) event.currentTarget.select(); }}
@@ -75,7 +75,7 @@ export function SubtitleCard({ credentialId, value, active, onChange }: {
         <p className="settings-note">套餐每月发放：{currentUsage.data.monthlyAllowance} credits{currentUsage.data.resetsAt ? ` · 重置 ${new Date(currentUsage.data.resetsAt).toLocaleString()} (${Intl.DateTimeFormat().resolvedOptions().timeZone})` : ''}</p>
         {currentUsage.data.rolling30CreditsUsed !== undefined ? <p className="settings-note">近 30 日消耗：{currentUsage.data.rolling30CreditsUsed} credits</p> : null}
       </> : null}
-      <Button onClick={() => { void window.huanApp.settings.openSubtitleAccount().catch(() => setError('无法打开官方后台，请检查默认浏览器。')); }}>打开官方后台</Button>
+      <Button onClick={() => { void window.huanApp.settings.openSubtitleAccount().catch(error => setError(String(error))); }}>打开官方后台</Button>
     </section> : null}
   </section>;
 }

@@ -97,7 +97,7 @@ export function createYouTubePlayback(host: ReturnType<typeof createPageHost>,
         // 不调用 play/pause，保持原播放器状态；立即发布真实结果。
         update({ observedAt: Date.now(), phase: 'content', seconds: result.data.seconds });
         return { ok: true, value: undefined };
-      } catch { return { ok: false, code: 'PLAYBACK_UNAVAILABLE', message: '视频定位失败；可继续手动阅读。' }; }
+      } catch (error) { return { ok: false, code: 'PLAYBACK_UNAVAILABLE', message: `视频定位失败：${error instanceof Error ? error.message : String(error)}` }; }
     },
     close() { off(); detach(); contents = undefined; reset(null); }
   };

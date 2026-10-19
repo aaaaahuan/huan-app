@@ -27,7 +27,7 @@ function TurnDetails({ entry }: { entry: ChatEntry }) {
       {entry.sources.map(source => <div className="ai-material" key={source.id}>
         <p className="ai-material-title">{source.kind === 'subtitles' ? '已读取字幕片段' : '已读取'}：{source.title || '页面正文'}</p>
         <p className="ai-material-url">{source.url}</p>
-        <p>{source.kind === 'subtitles' ? `读取了冻结字幕片段（${source.language} / ${source.subtitleSource}），不包含视频画面。` : '读取了缓存正文片段，不包含图片或视频内容。'}{source.truncated ? '缓存正文已截断。' : ''}</p>
+        <p>{source.kind === 'subtitles' ? `读取了冻结字幕文本（${source.language} / ${source.subtitleSource}），不包含视频画面。` : '读取了缓存正文，不包含图片或视频内容。'}{source.truncated ? '页面提取内容可能不完整。' : ''}</p>
       </div>)}
       {entry.writes.map((write, index) => <p className="ai-write" key={index}>{write.operation === 'edit' ? '已更新到本机' : '已保存到本机'}：<span>{write.path}</span></p>)}
     </div>
@@ -58,7 +58,7 @@ export function AIChat({ settingsRevision, collapsed, tabbed, selection, modelCh
       if (!cancelled) setPage(previous => !previous || next.revision > previous.revision ? next : previous);
     };
     const off = window.huanApp.browser.onState(accept);
-    void window.huanApp.browser.get().then(accept).catch(() => undefined);
+    void window.huanApp.browser.get().then(accept).catch(error => { if (!cancelled) setError(String(error)); });
     return () => { cancelled = true; off(); };
   }, []);
 
@@ -67,8 +67,11 @@ export function AIChat({ settingsRevision, collapsed, tabbed, selection, modelCh
     if (selection?.mode === 'offline') { setConfigured(true); return; }
     setConfigured(false);
     void window.huanApp.settings.load().then(result => {
-      if (!cancelled) setConfigured(!!selection && result.ok && !!result.settings.ai.credentialId);
-    }).catch(() => { if (!cancelled) setConfigured(false); });
+      if (!cancelled) {
+        setConfigured(!!selection && result.ok && !!result.settings.ai.credentialId);
+        if (!result.ok) setError(result.message);
+      }
+    }).catch(error => { if (!cancelled) { setConfigured(false); setError(String(error)); } });
     return () => { cancelled = true; };
   }, [settingsRevision, selection]);
 
@@ -108,7 +111,7 @@ export function AIChat({ settingsRevision, collapsed, tabbed, selection, modelCh
       if (cancelled) return;
       if (!result.ok) { setError(result.message); return; }
       accept(result.value);
-    }).catch(() => { if (!cancelled) setError('无法读取对话。'); });
+    }).catch(error => { if (!cancelled) setError(String(error)); });
     return () => { cancelled = true; off(); };
   }, []);
 
@@ -116,14 +119,14 @@ export function AIChat({ settingsRevision, collapsed, tabbed, selection, modelCh
     if (commandBusy) return;
     setCommandBusy(true); setError('');
     try { const result = await action(); if (!result.ok) setError(result.message); }
-    catch { setError('操作失败，请重试。'); }
+    catch (error) { setError(String(error)); }
     finally { setCommandBusy(false); }
   }
   function edit(text: string) {
     editVersion.current++;
     setDraft(text); draftRef.current = text;
     if (current) void window.huanApp.ai.draft({ key: current.key, instanceId: current.instanceId }, text)
-      .catch(() => setError('草稿同步失败。'));
+      .catch(error => setError(String(error)));
   }
   function owner() { return { key: current!.key, instanceId: current!.instanceId }; }
 
@@ -146,6 +149,7 @@ export function AIChat({ settingsRevision, collapsed, tabbed, selection, modelCh
       <div className="ai-empty-icon"><Icon name="book" width="36" height="36" /></div>
       <h2>准备开始伴读</h2>
       <p>在线模式需要配置 API Key，也可切换离线使用。</p>
+      {error ? <p className="ai-error" role="alert">{error}</p> : null}
       <Button onClick={onConfigure}>配置 DeepSeek</Button>
     </div>
   </section>;
@@ -181,7 +185,7 @@ export function AIChat({ settingsRevision, collapsed, tabbed, selection, modelCh
       {current?.lastMetrics ? <ExecutionMetrics metrics={current.lastMetrics} label="上次请求用量" /> : null}
       <div className="ai-input-box ui-input-surface">
         <label className="visually-hidden" htmlFor="ai-question">向 AI 提问</label>
-        <textarea id="ai-question" placeholder={current?.entries.length ? '继续提问…' : '向 AI 提问…'} value={draft} maxLength={8000}
+        <textarea id="ai-question" placeholder={current?.entries.length ? '继续提问…' : '向 AI 提问…'} value={draft}
           disabled={!current || !configured} onChange={event => edit(event.target.value)}
           onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); send(); } }} />
         <div className="ai-actions">

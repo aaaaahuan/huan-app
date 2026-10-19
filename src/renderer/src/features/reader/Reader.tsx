@@ -2,7 +2,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import type { Bookmark } from '@shared/contracts/bookmarks';
 import { readerStateSchema, type ReaderAction, type ReaderState } from '@shared/contracts/browser';
-import { youtubeVideoId } from '@shared/contracts/subtitles';
 import { Button, IconButton } from '@renderer/components/Button';
 import { Input } from '@renderer/components/Input';
 import { Icon } from '@renderer/components/Icon';
@@ -23,18 +22,14 @@ export function Reader({ selected, suspended, layoutKey, children, leadingPanel,
   const activeId = useRef(id);
   const contextOperation = useRef<{ id: string; action: 'captureContext' | 'clearContext' } | undefined>(undefined);
   const current = state?.bookmarkId === id ? state : undefined;
-  const subtitlePage = !!youtubeVideoId(current?.url || selected?.url || '');
-  const contextUnavailable = !current?.pageId || suspended
-    || subtitlePage || current.contentStatus === 'unsupported' || current.contentStatus === 'empty';
-  const captureDisabled = contextUnavailable || current?.phase !== 'ready' || !!contextBusy
-    || current?.capturing || current?.contentStatus === 'loading';
+  const contextUnavailable = !current?.pageId || suspended;
+  const captureDisabled = contextUnavailable || !!contextBusy || current?.capturing;
   const clearDisabled = contextUnavailable || contextBusy === 'clearContext'
     || (!current?.capturing && contextBusy !== 'captureContext' && !current?.captureCount);
   const capturedAt = current?.capturedAt ? new Date(current.capturedAt) : undefined;
   const contextMessage = contextBusy === 'clearContext' ? '正在清空本页上下文…'
     : current?.capturing || contextBusy === 'captureContext' ? '正在提取当前页面上下文…'
-    : current?.captureMessage || (subtitlePage ? '视频内容请在「实时字幕」中获取。'
-      : current?.contentStatus === 'unsupported' ? '当前页面暂不支持正文提取。' : '');
+    : current?.captureMessage || '';
   function accept(value: ReaderState) {
     const parsed = readerStateSchema.safeParse(value);
     // IPC 返回值与事件可能交错，只接受更新的状态版本。
@@ -43,7 +38,7 @@ export function Reader({ selected, suspended, layoutKey, children, leadingPanel,
   }
   useEffect(() => {
     const unsubscribe = window.huanApp.browser.onState(accept);
-    void window.huanApp.browser.get().then(accept, () => setError('无法连接网页容器。'));
+    void window.huanApp.browser.get().then(accept, error => setError(String(error)));
     return unsubscribe;
   }, []);
   useEffect(() => {
@@ -53,8 +48,8 @@ export function Reader({ selected, suspended, layoutKey, children, leadingPanel,
     setContextBusy(undefined);
     setContextActionsOpen(false);
     setError('');
-    void window.huanApp.browser.select(id).then(value => { if (!cancelled) accept(value); }, () => {
-      if (!cancelled) setError('无法打开收藏，请重新选择。');
+    void window.huanApp.browser.select(id).then(value => { if (!cancelled) accept(value); }, error => {
+      if (!cancelled) setError(String(error));
     });
     return () => { cancelled = true; activeId.current = null; contextOperation.current = undefined; };
   }, [id]);
@@ -64,7 +59,7 @@ export function Reader({ selected, suspended, layoutKey, children, leadingPanel,
     function report() {
       const rect = element!.getBoundingClientRect();
       void window.huanApp.browser.layout({ x: rect.x, y: rect.y, width: rect.width, height: rect.height,
-        visible: !!id && !suspended }).catch(() => setError('网页区域定位失败，请重启应用。'));
+        visible: !!id && !suspended }).catch(error => setError(String(error)));
     }
     report();
     const observer = new ResizeObserver(report);
@@ -82,8 +77,8 @@ export function Reader({ selected, suspended, layoutKey, children, leadingPanel,
   function navigate(action: ReaderAction) {
     if (!id) return;
     setError('');
-    void window.huanApp.browser.action(id, action).then(accept, () => {
-      if (activeId.current === id) setError('页面操作失败，请重试。');
+    void window.huanApp.browser.action(id, action).then(accept, error => {
+      if (activeId.current === id) setError(String(error));
     });
   }
   async function contextAction(action: 'captureContext' | 'clearContext') {
@@ -96,9 +91,9 @@ export function Reader({ selected, suspended, layoutKey, children, leadingPanel,
     try {
       const value = await window.huanApp.browser[action](id, pageId);
       if (contextOperation.current === operation && activeId.current === id) accept(value);
-    } catch {
+    } catch (error) {
       if (contextOperation.current === operation && activeId.current === id)
-        setError(action === 'captureContext' ? '页面上下文提取失败，请重试。' : '未能清空本页上下文，请重试。');
+        setError(String(error));
     } finally {
       if (contextOperation.current === operation) { contextOperation.current = undefined; setContextBusy(undefined); }
     }
@@ -120,7 +115,7 @@ export function Reader({ selected, suspended, layoutKey, children, leadingPanel,
         <Button className="reader-capture" disabled={captureDisabled} aria-label="页面上下文提取"
           onClick={() => void contextAction('captureContext')}>
           {current?.capturing || contextBusy === 'captureContext' ? '提取中…' : '提取上下文'}</Button>
-        {selected && !subtitlePage ? <span className="reader-context-summary" title="保留的不同正文快照数量，重复采集不增加数量">
+        {selected ? <span className="reader-context-summary" title="保留的不同正文快照数量，重复采集不增加数量">
           已采集 {current?.captureCount ?? 0} 次{capturedAt ? <time className="reader-capture-time" dateTime={capturedAt.toISOString()}
             title={capturedAt.toLocaleString('zh-CN')}> · {capturedAt.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</time> : null}
         </span> : null}

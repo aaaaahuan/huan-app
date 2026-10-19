@@ -41,7 +41,7 @@ export function registerModelControls(window: BrowserWindow, settings: ReturnTyp
     assertTrusted(event);
     return result(async () => {
       if (testing) throw new Error('连接测试正在进行。');
-      const supplied = z.string().max(512).parse(input).trim();
+      const supplied = z.string().parse(input).trim();
       testing = true;
       try {
         const answer = await dialog.showMessageBox(window, { type: 'question', buttons: ['取消', '测试连接'], defaultId: 0,
@@ -55,9 +55,10 @@ export function registerModelControls(window: BrowserWindow, settings: ReturnTyp
             runId, prompt: 'Reply OK.', toolContext: {}
           }, { signal: AbortSignal.timeout(20000) });
           if (execution.status === 'completed') return '连接成功。测试没有保存未保存的 API Key。';
-          if (execution.failure?.httpStatus)
-            throw new Error('DeepSeek 返回 HTTP ' + execution.failure.httpStatus + '，请检查 Key、额度或稍后再试。');
-          throw new Error('无法连接 DeepSeek，请检查网络；未自动重试。');
+          const final = execution.messages.filter(message => message.role === 'assistant').at(-1);
+          const detail = final?.errorMessage || execution.warning || execution.failure?.code || execution.status;
+          throw new Error([execution.failure?.httpStatus ? `DeepSeek HTTP ${execution.failure.httpStatus}` : 'DeepSeek 连接失败',
+            detail].join('：'));
         } finally {
           keyTestKeys.delete(runId);
         }

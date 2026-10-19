@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, open, rename, unlink } from 'node:fs/promises';
 import { dirname, extname, isAbsolute, join } from 'node:path';
 import { z } from 'zod';
-import { PLATFORMS, type Platform, type Settings, type SettingsResult } from '@shared/contracts/settings';
+import { PLATFORMS, type Settings, type SettingsResult } from '@shared/contracts/settings';
 import type { BookmarkLibrary, BookmarkSource, SetReadInput, SetReadResult } from '@shared/contracts/bookmarks';
 import { bookmarkId, parseBookmarks, updateBookmarkRead, validBookmarkUrl } from './markdown';
 
@@ -20,38 +20,24 @@ const cacheSchema = z.object({ version: z.literal(1), sources: z.object({
 }) });
 type Cache = z.infer<typeof cacheSchema>;
 
-// 限制读取大小，并对比前后元信息；尽量避免将编辑中的文件作为完整结果发布。
-async function readBounded(path: string, limit: number, preserveBOM = false): Promise<string> {
+// 对比前后元信息，避免将编辑中的文件作为完整结果发布。
+async function readText(path: string, preserveBOM = false): Promise<string> {
   const file = await open(path, 'r');
   try {
     const before = await file.stat();
-    if (!before.isFile() || before.size > limit) throw new Error(`不是普通文件，或文件超过 ${limit / 1024 / 1024} MB。`);
-    // 多读一个字节用于发现文件增长，循环处理底层读取可能只返回部分数据的情况。
-    const bytes = Buffer.alloc(Math.min(before.size + 1, limit + 1));
-    let length = 0;
-    while (length < bytes.length) {
-      const result = await file.read(bytes, length, bytes.length - length, null);
-      if (!result.bytesRead) break;
-      length += result.bytesRead;
-    }
+    if (!before.isFile()) throw new Error('只读取普通文件。');
+    const bytes = await file.readFile();
     const after = await file.stat();
-    if (before.mtimeMs !== after.mtimeMs || before.size !== after.size || length !== before.size)
+    if (before.mtimeMs !== after.mtimeMs || before.size !== after.size || bytes.length !== before.size)
       throw new Error('读取期间文件发生变化，本轮未更新。');
     // 非法编码直接报错，避免用替换字符生成错误链接或标题。
-    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: preserveBOM }).decode(bytes.subarray(0, length));
+    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: preserveBOM }).decode(bytes);
   } finally { await file.close(); }
 }
 
 async function readSource(path: string): Promise<string> {
   if (!isAbsolute(path) || !['.md', '.markdown'].includes(extname(path).toLowerCase())) throw new Error('未配置有效的 Markdown 绝对路径。');
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    // 超时只结束本轮等待，不取消底层 I/O；迟到结果不会再写入列表或副本。
-    return await Promise.race([
-      readBounded(path, 8 * 1024 * 1024, true),
-      new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(new Error('读取超时，请确认 iCloud 文件已下载到本机。')), 10_000); })
-    ]);
-  } finally { clearTimeout(timeout); }
+  return readText(path, true);
 }
 
 export function createBookmarkLibrary(directory: string, loadSettings: () => Promise<SettingsResult>) {
@@ -69,7 +55,6 @@ export function createBookmarkLibrary(directory: string, loadSettings: () => Pro
     const temporary = join(cacheDirectory, `.last-success-${randomUUID()}.tmp`);
     try {
       const text = JSON.stringify(next);
-      if (Buffer.byteLength(text) > 64 * 1024 * 1024) throw new Error('本地副本超过 64 MB。');
       const file = await open(temporary, 'wx', 0o600);
       try { await file.writeFile(text, 'utf8'); await file.sync(); }
       finally { await file.close(); }
@@ -78,9 +63,9 @@ export function createBookmarkLibrary(directory: string, loadSettings: () => Pro
   }
 
   async function apply(settings: Settings) {
-    // 先组装候选结果，成功落盘后才更新有效副本；失败来源仍保留旧记录。
+    // 源文件读取结果直接发布；副本保存失败仅提示，失败来源仍保留旧记录。
     const next: Cache = { version: 1, sources: { ...cache.sources } };
-    const successful = new Set<Platform>();
+    let refreshed = false;
     const sources: BookmarkSource[] = [];
     for (const platform of PLATFORMS) {
       const config = settings.sources[platform];
@@ -95,7 +80,7 @@ export function createBookmarkLibrary(directory: string, loadSettings: () => Pro
         const parsed = parseBookmarks(await readSource(config.path), platform);
         const snapshot = { path: config.path, readAt: new Date().toISOString(), ...parsed };
         next.sources[platform] = snapshot;
-        successful.add(platform);
+        refreshed = true;
         sources.push({ ...base, ...snapshot, state: 'ready' });
       } catch (error) {
         const snapshot = cache.sources[platform];
@@ -107,20 +92,13 @@ export function createBookmarkLibrary(directory: string, loadSettings: () => Pro
       }
     }
     let warning = cacheWarning;
-    if (successful.size) {
-      try { await persist(next); cache = next; cacheWarning = ''; warning = ''; }
+    if (refreshed) {
+      cache = next;
+      try { await persist(next); cacheWarning = ''; warning = ''; }
       catch (error) {
         console.error('Bookmark snapshot save failed', error);
-        warning = '本地副本保存失败，本轮成功读取的数据未发布。请检查磁盘空间和 ~/.huan-app/bookmarks 的权限。';
-        // 副本无法保存时撤回本轮新数据，避免界面与“最近成功副本”不一致。
-        for (let i = 0; i < sources.length; i++) {
-          const source = sources[i];
-          if (!successful.has(source.platform)) continue;
-          const old = cache.sources[source.platform];
-          sources[i] = old?.path === source.path
-            ? { ...source, ...old, state: 'cached', message: warning }
-            : { ...source, items: [], readAt: null, duplicates: 0, state: 'error', message: warning };
-        }
+        cacheWarning = `本地副本保存失败：${error instanceof Error ? error.message : String(error)}`;
+        warning = cacheWarning;
       }
     }
     current = settings;
@@ -130,7 +108,7 @@ export function createBookmarkLibrary(directory: string, loadSettings: () => Pro
 
   async function initialize() {
     try {
-      cache = cacheSchema.parse(JSON.parse(await readBounded(cachePath, 64 * 1024 * 1024)));
+      cache = cacheSchema.parse(JSON.parse(await readText(cachePath)));
       // 除结构外，还核对平台、稳定 ID 和重复项，拒绝不一致的缓存身份。
       for (const platform of PLATFORMS) {
         const seen = new Set<string>();
@@ -141,7 +119,8 @@ export function createBookmarkLibrary(directory: string, loadSettings: () => Pro
       }
     } catch (error) {
       cache = { version: 1, sources: {} };
-      if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') cacheWarning = '本地副本无效或不可读；将尝试原始文件，不使用损坏副本。';
+      if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT')
+        cacheWarning = `本地副本无效或不可读：${error instanceof Error ? error.message : String(error)} 将尝试原始文件。`;
     }
     const result = await loadSettings();
     if (!result.ok) { state = { sources: [], warning: result.message }; return state; }
@@ -168,7 +147,6 @@ export function createBookmarkLibrary(directory: string, loadSettings: () => Pro
         if (!before.isFile()) throw new Error('只允许修改普通 Markdown 文件，不写入目录或符号链接。');
         const original = await readSource(source.path);
         const updated = updateBookmarkRead(original, source.platform, input.id, input.read);
-        if (Buffer.byteLength(updated) > 8 * 1024 * 1024) throw new Error('更新后的笔记超过 8 MB，未写入。');
         const parsed = parseBookmarks(updated, source.platform);
         if (updated !== original) {
           const temporary = join(dirname(source.path), `.huan-read-${randomUUID()}.tmp`);
@@ -186,10 +164,11 @@ export function createBookmarkLibrary(directory: string, loadSettings: () => Pro
         const snapshot = { path: source.path, readAt: new Date().toISOString(), ...parsed };
         const next: Cache = { version: 1, sources: { ...cache.sources, [source.platform]: snapshot } };
         let warning = '';
-        try { await persist(next); cache = next; cacheWarning = ''; }
-        catch {
+        cache = next;
+        try { await persist(next); cacheWarning = ''; }
+        catch (error) {
           // 原笔记已经提交，副本失败不能谎报“未保存”或把界面回退成旧状态。
-          warning = '已读状态已写入 Obsidian，但本地副本更新失败，请检查磁盘权限。';
+          warning = `已读状态已写入 Obsidian，但本地副本更新失败：${error instanceof Error ? error.message : String(error)}`;
           cacheWarning = warning;
         }
         state = { sources: state.sources.map(item => item.platform === source.platform ? { ...source, ...snapshot } : item), warning };

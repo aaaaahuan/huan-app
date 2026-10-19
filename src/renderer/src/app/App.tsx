@@ -52,7 +52,7 @@ export function App() {
       if (cancelled || version !== modelVersion.current) return;
       if (result.ok) setModelSelection(result.value);
       else setFeedback(result.message);
-    }).catch(() => { if (!cancelled && version === modelVersion.current) setFeedback('无法读取模型配置。'); });
+    }).catch(error => { if (!cancelled && version === modelVersion.current) setFeedback(String(error)); });
     return () => { cancelled = true; };
   }, [revision]);
 
@@ -64,7 +64,7 @@ export function App() {
       const result = await window.huanApp.ai.selectModel(selection);
       if (result.ok) setModelSelection(result.value);
       else setFeedback(result.message);
-    } catch { setFeedback('模型切换失败，请重试。'); }
+    } catch (error) { setFeedback(String(error)); }
     finally { modelPending.current = false; setModelSaving(false); }
   }
 
@@ -78,7 +78,7 @@ export function App() {
       setLibrary(value);
       // 只清除已不存在的选择，不因数据更新自动切到第一条。
       setSelectedId((id) => value.sources.some((source) => source.items.some((item) => item.id === id)) ? id : null);
-    }, () => { if (!cancelled) setError('无法取得收藏列表，请完全退出应用后重试。'); }
+    }, error => { if (!cancelled) setError(String(error)); }
     ).finally(() => { if (!cancelled) setLoading(false); });
     // 忽略旧请求的迟到结果，避免覆盖设置更新后的列表或已卸载组件。
     return () => { cancelled = true; };
@@ -91,11 +91,11 @@ export function App() {
   async function openSettings(tab: 'sources' | 'ai' | 'subtitles' = 'sources') {
     // 原生视图不受 DOM z-index 约束，确认隐藏后才能打开设置对话框。
     try { await window.huanApp.browser.suspend(true); setFeedback(''); setSettingsTab(tab); setSettingsOpen(true); }
-    catch { setError('无法隐藏网页容器，请重试打开设置。'); }
+    catch (error) { setError(String(error)); }
   }
   function closeSettings() {
     setSettingsOpen(false);
-    void window.huanApp.browser.suspend(activePage !== 'reading').catch(() => setFeedback('无法恢复网页容器，请重启应用。'));
+    void window.huanApp.browser.suspend(activePage !== 'reading').catch(error => setFeedback(String(error)));
   }
   async function navigate(page: SystemPage) {
     if (page === activePage || navigationPending.current) return;
@@ -104,7 +104,7 @@ export function App() {
       // 原生网页不受 DOM hidden/z-index 约束，隐藏确认后再展示其他系统。
       await window.huanApp.browser.suspend(page !== 'reading' || settingsOpen);
       setActivePage(page);
-    } catch { setFeedback('无法切换系统，请重试。'); }
+    } catch (error) { setFeedback(String(error)); }
     finally { navigationPending.current = false; setNavigationBusy(false); }
   }
   async function toggleRead(item: Bookmark) {
@@ -114,7 +114,7 @@ export function App() {
       const result = await window.huanApp.bookmarks.setRead({ id: item.id, read: !item.read });
       if (result.ok) setLibrary(result.library);
       else setFeedback(result.message);
-    } catch { setFeedback('未能确认已读状态写入结果，请重新加载后核对。'); }
+    } catch (error) { setFeedback(`未能确认已读状态写入结果：${String(error)}`); }
     finally { readPending.current = false; setReadBusy(false); }
   }
   function togglePanel(side: PanelSide) {

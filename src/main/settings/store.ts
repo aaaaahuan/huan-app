@@ -17,15 +17,14 @@ export function createSettingsStore(directory: string) {
   // 只有文件不存在时返回默认值；损坏或未知版本必须报错，不能自动覆盖。
   async function load(): Promise<SettingsResult> {
     try {
-      if ((await stat(path)).size > 64 * 1024) throw new Error('Configuration too large');
       const text = await readFile(path, 'utf8');
       const parsed = settingsSchema.safeParse(JSON.parse(text));
-      if (!parsed.success) throw new Error('Unsupported configuration');
+      if (!parsed.success) throw parsed.error;
       return { ok: true, settings: parsed.data, revision: digest(text) };
     } catch (error) {
       if (missing(error)) return { ok: true, settings: defaultSettings(), revision: null };
       console.error('Settings load failed', error);
-      return { ok: false, message: '无法读取设置，文件可能损坏、版本不支持或没有读取权限。原文件未修改，请检查 ~/.huan-app/settings.json 后重试。' };
+      return { ok: false, message: `无法读取设置：${error instanceof Error ? error.message : String(error)}` };
     }
   }
   
@@ -34,13 +33,14 @@ export function createSettingsStore(directory: string) {
     // IPC 参数在运行时并不可信，不能只依靠 TypeScript 类型声明。
     if (saving) return { ok: false, message: '正在保存设置，请稍后重试。' };
     const parsed = settingsSchema.safeParse(input);
-    if (!parsed.success || !(revision === null || typeof revision === 'string'))
-      return { ok: false, message: '设置格式不正确，请重新打开设置。' };
+    if (!parsed.success) return { ok: false, message: parsed.error.message };
+    if (!(revision === null || typeof revision === 'string'))
+      return { ok: false, message: '设置修订标识必须是字符串或 null。' };
     if (keyChange !== undefined && keyChange !== null &&
-      (typeof keyChange !== 'string' || !/^[\x21-\x7e]{8,512}$/.test(keyChange)))
+      (typeof keyChange !== 'string' || !/^[\x21-\x7e]+$/.test(keyChange)))
       return { ok: false, message: 'API Key 格式不正确，请检查是否包含空格或换行。' };
     if (subtitleKeyChange !== undefined && subtitleKeyChange !== null &&
-      (typeof subtitleKeyChange !== 'string' || !/^[\x21-\x7e]{8,512}$/.test(subtitleKeyChange)))
+      (typeof subtitleKeyChange !== 'string' || !/^[\x21-\x7e]+$/.test(subtitleKeyChange)))
       return { ok: false, message: 'Transcript Guru Key 格式不正确，请检查是否包含空格或换行。' };
     saving = true;
     let createdKey: string | undefined;
@@ -59,16 +59,16 @@ export function createSettingsStore(directory: string) {
         // 停用来源可保留暂时离线的路径，启用时才要求文件当前存在且可读。
         if (!source.enabled) continue;
         try {
-          if (!(await stat(source.path)).isFile()) throw new Error('Not a file');
+          if (!(await stat(source.path)).isFile()) throw new Error('请选择普通 Markdown 文件。');
           await access(source.path, constants.R_OK);
-        } catch { fields[platform] = '文件不存在或不可读，请重新选择，或停用此来源。'; }
+        } catch (error) { fields[platform] = error instanceof Error ? error.message : String(error); }
       }
       if (Object.keys(fields).length) return { ok: false, message: '请修正标出的来源后再保存。', fields };
       if (parsed.data.notesPath) {
         try {
-          if (!isAbsolute(parsed.data.notesPath) || !(await stat(parsed.data.notesPath)).isDirectory()) throw new Error('Invalid directory');
+          if (!isAbsolute(parsed.data.notesPath) || !(await stat(parsed.data.notesPath)).isDirectory()) throw new Error('笔记库必须是本机目录的绝对路径。');
           await access(parsed.data.notesPath, constants.R_OK | constants.W_OK);
-        } catch { return { ok: false, message: '笔记库必须是本机可读写目录的绝对路径。' }; }
+        } catch (error) { return { ok: false, message: error instanceof Error ? error.message : String(error) }; }
       }
       const current = await load();
       // 这是乐观冲突检查，不是对任意外部编辑器加文件锁。
@@ -96,7 +96,7 @@ export function createSettingsStore(directory: string) {
       return { ok: true, settings: parsed.data, revision: digest(text) };
     } catch (error) {
       console.error('Settings save failed', error);
-      return { ok: false, message: '保存失败，请检查磁盘空间和 ~/.huan-app 的写入权限。原配置保留，可重试。' };
+      return { ok: false, message: `保存失败：${error instanceof Error ? error.message : String(error)}` };
     } finally {
       await unlink(temporary).catch(() => undefined);
       if (createdKey && !committed) await credentials.remove(createdKey);

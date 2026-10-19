@@ -4,8 +4,8 @@ import type { ModelSelection } from './models';
 import type { ExecutionMetrics } from './ai-execution';
 
 export const AI_MODEL_NAME = 'DeepSeek Flash';
-export const ownerSchema = z.object({ key: z.string().min(1).max(128), instanceId: z.uuid() }).strict();
-export const sendSchema = ownerSchema.extend({ requestId: z.uuid(), text: z.string().trim().min(1).max(8000) });
+export const ownerSchema = z.object({ key: z.string().min(1), instanceId: z.uuid() }).strict();
+export const sendSchema = ownerSchema.extend({ requestId: z.uuid(), text: z.string().trim().min(1) });
 export type Owner = z.infer<typeof ownerSchema>;
 export type SendInput = z.infer<typeof sendSchema>;
 export type AIResult<T = undefined> = { ok: true; value: T } | { ok: false; message: string };

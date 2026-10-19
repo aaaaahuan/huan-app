@@ -40,7 +40,8 @@ function assistantText(result: ExecutionResult) {
 
 function outcome(result: ExecutionResult, model: ModelIdentity): Pick<ChatEntry, 'status' | 'error'> {
   const final = finalAssistant(result);
-  const raw = final?.errorMessage ?? result.failure?.code ?? '';
+  const raw = [result.failure?.httpStatus ? `HTTP ${result.failure.httpStatus}` : '',
+    final?.errorMessage || result.warning || result.failure?.code || ''].filter(Boolean).join('：');
   if (result.status === 'interrupted')
     return { status: 'failed', error: '原生会话中断，后续对话已切换到新会话；此前聊天仍显示，但不会进入模型上下文。' };
   if (result.status === 'aborted' || final?.stopReason === 'aborted') return { status: 'stopped' };
@@ -51,12 +52,7 @@ function outcome(result: ExecutionResult, model: ModelIdentity): Pick<ChatEntry,
   if (result.status === 'declined') return { status: 'failed', error: '请求未被模型受理。' };
   if (model.mode === 'offline')
     return { status: 'failed', error: raw || '本地模型请求失败，未自动重发。' };
-  const error = /401|403|authentication|api.?key/i.test(raw)
-    ? 'API Key 无效或没有权限，请检查设置。'
-    : /429|rate.?limit/i.test(raw)
-      ? 'DeepSeek 请求限流，请稍后手动重试。'
-      : '模型请求失败；服务商可能已处理或计费，未自动重发。';
-  return { status: 'failed', error };
+  return { status: 'failed', error: raw || '模型请求失败；服务商可能已处理或计费，未自动重发。' };
 }
 
 // 对话只管理 UI 所属权和授权；消息与工具执行由共享的 AgentHandle 管理。
@@ -203,7 +199,12 @@ export function createConversations(
               signal.throwIfAborted();
               owner.privateHistory = false;
             }
-            const notesPath = await getNotesPath();
+            let notesPath = '';
+            try { notesPath = await getNotesPath(); }
+            catch (error) {
+              signal.throwIfAborted();
+              toolError = `笔记工具加载失败：${errorMessage(error)}`;
+            }
             signal.throwIfAborted();
             let context: PageContext | undefined;
             try { context = await provideContext?.(signal, selectedModel, recordApprovalDecision); }
@@ -223,8 +224,8 @@ export function createConversations(
             };
             const prepared = await prepareReadingInput(input.text, scope);
             tools = prepared.tools?.map(tool => tool.name) ?? [];
-            toolError = prepared.toolError;
-            return prepared;
+            toolError ??= prepared.toolError;
+            return { ...prepared, toolError };
           }
         }, { signal: run.controller.signal, onEvent });
         if (entry && model) {

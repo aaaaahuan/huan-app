@@ -72,8 +72,8 @@ export function AlgorithmNoteEditor({ problem, active, blocked, onClose, onBusyC
         // 仅改名或移动不构成正文冲突，也不丢弃正在编辑的草稿。
         noteRef.current = result.note; setNote(result.note); setConflict(undefined); setMessage('');
       }
-    } catch {
-      if (mounted.current && requestVersion === version.current) setMessage('无法读取心得，草稿已保留。请刷新重试。');
+    } catch (error) {
+      if (mounted.current && requestVersion === version.current) setMessage(`无法读取心得，草稿已保留：${String(error)}`);
     } finally {
       checking.current = false;
       if (mounted.current && !pending.current) {
@@ -118,8 +118,8 @@ export function AlgorithmNoteEditor({ problem, active, blocked, onClose, onBusyC
         setMessage(result.message);
         if (result.kind === 'conflict') setConflict(result.note);
       }
-    } catch {
-      if (mounted.current) setMessage('未能确认保存结果，草稿已保留。请刷新核对后再保存。');
+    } catch (error) {
+      if (mounted.current) setMessage(`未能确认保存结果，草稿已保留：${String(error)}`);
       recheckNeeded.current = true;
     } finally { finish(); }
   }
@@ -150,7 +150,7 @@ export function AlgorithmNoteEditor({ problem, active, blocked, onClose, onBusyC
       if (!mounted.current) return;
       if (result.ok) setFeedback(`草稿副本已保存：${result.path}。正式心得未修改。`);
       else setMessage(result.message);
-    } catch { if (mounted.current) setMessage('未能确认副本保存结果，草稿已保留，请检查冲突副本目录。'); }
+    } catch (error) { if (mounted.current) setMessage(`未能确认副本保存结果，草稿已保留：${String(error)}`); }
     finally { finish(); }
   }
   async function openObsidian() {
@@ -159,7 +159,7 @@ export function AlgorithmNoteEditor({ problem, active, blocked, onClose, onBusyC
     try {
       const result = await window.huanApp.algorithms.openNote(problem.id);
       if (!result.ok && mounted.current) setMessage(result.message);
-    } catch { if (mounted.current) setMessage('无法打开 Obsidian，请确认已安装并运行过。'); }
+    } catch (error) { if (mounted.current) setMessage(String(error)); }
     finally { finish(); }
   }
   async function openLink(url: string) {
@@ -167,7 +167,7 @@ export function AlgorithmNoteEditor({ problem, active, blocked, onClose, onBusyC
     try {
       const result = await window.huanApp.algorithms.openNoteLink(url);
       if (!result.ok && mounted.current) setMessage(result.message);
-    } catch { if (mounted.current) setMessage('无法打开链接，请重试。'); }
+    } catch (error) { if (mounted.current) setMessage(String(error)); }
   }
 
   const disabled = busy || blocked;

@@ -5,45 +5,22 @@ import { dirname, join } from 'node:path';
 import type { AlgorithmLibrary, SetCompletedInput, SetCompletedResult } from '@shared/contracts/algorithms';
 import { parseAlgorithms, updateAlgorithmCompletion } from './markdown';
 
-const LIMIT = 8 * 1024 * 1024;
-const message = (error: unknown) => {
-  const code = (error as NodeJS.ErrnoException)?.code;
-  if (code === 'ENOENT') return '未找到 leetcode-raw.md，请确认笔记已同步到本机。';
-  if (code === 'EACCES' || code === 'EPERM') return '无法访问笔记，请检查文件权限和 iCloud 下载状态。';
-  return error instanceof Error ? error.message : '笔记操作失败，请刷新后重试。';
-};
+const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 const sameFile = (a: Stats, b: Stats) => a.dev === b.dev && a.ino === b.ino && a.size === b.size &&
   a.mtimeMs === b.mtimeMs && a.ctimeMs === b.ctimeMs;
 
-async function readBounded(path: string) {
+async function readSource(path: string) {
   const source = await lstat(path);
   if (!source.isFile()) throw new Error('只读取普通 Markdown 文件，不使用目录或符号链接。');
   const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const before = await file.stat();
-    if (!sameFile(source, before) || !before.isFile() || before.size > LIMIT)
-      throw new Error('笔记读取期间发生变化，或文件超过 8 MB。');
-    const bytes = Buffer.alloc(before.size + 1);
-    let length = 0;
-    while (length < bytes.length) {
-      const result = await file.read(bytes, length, bytes.length - length, null);
-      if (!result.bytesRead) break;
-      length += result.bytesRead;
-    }
-    if (length !== before.size || !sameFile(before, await file.stat()) || !sameFile(before, await lstat(path)))
+    if (!sameFile(source, before) || !before.isFile()) throw new Error('笔记读取期间发生变化，请刷新后重试。');
+    const bytes = await file.readFile();
+    if (bytes.length !== before.size || !sameFile(before, await file.stat()) || !sameFile(before, await lstat(path)))
       throw new Error('笔记读取期间发生变化，请刷新后重试。');
-    return { text: new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes.subarray(0, length)), stat: before };
+    return { text: new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes), stat: before };
   } finally { await file.close(); }
-}
-
-async function readSource(path: string) {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    // 超时不取消底层 I/O，但迟到结果不会发布到界面或参与写入。
-    return await Promise.race([readBounded(path), new Promise<never>((_, reject) => {
-      timeout = setTimeout(() => reject(new Error('读取超时，请确认 iCloud 文件已下载到本机。')), 10_000);
-    })]);
-  } finally { clearTimeout(timeout); }
 }
 
 export function createAlgorithmLibrary(path: string) {
@@ -72,7 +49,6 @@ export function createAlgorithmLibrary(path: string) {
         if (state.state !== 'ready') throw new Error('笔记尚未正常读取，请先刷新笔记再勾选。');
         const original = await readSource(path);
         const updated = updateAlgorithmCompletion(original.text, input.id, input.completed, input.expectedCompleted);
-        if (Buffer.byteLength(updated) > LIMIT) throw new Error('更新后的笔记超过 8 MB，未写入。');
         const items = parseAlgorithms(updated);
         if (updated !== original.text) {
           const temporary = join(dirname(path), `.huan-algorithm-${randomUUID()}.tmp`);

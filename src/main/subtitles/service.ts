@@ -31,20 +31,8 @@ export function createSubtitleService(initial: Settings, currentVideo: () => str
       return Promise.resolve({ ok: false, code: 'VIDEO_CHANGED', message: '当前页面的视频已变化，请重新选择。' });
     let entry = entries.get(videoId);
     if (!entry) {
-      if (entries.size >= 20) {
-        const disposable = [...entries].find(([id, value]) => id !== state.videoId && !value.promise &&
-          (value.transcript || (!value.job && !value.submissionUnknown)));
-        if (!disposable) {
-          const error = { code: 'CACHE_CAPACITY', message: '字幕缓存已满，未丢弃可续查或未知任务。请完全退出应用后重试。' };
-          state = { ...state, phase: 'error', error }; notify();
-          return Promise.resolve({ ok: false, ...error });
-        }
-        entries.delete(disposable[0]);
-      }
       entry = {}; entries.set(videoId, entry);
     }
-    // 最近使用的结果移到末尾，不淘汰当前、在途、可续查或提交未知记录。
-    entries.delete(videoId); entries.set(videoId, entry);
     if (entry.transcript && entry.job) {
       publishEntry(); return Promise.resolve({ ok: true, value: { job: entry.job, transcript: entry.transcript } });
     }
@@ -53,18 +41,17 @@ export function createSubtitleService(initial: Settings, currentVideo: () => str
     const target = entry, credential = config.credentialId, consent = config.consentVersion;
     const controller = new AbortController();
     target.controller = controller;
-    const deadline = setTimeout(() => controller.abort(), 120000);
     function assertCurrentCredential() {
       if (!sameEntry(videoId, target, controller) || credential !== config.credentialId)
         throw new SubtitleFailure('CREDENTIAL_CHANGED', '字幕凭据已变化，旧请求已停止。', true);
-      if (controller.signal.aborted) throw new SubtitleFailure('CANCELLED', '字幕获取已取消或等待超时；已受理的服务端任务可能仍在运行。');
+      if (controller.signal.aborted) throw new SubtitleFailure('CANCELLED', '字幕获取已取消；已受理的服务端任务可能仍在运行。');
     }
     target.promise = Promise.resolve().then(async (): Promise<SubtitleResult<SubtitleDocument>> => {
       if (!credential) throw new SubtitleFailure('KEY_MISSING', '配置 Transcript Guru 后可获取视频字幕。', true);
       if (consent < 1) throw new SubtitleFailure('CONSENT_REQUIRED', '请在字幕服务设置中重新保存并授权 Key。', true);
       let key: string;
       try { key = await readKey(credential); }
-      catch { throw new SubtitleFailure('KEY_DECRYPT_FAILED', '无法解密字幕服务 Key，请在设置中重新填写。', true); }
+      catch (error) { throw new SubtitleFailure('KEY_DECRYPT_FAILED', `无法读取字幕服务 Key：${subtitleFailure(error).message}`, true); }
       assertCurrentCredential();
       const replacing = !!((target.job && target.credentialId !== credential) || target.submissionUnknown);
       if (replacing) {
@@ -99,14 +86,13 @@ export function createSubtitleService(initial: Settings, currentVideo: () => str
       const failure = subtitleFailure(error);
       if (sameEntry(videoId, target, controller)) {
         target.error = target.submissionUnknown
-          ? { code: 'SUBMISSION_UNKNOWN', message: '旧提交结果仍未知；未自动新建任务，重新提交必须再次确认。' }
+          ? { code: 'SUBMISSION_UNKNOWN', message: `${failure.message} 旧提交结果仍未知；重新提交需确认，避免重复任务和费用。`, retryAfter: failure.retryAfter }
           : { code: failure.code, message: failure.message, retryAfter: failure.retryAfter };
         console.warn('[Subtitles] failed', { videoId, jobId: target.job?.id, code: target.error?.code });
         return { ok: false as const, ...target.error! };
       }
       return { ok: false as const, code: failure.code, message: failure.message, retryAfter: failure.retryAfter };
     }).finally(() => {
-      clearTimeout(deadline);
       if (!sameEntry(videoId, target, controller)) return;
       target.promise = undefined; target.controller = undefined;
       if (state.videoId === videoId) publishEntry();
@@ -126,7 +112,6 @@ export function createSubtitleService(initial: Settings, currentVideo: () => str
       if (!credentialId) return Promise.resolve({ credentialId, phase: 'unavailable', message: '请先保存字幕服务 Key。' });
       if (usageRequest?.credentialId === credentialId) return usageRequest.promise;
       const controller = new AbortController();
-      const deadline = setTimeout(() => controller.abort(), 120000);
       const request = { credentialId, controller, promise: Promise.resolve().then(async () => {
         const key = await readKey(credentialId);
         const result = await provider.usage(key, credentialId, controller.signal);
@@ -137,7 +122,7 @@ export function createSubtitleService(initial: Settings, currentVideo: () => str
       }).catch(error => ({ credentialId, phase: 'error' as const, message: subtitleFailure(error).message,
         stale: lastUsage?.credentialId === credentialId && !!lastUsage.data,
         data: lastUsage?.credentialId === credentialId ? lastUsage.data : undefined
-      })).finally(() => { clearTimeout(deadline); if (usageRequest === request) usageRequest = undefined; }) };
+      })).finally(() => { if (usageRequest === request) usageRequest = undefined; }) };
       usageRequest = request;
       return request.promise;
     },

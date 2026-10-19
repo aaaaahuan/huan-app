@@ -5,23 +5,18 @@ import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node
 import { isMap, parseDocument, stringify } from 'yaml';
 import type { AlgorithmNote, AlgorithmProblem, SaveAlgorithmNoteResult } from '@shared/contracts/algorithms';
 
-const LIMIT = 1024 * 1024;
 const missing = (error: unknown) => (error as NodeJS.ErrnoException)?.code === 'ENOENT';
 const digest = (text: string) => createHash('sha256').update(text).digest('hex');
 const sameFile = (a: Stats, b: Stats) => a.dev === b.dev && a.ino === b.ino && a.size === b.size &&
   a.mtimeMs === b.mtimeMs && a.ctimeMs === b.ctimeMs;
-export const noteError = (error: unknown) => {
-  const code = (error as NodeJS.ErrnoException)?.code;
-  if (code === 'EACCES' || code === 'EPERM') return '无法读写心得，请检查目录权限及 iCloud 下载状态。';
-  return error instanceof Error ? error.message : '心得操作失败，请重试。';
-};
+export const noteError = (error: unknown) => error instanceof Error ? error.message : String(error);
 
 function frontmatter(content: string) {
   const match = /^(?:\uFEFF)?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(content);
   if (!match) return undefined;
-  if (match[1].length > 16 * 1024) throw new Error('心得的 YAML 属性超过 16 KB。');
   const document = parseDocument(match[1], { schema: 'core', uniqueKeys: true });
-  if (document.errors.length || !isMap(document.contents)) throw new Error('心得的 YAML 属性格式无效，请在 Obsidian 中修正。');
+  if (document.errors.length) throw new Error(document.errors.map(error => error.message).join('\n'));
+  if (!isMap(document.contents)) throw new Error('心得的 YAML 属性必须是键值映射。');
   return { document, body: content.slice(match[0].length), bom: content.startsWith('\uFEFF') ? '\uFEFF' : '' };
 }
 
@@ -34,7 +29,7 @@ function keyOf(content: string): string | undefined {
 
 function safeName(value: string) {
   const printable = Array.from(value.normalize('NFC'), character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127 ? '-' : character).join('');
-  const name = printable.replace(/[/\\:*?"<>|]/g, '-').replace(/^\.+|[. ]+$/g, '').trim().slice(0, 80);
+  const name = printable.replace(/[/\\:*?"<>|]/g, '-').replace(/^\.+|[. ]+$/g, '').trim();
   return name || '未命名';
 }
 
@@ -96,58 +91,37 @@ export function createAlgorithmNotes(directory: string, changed: () => void) {
     }
   }
 
-  async function readBounded(target: string) {
+  async function read(target: string) {
     await checkParents(target);
     const source = await lstat(target);
-    if (!source.isFile() || source.size > LIMIT) throw new Error('只支持不超过 1 MB 的普通 Markdown 心得，不读取符号链接。');
+    if (!source.isFile()) throw new Error('只读取普通 Markdown 心得，不读取符号链接。');
     const file = await open(target, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
       const before = await file.stat();
       if (!sameFile(source, before)) throw new Error('心得读取期间发生变化，请重试。');
-      const bytes = Buffer.alloc(before.size + 1);
-      let length = 0;
-      while (length < bytes.length) {
-        const result = await file.read(bytes, length, bytes.length - length, null);
-        if (!result.bytesRead) break;
-        length += result.bytesRead;
-      }
-      if (length !== before.size || !sameFile(before, await file.stat()) || !sameFile(before, await lstat(target)))
+      const bytes = await file.readFile();
+      if (bytes.length !== before.size || !sameFile(before, await file.stat()) || !sameFile(before, await lstat(target)))
         throw new Error('心得读取期间发生变化，请重试。');
-      return { content: new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes.subarray(0, length)), stat: before };
+      return { content: new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes), stat: before };
     } finally { await file.close(); }
-  }
-
-  async function read(target: string) {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      return await Promise.race([readBounded(target), new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error('心得读取超时，请确认 iCloud 文件已下载到本机。')), 10_000);
-      })]);
-    } finally { clearTimeout(timer); }
   }
 
   async function scan() {
     await checkParents(join(root, 'check.md'));
     const index = new Map<string, { path: string; content: string; stat: Stats }>();
-    let entries = 0;
-    let bytes = 0;
-    async function visit(directory: string, depth: number) {
-      if (depth > 10) throw new Error('心得目录层级超过 10 层。');
+    async function visit(directory: string) {
       let children;
       try { children = await readdir(directory, { withFileTypes: true }); }
       catch (error) { if (missing(error)) return; throw error; }
       for (const entry of children) {
         if (entry.name.startsWith('.') || (directory === root && entry.name === '冲突副本')) continue;
-        if (++entries > 2000) throw new Error('心得目录超过 2000 个条目，请缩小目录范围。');
         const path = join(directory, entry.name);
         if (entry.isSymbolicLink()) throw new Error(`心得目录不支持符号链接：${relative(root, path)}`);
         if (entry.isDirectory()) {
           await checkParents(join(path, 'check.md'));
-          await visit(path, depth + 1);
+          await visit(path);
         } else if (entry.isFile() && extname(entry.name) === '.md') {
           const value = await read(path);
-          bytes += value.stat.size;
-          if (bytes > 64 * LIMIT) throw new Error('心得目录的 Markdown 总量超过 64 MB，请缩小目录范围。');
           let key;
           try { key = keyOf(value.content); }
           catch (error) { throw new Error(`${relative(root, path)}：${noteError(error)}`, { cause: error }); }
@@ -157,7 +131,7 @@ export function createAlgorithmNotes(directory: string, changed: () => void) {
         }
       }
     }
-    await visit(root, 0);
+    await visit(root);
     ensureWatch();
     return index;
   }
@@ -193,7 +167,6 @@ export function createAlgorithmNotes(directory: string, changed: () => void) {
     index: () => serialize(async () => [...(await scan()).keys()]),
     save: (problem: AlgorithmProblem, content: string, expectedRevision: string | null): Promise<SaveAlgorithmNoteResult> => serialize(async () => {
       try {
-        if (Buffer.byteLength(content) > LIMIT) throw new Error('单篇心得不能超过 1 MB。');
         if (keyOf(content) !== problem.noteKey) throw new Error('请保留 YAML 中的 problem_key，不要修改或删除题目关联标识。');
         const index = await scan();
         const current = snapshot(problem, index);
@@ -203,7 +176,6 @@ export function createAlgorithmNotes(directory: string, changed: () => void) {
       } catch (error) { return { ok: false, kind: 'error', message: noteError(error) }; }
     }),
     copy: (problem: AlgorithmProblem, content: string) => serialize(async () => {
-      if (Buffer.byteLength(content) > LIMIT) throw new Error('单篇心得不能超过 1 MB。');
       let parts: ReturnType<typeof frontmatter>;
       // 属性写坏时副本仍能救出原文；副本目录不参与正式心得索引。
       try { parts = frontmatter(content); } catch { parts = undefined; }

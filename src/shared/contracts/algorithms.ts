@@ -37,7 +37,7 @@ export type SaveAlgorithmNoteResult = { ok: true; note: AlgorithmNote } |
 export type AlgorithmNoteIndex = { ok: true; keys: string[] } | { ok: false; message: string };
 export const saveAlgorithmNoteSchema = z.object({
   id: algorithmIdSchema,
-  content: z.string().max(1024 * 1024),
+  content: z.string(),
   expectedRevision: z.string().regex(/^[a-f0-9]{64}$/).nullable()
 }).strict();
 export const copyAlgorithmNoteSchema = saveAlgorithmNoteSchema.pick({ id: true, content: true });

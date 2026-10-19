@@ -44,11 +44,11 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
     let cancelled = false;
     void window.huanApp.settings.load().then(
       (result) => { if (!cancelled) accept(result); },
-      () => { if (!cancelled) setMessage('无法连接设置服务，请重试。'); }
+      error => { if (!cancelled) setMessage(String(error)); }
     ).finally(() => { if (!cancelled) setLoading(false); });
     void window.huanApp.browser.sessionModes().then(
       (value) => { if (!cancelled) setActiveModes(value); },
-      () => { if (!cancelled) setSessionMessage('无法读取本轮会话策略，请重新打开设置。'); }
+      error => { if (!cancelled) setSessionMessage(String(error)); }
     );
     return () => { cancelled = true; element.close(); };
   }, []);
@@ -63,7 +63,7 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
   async function retry() {
     setLoading(true);
     try { accept(await window.huanApp.settings.load()); }
-    catch { setMessage('无法连接设置服务，请重试。'); }
+    catch (error) { setMessage(String(error)); }
     finally { setLoading(false); }
   }
   function requestClose() {
@@ -87,7 +87,7 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
       if (!result.ok) setMessage(result.message);
       // 取消系统文件选择器不等于清空路径，保留用户之前的输入。
       else if (result.path !== null) update(platform, { path: result.path });
-    } catch { setMessage('无法选择文件，请重试。'); }
+    } catch (error) { setMessage(String(error)); }
     finally { setBusy(false); }
   }
   async function save() {
@@ -104,7 +104,7 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
         return;
       }
       setKeyChange(undefined); setSubtitleKeyChange(undefined); onSaved();
-    } catch { setMessage('未能确认保存结果，请保留输入并重试；如提示配置已变更，请重新打开设置核对。'); }
+    } catch (error) { setMessage(`未能确认保存结果，输入已保留：${String(error)}`); }
     finally { setBusy(false); }
   }
   function updateMode(platform: Platform, mode: SessionMode) {
@@ -115,7 +115,7 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
     try {
       const result = await window.huanApp.ai.testKey(keyChange ?? '');
       setAIMessage(result.ok ? result.value : result.message);
-    } catch { setAIMessage('连接测试失败，请重试。'); }
+    } catch (error) { setAIMessage(String(error)); }
     finally { setBusy(false); }
   }
   async function clearSession(platform: Platform) {
@@ -127,7 +127,7 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
       const result = await window.huanApp.browser.clearSession(platform);
       if (!result.ok) setSessionMessage(result.message);
       else if (!result.cancelled) setSessionMessage(`${PLATFORM_NAMES[platform]} 的本地会话已清除，收藏保持不变。`);
-    } catch { setSessionMessage('未能确认清除结果，请重试。'); }
+    } catch (error) { setSessionMessage(String(error)); }
     finally { setBusy(false); }
   }
   return (

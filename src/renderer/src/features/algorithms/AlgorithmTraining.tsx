@@ -37,10 +37,10 @@ export function AlgorithmTraining({ active, blocked }: { active: boolean; blocke
     try {
       const value = await (refresh ? window.huanApp.algorithms.refresh() : window.huanApp.algorithms.get());
       if (mounted.current) accept(value);
-    } catch {
+    } catch (error) {
       if (mounted.current) {
-        setLibrary(previous => previous ? { ...previous, state: 'error', message: '未能确认读取结果，请刷新笔记。' } : undefined);
-        setFeedback('无法读取算法清单，请刷新笔记；若仍失败，请完全退出应用后重试。');
+        setLibrary(previous => previous ? { ...previous, state: 'error', message: String(error) } : undefined);
+        setFeedback(String(error));
       }
     } finally { pending.current = false; if (mounted.current) setBusy(false); }
   }
@@ -57,7 +57,7 @@ export function AlgorithmTraining({ active, blocked }: { active: boolean; blocke
       if (!mounted.current || version !== indexVersion.current) return;
       if (result.ok) { setNoteKeys(result.keys); setNoteError(''); }
       else setNoteError(result.message);
-    } catch { if (mounted.current && version === indexVersion.current) setNoteError('无法读取心得索引，请刷新笔记重试。'); }
+    } catch (error) { if (mounted.current && version === indexVersion.current) setNoteError(String(error)); }
   }
   const refreshNotes = useEffectEvent(() => { if (active) void loadNoteIndex(); });
   useEffect(() => { if (active) refreshNotes(); }, [active]);
@@ -89,9 +89,9 @@ export function AlgorithmTraining({ active, blocked }: { active: boolean; blocke
         accept(result.library);
         if (!result.ok && result.message !== result.library.message) setFeedback(result.message);
       }
-    } catch {
+    } catch (error) {
       if (mounted.current) {
-        setLibrary(previous => previous ? { ...previous, state: 'error', message: '未能确认保存结果，请刷新笔记核对，不要重复提交。' } : undefined);
+        setLibrary(previous => previous ? { ...previous, state: 'error', message: `未能确认保存结果：${String(error)}` } : undefined);
       }
     } finally { pending.current = false; if (mounted.current) setBusy(false); }
   }
@@ -101,7 +101,7 @@ export function AlgorithmTraining({ active, blocked }: { active: boolean; blocke
     try {
       const result = await window.huanApp.algorithms.open(item.id);
       if (!result.ok && mounted.current) setFeedback(result.message);
-    } catch { if (mounted.current) setFeedback('无法打开题目链接，请重试。'); }
+    } catch (error) { if (mounted.current) setFeedback(String(error)); }
     finally { pending.current = false; if (mounted.current) setBusy(false); }
   }
 

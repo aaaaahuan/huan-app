@@ -60,7 +60,7 @@ export function registerSettings(window: BrowserWindow, store: ReturnType<typeof
       if (!current.ok || current.settings.ai.credentialId !== parsed.data)
         return { ok: false, message: 'AI 凭据已变更，请重新打开设置。' };
       return { ok: true, credentialId: parsed.data, key };
-    } catch { return { ok: false, message: '无法读取 DeepSeek Key，请重新打开设置或重新配置。' }; }
+    } catch (error) { return { ok: false, message: `无法读取 DeepSeek Key：${error instanceof Error ? error.message : String(error)}` }; }
   });
   ipcMain.handle(IPC_CHANNELS.settings.revealSubtitleKey, async (event, input: unknown): Promise<SavedKeyResult> => {
     assertTrusted(event);
@@ -72,7 +72,7 @@ export function registerSettings(window: BrowserWindow, store: ReturnType<typeof
       if (!current.ok || current.settings.subtitles.credentialId !== parsed.data)
         return { ok: false, message: '字幕凭据已变更，请重新打开设置。' };
       return { ok: true, credentialId: parsed.data, key };
-    } catch { return { ok: false, message: '无法读取字幕 Key，请重新打开设置或重新配置。' }; }
+    } catch (error) { return { ok: false, message: `无法读取字幕 Key：${error instanceof Error ? error.message : String(error)}` }; }
   });
   ipcMain.handle(IPC_CHANNELS.settings.openSubtitleAccount, (event) => {
     assertTrusted(event);
@@ -90,8 +90,8 @@ export function registerSettings(window: BrowserWindow, store: ReturnType<typeof
         properties: ['openFile']
       });
       return { ok: true, path: result.canceled ? null : result.filePaths[0] ?? null };
-    } catch {
-      return { ok: false, message: '无法打开文件选择器，请重试或直接填写绝对路径。' };
+    } catch (error) {
+      return { ok: false, message: `无法打开文件选择器：${error instanceof Error ? error.message : String(error)}` };
     } finally { choosing = false; }
   });
 }

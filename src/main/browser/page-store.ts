@@ -5,17 +5,6 @@ import type { Platform } from '@shared/contracts/settings';
 type Capture = PageContent & { capturedAt: number };
 type StoredPage = { snapshot: PageSnapshot; captures: Capture[]; manuallyManaged: boolean };
 
-// 已有平台仍限定详情页；Other 网站由 Readability 再判断是否为可读文章。
-export function supportsPage(url: URL, platform?: Platform): boolean {
-  const host = url.hostname.replace(/^www\./, '');
-  if (host === 'x.com' || host.endsWith('.x.com') || host === 'twitter.com' || host.endsWith('.twitter.com'))
-    return /\/(?:status|article)\/\d+/.test(url.pathname);
-  if (host === 'reddit.com' || host.endsWith('.reddit.com')) return /\/comments\/[a-z0-9]+/i.test(url.pathname);
-  if (host === 'mp.weixin.qq.com') return /^\/s(?:\/|$)/.test(url.pathname);
-  if (host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be') return false;
-  return platform === 'other' && ['http:', 'https:'].includes(url.protocol);
-}
-
 export function createPageStore() {
   const pages = new Map<string, StoredPage>();
   const idsByUrl = new Map<string, string>();
@@ -43,12 +32,11 @@ export function createPageStore() {
       // 聚合使用真实 URL，不能用下方脱敏后的目录地址合并不同查询或 hash 路由。
       const identity = url.href;
       url.hash = '';
-      const supported = supportsPage(url, platform);
       const existingId = idsByUrl.get(identity);
       const existing = existingId ? pages.get(existingId) : undefined;
       if (existing) {
         currentPageId = existing.snapshot.id;
-        if (!existing.manuallyManaged) existing.snapshot = { ...existing.snapshot, status: supported ? 'loading' : 'unsupported' };
+        if (!existing.manuallyManaged) existing.snapshot = { ...existing.snapshot, status: 'loading' };
         return currentPageId;
       }
       // 微信旧式文章地址需要这些定位参数；不保留跟踪参数或授权令牌。
@@ -68,7 +56,7 @@ export function createPageStore() {
       url.search = query.toString();
       const id = randomUUID();
       pages.set(id, { snapshot: { id, url: url.href, title: '', text: '', truncated: false,
-        status: supported ? 'loading' : 'unsupported' }, captures: [], manuallyManaged: false });
+        status: 'loading' }, captures: [], manuallyManaged: false });
       idsByUrl.set(identity, id);
       currentPageId = id;
       return id;
@@ -105,11 +93,6 @@ export function createPageStore() {
       const page = id ? pages.get(id) : undefined;
       return { captureCount: page?.captures.length ?? 0, capturedAt: page?.snapshot.capturedAt,
         manuallyManaged: page?.manuallyManaged ?? false };
-    },
-    refreshed(snapshot: PageSnapshot, content: PageContent) {
-      const page: StoredPage = { snapshot, captures: [{ ...content, capturedAt: Date.now() }], manuallyManaged: false };
-      updateSnapshot(page);
-      return page.snapshot;
     },
     // 快照不共享可变对象；本轮发送后切页或清理缓存均不影响工具读取。
     snapshot: (): PageContext => ({ currentPageId, pages: [...pages.values()]

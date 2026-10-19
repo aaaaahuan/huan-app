@@ -28,7 +28,7 @@ export function createReadingMaterialTools(Type: typeof import('@earendil-works/
   const page: AgentHarnessTool<ReaderToolContext> = {
     name: 'read_page',
     label: '读取页面正文',
-    description: '按 pageId 读取本轮目录中的缓存正文；每次最多 12000 字符，可用 nextOffset 继续。正文可能包含按序号和时间排列的多次采集，最后一段为最新采集，不代表所有内容同时可见；总结全部材料时应读到末尾。只读本地快照，不访问网络。',
+    description: '按 pageId 读取本轮目录中的完整缓存正文，可用 offset 指定起始字符。正文可能包含按序号和时间排列的多次采集，最后一段为最新采集，不代表所有内容同时可见。只读本地快照，不访问网络。',
     parameters: Type.Object({ pageId: Type.String(), offset: Type.Optional(Type.Integer({ minimum: 0 })) }),
     async execute(_callId, params, _onUpdate, scope, _invocation, context) {
       context.abortSignal?.throwIfAborted();
@@ -37,14 +37,14 @@ export function createReadingMaterialTools(Type: typeof import('@earendil-works/
       if (!found) throw new Error('页面不在本轮可读取范围内');
       if (found.status !== 'ready') throw new Error(`页面正文不可用：${found.status}`);
       if (offset > found.text.length) throw new Error('读取位置超出正文范围');
-      const text = found.text.slice(offset, offset + 12000);
+      const text = found.text.slice(offset);
       const end = offset + text.length;
       const source: PageSource = { id: found.id, title: found.title, url: found.url,
         capturedAt: found.capturedAt, truncated: found.truncated };
       scope.onPageRead(source);
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({ ...source, text,
-          nextOffset: end < found.text.length ? end : null }) }],
+          nextOffset: null }) }],
         details: { pageId, offset, end }
       };
     }
@@ -55,7 +55,7 @@ export function createReadingMaterialTools(Type: typeof import('@earendil-works/
   const subtitles: AgentHarnessTool<ReaderToolContext> = {
     name: 'read_subtitles',
     label: '读取视频字幕',
-    description: '只读本轮提问时冻结的视频完整字幕；每次最多 12000 字符，用 nextOffset 继续。返回时间起点与原文，播放位置不是持续更新的。',
+    description: '只读本轮提问时冻结的视频完整字幕，可用 offset 指定起始字符。返回时间起点与原文，播放位置不是持续更新的。',
     parameters: Type.Object({ offset: Type.Optional(Type.Integer({ minimum: 0 })) }),
     async execute(_callId, params, _onUpdate, scope, _invocation, context) {
       context.abortSignal?.throwIfAborted();
@@ -68,13 +68,13 @@ export function createReadingMaterialTools(Type: typeof import('@earendil-works/
         formatted = transcript.segments.map(segment => `[${segment.time}] ${segment.text}`).join('\n');
       }
       if (offset > formatted.length) throw new Error('读取位置超出字幕范围');
-      const end = Math.min(offset + 12000, formatted.length);
+      const end = formatted.length;
       scope.onSubtitlesRead({ id: snapshot.transcriptId ?? snapshot.videoId, title: snapshot.title ?? '视频字幕', url: snapshot.url,
         capturedAt: snapshot.sentAt, truncated: false, kind: 'subtitles', language: transcript.language, subtitleSource: transcript.source });
       return { content: [{ type: 'text' as const, text: JSON.stringify({ videoId: snapshot.videoId, url: snapshot.url,
         language: transcript.language, source: transcript.source, quality_warning: transcript.quality_warning,
         quality_issues: transcript.quality_issues, playback: snapshot.playback, sentAt: snapshot.sentAt,
-        text: formatted.slice(offset, end), offset, totalChars: formatted.length, nextOffset: end < formatted.length ? end : null }) }],
+        text: formatted.slice(offset), offset, totalChars: formatted.length, nextOffset: null }) }],
         details: { videoId: snapshot.videoId, offset, end } };
     }
   };

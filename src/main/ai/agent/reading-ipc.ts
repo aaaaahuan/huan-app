@@ -20,7 +20,8 @@ export function registerReading(window: BrowserWindow, host: ReturnType<typeof c
     if (!window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send(IPC_CHANNELS.ai.state, state);
   }, async () => {
     const result = await settings.load();
-    return result.ok && result.settings.notesPath ? realpath(result.settings.notesPath).catch(() => '') : '';
+    if (!result.ok) throw new Error(result.message);
+    return result.settings.notesPath ? realpath(result.settings.notesPath) : '';
   }, async (proposal, signal) => {
     signal.throwIfAborted();
     const result = await settings.load();
@@ -50,19 +51,17 @@ export function registerReading(window: BrowserWindow, host: ReturnType<typeof c
     signal.throwIfAborted();
     if (model.mode === 'offline') return snapshot;
     const result = await settings.load();
-    if (!result.ok) return undefined;
+    if (!result.ok) throw new Error(result.message);
     let consent = result.settings.ai.consentVersion;
     const required = snapshot.subtitles ? 3 : 2;
     if (consent < required) {
-      try {
-        const answer = await dialog.showMessageBox(window, { type: 'question', signal, buttons: ['不附带新材料', '允许附带'],
-          defaultId: 0, cancelId: 0, message: '允许向 DeepSeek 发送阅读材料？',
-          detail: '将向 DeepSeek 提供本轮页面目录、视频信息及提问时播放位置，并允许 AI 按需读取已有页面正文和完整字幕。可能计费和留存；拒绝时保留此前已授权的文章材料，普通聊天继续。不会自动获取字幕或发送音频。' });
-        signal.throwIfAborted();
-        await recordApprovalDecision({ invocationId: randomUUID(),
-          decision: answer.response === 1 ? 'approved' : 'declined', scope: 'preflight' });
-        if (answer.response === 1) { await settings.allowMaterials(required); consent = Math.max(consent, required); }
-      } catch { /* 弹窗或保存失败按原授权过滤；停止仍由下方 signal 检查传播。 */ }
+      const answer = await dialog.showMessageBox(window, { type: 'question', signal, buttons: ['不附带新材料', '允许附带'],
+        defaultId: 0, cancelId: 0, message: '允许向 DeepSeek 发送阅读材料？',
+        detail: '将向 DeepSeek 提供本轮页面目录、视频信息及提问时播放位置，并允许 AI 按需读取已有页面正文和完整字幕。可能计费和留存；拒绝时保留此前已授权的文章材料，普通聊天继续。不会自动获取字幕或发送音频。' });
+      signal.throwIfAborted();
+      await recordApprovalDecision({ invocationId: randomUUID(),
+        decision: answer.response === 1 ? 'approved' : 'declined', scope: 'preflight' });
+      if (answer.response === 1) { await settings.allowMaterials(required); consent = Math.max(consent, required); }
     }
     signal.throwIfAborted();
     const filtered: PageContext = { pages: consent >= 2 ? snapshot.pages : [],
@@ -85,7 +84,7 @@ export function registerReading(window: BrowserWindow, host: ReturnType<typeof c
     });
   }
   ipcMain.handle(IPC_CHANNELS.ai.draft, (event, owner: unknown, text: unknown) => {
-    assertTrusted(event); return result(() => chat.draft(ownerSchema.parse(owner), z.string().max(8000).parse(text)));
+    assertTrusted(event); return result(() => chat.draft(ownerSchema.parse(owner), z.string().parse(text)));
   });
   ipcMain.handle(IPC_CHANNELS.ai.send, (event, input: unknown) => {
     assertTrusted(event);

@@ -8,20 +8,30 @@ import type { NoteWrite } from '@shared/contracts/ai';
 import type { ReaderToolContext } from './reading-agent';
 
 export type NoteProposal = NoteWrite & { root: string; content: string };
-const MAX_BYTES = 64 * 1024;
 const missing = (error: unknown) => (error as NodeJS.ErrnoException)?.code === 'ENOENT';
 
 function nativeTool<P extends TSchema, D>(tool: AgentTool<P, D>): AgentHarnessTool<ReaderToolContext, P, D> {
   return {
     ...tool,
-    execute(callId, params, onUpdate, _scope, _invocation, context) {
-      return tool.execute(callId, params, context.abortSignal, onUpdate);
+    async execute(callId, params, onUpdate, _scope, _invocation, context) {
+      const signal = context.abortSignal;
+      signal?.throwIfAborted();
+      let abort: (() => void) | undefined;
+      try {
+        const cancelled = new Promise<never>((_, reject) => {
+          abort = () => reject(signal?.reason ?? new Error('笔记读取已取消。'));
+          signal?.addEventListener('abort', abort, { once: true });
+        });
+        return await Promise.race([tool.execute(callId, params, signal, onUpdate), cancelled]);
+      } finally {
+        if (abort) signal?.removeEventListener('abort', abort);
+      }
     }
   };
 }
 
 export async function createReaderNoteTools(scope: ReaderToolContext): Promise<AgentHarnessTool<ReaderToolContext>[]> {
-  const { createReadTool, createWriteTool, createEditTool } = await import('@earendil-works/pi-coding-agent');
+  const { createReadTool, createWriteTool, createEditTool, truncateHead } = await import('@earendil-works/pi-coding-agent');
   const root = await realpath(scope.notesPath);
   if (!(await lstat(root)).isDirectory()) throw new Error('笔记库目录不存在。');
 
@@ -43,21 +53,14 @@ export async function createReaderNoteTools(scope: ReaderToolContext): Promise<A
     return target;
   }
 
-  async function read(path: string) {
+  async function read(path: string, signal?: AbortSignal) {
     const target = await checked(path);
+    signal?.throwIfAborted();
     const file = await open(target, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
       const info = await file.stat();
-      if (!info.isFile() || info.size > MAX_BYTES) throw new Error('只支持不超过 64 KB 的 Markdown 笔记。');
-      const buffer = Buffer.alloc(MAX_BYTES + 1);
-      let length = 0;
-      while (length < buffer.length) {
-        const result = await file.read(buffer, length, buffer.length - length, null);
-        if (!result.bytesRead) break;
-        length += result.bytesRead;
-      }
-      if (length > MAX_BYTES) throw new Error('笔记超过 64 KB。');
-      const bytes = buffer.subarray(0, length);
+      if (!info.isFile()) throw new Error('笔记路径不是普通文件。');
+      const bytes = await file.readFile({ signal });
       new TextDecoder('utf-8', { fatal: true }).decode(bytes);
       return bytes;
     } finally { await file.close(); }
@@ -67,7 +70,6 @@ export async function createReaderNoteTools(scope: ReaderToolContext): Promise<A
     operation: NoteWrite['operation'], invocationId: string, signal?: AbortSignal) {
     signal?.throwIfAborted();
     const target = await checked(path);
-    if (Buffer.byteLength(content) > MAX_BYTES) throw new Error('单次笔记写入不能超过 64 KB。');
     const assertUnchanged = async () => {
       if (original) {
         if (!(await read(target)).equals(original)) throw new Error('笔记已被其他操作修改，请重新读取后再编辑。');
@@ -102,6 +104,29 @@ export async function createReaderNoteTools(scope: ReaderToolContext): Promise<A
 
   const readTool = createReadTool(root, { operations: { readFile: read,
     access: async path => { await checked(path); }, detectImageMimeType: async () => null } });
+  const readLimits = { maxBytes: 100 * 1024, maxLines: 10000 };
+  readTool.description = '读取笔记库内 Markdown 文件。每次最多返回 100 KB 或 10000 行（先到者为准），按完整行截断；offset 为从 1 开始的行号，limit 为读取行数，超限后按提示继续读取。';
+  // Pi 的 read 没有截断配置入口；只替换文本回执，继续使用上方的安全读取。
+  readTool.execute = async (_callId, { path, offset = 1, limit }, signal) => {
+    signal?.throwIfAborted();
+    if (!Number.isSafeInteger(offset) || offset < 1 || (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 1)))
+      throw new Error('offset 和 limit 必须为正整数。');
+    const bytes = await read(resolve(root, path), signal);
+    signal?.throwIfAborted();
+    const lines = bytes.toString('utf8').split('\n');
+    const start = offset - 1;
+    if (start >= lines.length) throw new Error(`读取起始行 ${offset} 超出文件范围（共 ${lines.length} 行）。`);
+    const end = limit === undefined ? lines.length : Math.min(start + limit, lines.length);
+    const truncation = truncateHead(lines.slice(start, end).join('\n'), readLimits);
+    let text = truncation.content;
+    if (truncation.firstLineExceedsLimit) {
+      text = `[第 ${offset} 行超过 100 KB，无法按完整行返回；offset / limit 不能拆分单行。]`;
+    } else if (truncation.truncated || end < lines.length) {
+      const nextOffset = truncation.truncated ? offset + truncation.outputLines : end + 1;
+      text += `\n\n[已返回第 ${offset}-${nextOffset - 1} 行，共 ${lines.length} 行；使用 offset=${nextOffset} 继续读取。]`;
+    }
+    return { content: [{ type: 'text', text }], details: truncation.truncated ? { truncation } : undefined };
+  };
   const writeTool = createWriteTool(root);
   const editTool = createEditTool(root);
   const guardedWrite: AgentHarnessTool<ReaderToolContext, typeof writeTool.parameters> = {

@@ -32,7 +32,7 @@ export function registerAlgorithms(library: ReturnType<typeof createAlgorithmLib
     const item = state.items.find(problem => problem.id === parsed.data);
     if (state.state !== 'ready' || !item || !validBookmarkUrl(item.url)) return { ok: false, message: '题目链接不可用，请刷新笔记。' };
     try { await shell.openExternal(item.url); return { ok: true }; }
-    catch { return { ok: false, message: '无法打开浏览器，请重试。' }; }
+    catch (error) { return { ok: false, message: noteError(error) }; }
   });
   ipcMain.handle(IPC_CHANNELS.algorithms.getNote, async (event, input: unknown) => {
     assertTrusted(event);
@@ -69,9 +69,9 @@ export function registerAlgorithms(library: ReturnType<typeof createAlgorithmLib
   });
   ipcMain.handle(IPC_CHANNELS.algorithms.openNoteLink, async (event, input: unknown): Promise<OpenAlgorithmResult> => {
     assertTrusted(event);
-    const parsed = z.string().max(4096).safeParse(input);
+    const parsed = z.string().safeParse(input);
     if (!parsed.success || !validBookmarkUrl(parsed.data)) return { ok: false, message: '只允许打开不带凭据的 HTTP(S) 链接。' };
     try { await shell.openExternal(parsed.data); return { ok: true }; }
-    catch { return { ok: false, message: '无法打开浏览器，请重试。' }; }
+    catch (error) { return { ok: false, message: noteError(error) }; }
   });
 }

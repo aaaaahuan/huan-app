@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { setTimeout as delay } from 'node:timers/promises';
 import { videoIdSchema, youtubeVideoUrl, type TranscriptGuruJob, type TranscriptGuruTranscript } from '@shared/contracts/subtitles';
 import type { SubtitleUsage } from '@shared/contracts/settings';
 
@@ -12,18 +13,20 @@ export class SubtitleFailure extends Error {
   }
 }
 export function subtitleFailure(error: unknown): SubtitleFailure {
-  return error instanceof SubtitleFailure ? error : new SubtitleFailure('REQUEST_FAILED', '字幕请求失败或已取消；未自动重发。');
+  if (error instanceof SubtitleFailure) return error;
+  return new SubtitleFailure(error instanceof Error && error.name === 'AbortError' ? 'CANCELLED' : 'REQUEST_FAILED',
+    error instanceof Error ? error.message : String(error));
 }
 
 const jobSchema = z.object({
-  id: z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/), video_id: videoIdSchema,
-  status: z.string().min(1).max(64), resolution: z.string().max(64),
-  transcript_id: z.string().max(128).nullable(), video_title: z.string().max(4096).nullable(),
+  id: z.string().min(1).regex(/^[A-Za-z0-9_-]+$/), video_id: videoIdSchema,
+  status: z.string().min(1), resolution: z.string(),
+  transcript_id: z.string().nullable(), video_title: z.string().nullable(),
   actual_credits: z.number().finite().nonnegative(),
   estimated_credits: z.number().finite().nonnegative(), reserved_credits: z.number().finite().nonnegative()
 });
 const estimateSchema = z.object({
-  video_id: videoIdSchema, resolution: z.string().max(64), estimated_credits: z.number().finite().nonnegative(),
+  video_id: videoIdSchema, resolution: z.string(), estimated_credits: z.number().finite().nonnegative(),
   sufficient_credits: z.boolean(), requires_confirmation: z.boolean(), plan_upgrade_required: z.boolean()
 });
 const balanceSchema = z.object({
@@ -32,30 +35,30 @@ const balanceSchema = z.object({
 });
 const usageSchema = z.object({ days: z.array(z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), credits_used: z.number().finite().nonnegative()
-})).max(90) });
+})) });
 const transcriptSchema = z.object({
-  video_id: videoIdSchema, language: z.string().min(1).max(128), source: z.string().min(1).max(128),
-  segments: z.array(z.object({ time: z.string().max(128), seconds: z.number().finite().nonnegative(), text: z.string() })),
+  video_id: videoIdSchema, language: z.string().min(1), source: z.string().min(1),
+  segments: z.array(z.object({ time: z.string(), seconds: z.number().finite().nonnegative(), text: z.string() })),
   word_count: z.number().int().nonnegative(), quality_warning: z.boolean(), quality_issues: z.array(z.unknown())
 });
 export function validateJob(raw: unknown, videoId: string): TranscriptGuruJob {
   const result = jobSchema.safeParse(raw);
-  if (!result.success || result.data.video_id !== videoId)
-    throw new SubtitleFailure('INVALID_JOB', '服务返回的任务格式或视频身份不匹配。');
+  if (!result.success) throw new SubtitleFailure('INVALID_JOB', `字幕任务格式错误：${result.error.message}`);
+  if (result.data.video_id !== videoId) throw new SubtitleFailure('INVALID_JOB', '服务返回的任务视频身份不匹配。');
   return result.data;
 }
 export function validateTranscript(raw: unknown, videoId: string): TranscriptGuruTranscript {
   const result = transcriptSchema.safeParse(raw);
-  if (!result.success || result.data.video_id !== videoId)
-    throw new SubtitleFailure('INVALID_TRANSCRIPT', '服务返回的字幕格式或视频身份不匹配。');
+  if (!result.success) throw new SubtitleFailure('INVALID_TRANSCRIPT', `字幕格式错误：${result.error.message}`);
+  if (result.data.video_id !== videoId) throw new SubtitleFailure('INVALID_TRANSCRIPT', '服务返回的字幕视频身份不匹配。');
   const transcript = result.data;
   if (!transcript.segments.length) throw new SubtitleFailure('EMPTY_TRANSCRIPT', '服务返回空字幕；这不等于已确认视频没有字幕。');
   if (!CAPTION_SOURCES.has(transcript.source)) throw new SubtitleFailure('UNSUPPORTED_SOURCE',
     `服务返回的字幕来源“${transcript.source}”尚不支持；未接受该结果，不自动转写或翻译。`);
   let previous = -1;
   for (const segment of transcript.segments) {
-    if (!segment.text.trim() || segment.seconds < previous)
-      throw new SubtitleFailure('INVALID_TRANSCRIPT', '字幕包含空文本或不按时间顺序排列。');
+    if (segment.seconds < previous)
+      throw new SubtitleFailure('INVALID_TRANSCRIPT', '字幕未按时间顺序排列。');
     previous = segment.seconds;
     Object.freeze(segment);
   }
@@ -65,67 +68,65 @@ export function validateTranscript(raw: unknown, videoId: string): TranscriptGur
 }
 
 export function createSubtitleProvider() {
-  // 全部 HTTP 共用保守速率；清会话或重新保存同一账户的 Key 不重置 Retry-After。
-  const rate = { tail: Promise.resolve<unknown>(undefined), nextAt: 0 };
+  // 仅遵守服务端实际返回的 Retry-After，不预设客户端请求配额。
+  let retryAt = 0;
   async function request(path: string, key: string, signal: AbortSignal, body?: unknown) {
-    const operation = rate.tail.then(async () => {
-      if (signal.aborted) throw new SubtitleFailure('CANCELLED', '字幕请求尚未发出，已取消。', true);
-      const wait = rate.nextAt - Date.now();
-      if (wait > 0) await new Promise<void>((resolve, reject) => {
-        const finish = () => { signal.removeEventListener('abort', abort); resolve(); };
-        const timer = setTimeout(finish, wait);
-        const abort = () => { clearTimeout(timer); signal.removeEventListener('abort', abort); reject(new SubtitleFailure('CANCELLED', '字幕请求已取消。', true)); };
-        signal.addEventListener('abort', abort, { once: true });
-        if (signal.aborted) abort();
-      });
-      if (signal.aborted) throw new SubtitleFailure('CANCELLED', '字幕请求尚未发出，已取消。', true);
-      rate.nextAt = Date.now() + 12000;
-      const started = Date.now();
-      const requestSignal = AbortSignal.any([signal, AbortSignal.timeout(20000)]);
-      let response: Response;
+    if (signal.aborted) throw new SubtitleFailure('CANCELLED', '字幕请求尚未发出，已取消。', true);
+    const retryAfter = Math.ceil((retryAt - Date.now()) / 1000);
+    if (retryAfter > 0) throw new SubtitleFailure('RATE_LIMITED',
+      `字幕服务要求等待 ${retryAfter} 秒后重试。`, true, retryAfter);
+    const started = Date.now();
+    let response: Response;
+    try {
+      response = await fetch(`${ORIGIN}/api/v1${path}`, { method: body ? 'POST' : 'GET', redirect: 'error', signal,
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+    } catch (error) {
+      const message = subtitleFailure(error).message.replaceAll(key, '[redacted]');
+      throw new SubtitleFailure(signal.aborted ? 'CANCELLED' : 'NETWORK_ERROR',
+        `${message}；提交可能已被处理，未自动重发。`);
+    }
+    console.info('[Subtitles] HTTP', { method: body ? 'POST' : 'GET', path, status: response.status, elapsedMs: Date.now() - started });
+    if (!response.ok) {
+      const rawRetry = response.headers.get('Retry-After');
+      const retryAfter = rawRetry ? (/^\d+$/.test(rawRetry) ? Number(rawRetry) : Math.max(0, Math.ceil((Date.parse(rawRetry) - Date.now()) / 1000))) : undefined;
+      if (response.status === 429 && retryAfter !== undefined && Number.isFinite(retryAfter))
+        retryAt = Math.max(retryAt, Date.now() + retryAfter * 1000);
+      let detail = response.statusText;
       try {
-        response = await fetch(`${ORIGIN}/api/v1${path}`, { method: body ? 'POST' : 'GET', redirect: 'error', signal: requestSignal,
-          headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
-      } catch { throw new SubtitleFailure('NETWORK_ERROR', '无法连接字幕服务或请求超时；提交可能已被处理，未自动重发。'); }
-      console.info('[Subtitles] HTTP', { method: body ? 'POST' : 'GET', path, status: response.status, elapsedMs: Date.now() - started });
-      if (!response.ok) {
-        const rawRetry = response.headers.get('Retry-After');
-        const retryAfter = rawRetry ? (/^\d+$/.test(rawRetry) ? Number(rawRetry) : Math.max(0, Math.ceil((Date.parse(rawRetry) - Date.now()) / 1000))) : undefined;
-        if (response.status === 429 && retryAfter !== undefined && Number.isFinite(retryAfter))
-          rate.nextAt = Math.max(rate.nextAt, Date.now() + retryAfter * 1000);
-        await response.body?.cancel();
-        const errors: Record<number, [string, string]> = {
-          400: ['INVALID_INPUT', '服务拒绝此视频或参数；不能据此确认没有字幕。'],
-          401: ['INVALID_KEY', 'Transcript Guru Key 无效，请在字幕服务设置中修改。'],
-          402: ['INSUFFICIENT_CREDITS', '字幕服务额度不足，请到官方后台核对。'],
-          403: ['ACCESS_DENIED', '此 Key 或套餐没有接口权限。'],
-          429: ['RATE_LIMITED', '字幕服务限流，请按服务要求稍后手动重试。']
-        };
-        const [code, message] = errors[response.status] ?? ['SERVICE_ERROR', `字幕服务返回 HTTP ${response.status}，未自动重发。`];
-        throw new SubtitleFailure(code, message, [400, 401, 402, 403, 429].includes(response.status), Number.isFinite(retryAfter) ? retryAfter : undefined);
-      }
-      const reader = response.body?.getReader();
-      if (!reader) throw new SubtitleFailure('INVALID_RESPONSE', '字幕服务没有返回响应正文。');
-      const chunks: Uint8Array[] = [];
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunks.push(value);
+        const body: unknown = response.headers.get('Content-Type')?.includes('text/plain')
+          ? await response.text() : await response.json();
+        if (typeof body === 'string') detail = body;
+        if (body && typeof body === 'object') {
+          const data = body as Record<string, unknown>;
+          const error = data.error && typeof data.error === 'object' ? data.error as Record<string, unknown> : undefined;
+          const message = [data.message, data.detail, error?.message, data.error].find(value => typeof value === 'string');
+          if (typeof message === 'string') detail = message;
         }
-        try { return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown; }
-        catch { throw new SubtitleFailure('INVALID_RESPONSE', '字幕服务返回了无效 JSON。'); }
-      } finally { await reader.cancel().catch(() => undefined); reader.releaseLock(); }
-    });
-    rate.tail = operation.then(() => undefined, () => undefined);
-    return operation;
+      } catch { /* 非 JSON 错误响应仍展示 HTTP 状态。 */ }
+      const errors: Record<number, [string, string]> = {
+        400: ['INVALID_INPUT', '服务拒绝此视频或参数；不能据此确认没有字幕。'],
+        401: ['INVALID_KEY', 'Transcript Guru Key 无效，请在字幕服务设置中修改。'],
+        402: ['INSUFFICIENT_CREDITS', '字幕服务额度不足，请到官方后台核对。'],
+        403: ['ACCESS_DENIED', '此 Key 或套餐没有接口权限。'],
+        429: ['RATE_LIMITED', '字幕服务限流，请按服务要求稍后手动重试。']
+      };
+      const [code, message] = errors[response.status] ?? ['SERVICE_ERROR', '字幕服务请求失败，未自动重发。'];
+      throw new SubtitleFailure(code, `HTTP ${response.status}${detail ? `：${detail.replaceAll(key, '[redacted]')}` : ''}。${message}`,
+        [400, 401, 402, 403, 429].includes(response.status), Number.isFinite(retryAfter) ? retryAfter : undefined);
+    }
+    try { return await response.json() as unknown; }
+    catch (error) {
+      throw new SubtitleFailure(signal.aborted ? 'CANCELLED' : 'INVALID_RESPONSE',
+        `字幕服务响应读取失败：${subtitleFailure(error).message.replaceAll(key, '[redacted]')}`);
+    }
   }
   return {
     async estimate(videoId: string, key: string, signal: AbortSignal) {
       const result = estimateSchema.safeParse(await request('/jobs/estimate', key, signal,
         { url: youtubeVideoUrl(videoId), language: 'auto', force_asr: false }));
-      if (!result.success || result.data.video_id !== videoId)
-        throw new SubtitleFailure('INVALID_ESTIMATE', '无法验证费用预估或视频身份，未提交任务。', true);
+      if (!result.success) throw new SubtitleFailure('INVALID_ESTIMATE', `费用预估格式错误：${result.error.message}`, true);
+      if (result.data.video_id !== videoId)
+        throw new SubtitleFailure('INVALID_ESTIMATE', '费用预估视频身份不匹配，未提交任务。', true);
       const estimate = result.data;
       console.info('[Subtitles] estimate', { videoId, resolution: estimate.resolution, credits: estimate.estimated_credits });
       if (estimate.estimated_credits !== 0 || !FREE_RESOLUTIONS.has(estimate.resolution) ||
@@ -144,7 +145,8 @@ export function createSubtitleProvider() {
         if (current.status === 'done') break;
         if (!['queued', 'downloading'].includes(current.status))
           throw new SubtitleFailure('JOB_NOT_READY', `字幕任务状态为 ${current.status}，已保留同一任务，未自动新建。`);
-        // 只续查同一任务；共享限速和上层等待期限，不重复 POST。
+        // 只续查同一任务，避免轮询空转和重复提交。
+        await delay(2000, undefined, { signal });
         current = validateJob(await request(`/jobs/${encodeURIComponent(job.id)}`, key, signal), job.video_id);
         if (current.id !== job.id) throw new SubtitleFailure('INVALID_JOB', '续查返回了另一任务，未读取字幕。');
       }
@@ -152,7 +154,7 @@ export function createSubtitleProvider() {
     },
     async usage(key: string, credentialId: string, signal: AbortSignal): Promise<SubtitleUsage> {
       const balance = balanceSchema.safeParse(await request('/credits/balance', key, signal));
-      if (!balance.success) throw new SubtitleFailure('INVALID_BALANCE', '服务余额格式无法验证，请到官方后台查看。');
+      if (!balance.success) throw new SubtitleFailure('INVALID_BALANCE', `服务余额格式错误：${balance.error.message}`);
       const updatedAt = Date.now();
       const rawReset = balance.data.quota_resets_at;
       // 官方日期缺少时区时表示 UTC，与官网的日期展示保持一致。
@@ -163,10 +165,10 @@ export function createSubtitleProvider() {
       };
       try {
         const usage = usageSchema.safeParse(await request('/credits/usage?days=30', key, signal));
-        if (!usage.success) throw new SubtitleFailure('INVALID_USAGE', '服务消耗记录格式无法验证。');
+        if (!usage.success) throw new SubtitleFailure('INVALID_USAGE', `服务消耗记录格式错误：${usage.error.message}`);
         data.rolling30CreditsUsed = usage.data.days.reduce((sum, day) => sum + day.credits_used, 0);
-      } catch {
-        return { credentialId, phase: 'ready', data, message: '余额已读取；近 30 日消耗暂无法查询。账户日 / 月 API 调用配额未公开，不以 credits 代替调用次数。' };
+      } catch (error) {
+        return { credentialId, phase: 'ready', data, message: `余额已读取；近 30 日消耗查询失败：${subtitleFailure(error).message} 账户日 / 月 API 调用配额未公开，不以 credits 代替调用次数。` };
       }
       return { credentialId, phase: 'ready', data, message: '官方账户余额与近 30 日 credits 消耗。账户日 / 月 API 调用配额未公开，不以 credits 代替调用次数。' };
     }

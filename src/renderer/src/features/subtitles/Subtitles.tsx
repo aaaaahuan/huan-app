@@ -61,7 +61,7 @@ function SubtitleReader({ document: result, state, visible }: {
     try {
       const response = await window.huanApp.subtitles.seek({ videoId: transcript.video_id, seconds });
       if (!response.ok) setNotice(response.message);
-    } catch { setNotice('视频定位失败，可继续手动阅读。'); }
+    } catch (error) { setNotice(error instanceof Error ? error.message : String(error)); }
   }
   const synchronized = playback?.phase === 'content';
   return <>
@@ -112,7 +112,7 @@ export function Subtitles({ visible, hidden, settingsRevision, onConfigure }: {
       latest.current = next; setState(next);
     };
     const off = window.huanApp.subtitles.onState(accept);
-    void window.huanApp.subtitles.get().then(accept).catch(() => { if (!cancelled) setError('无法连接字幕服务。'); });
+    void window.huanApp.subtitles.get().then(accept).catch(error => { if (!cancelled) setError(error instanceof Error ? error.message : String(error)); });
     return () => { cancelled = true; sequence.current++; off(); };
   }, []);
   async function ensure(videoId: string, retry = false) {
@@ -123,7 +123,7 @@ export function Subtitles({ visible, hidden, settingsRevision, onConfigure }: {
       if (call !== sequence.current || latest.current.videoId !== videoId) return;
       if (response.ok) { if (response.value.transcript.video_id === videoId) setResult(response.value); }
       else { setError(response.message); setCode(response.code); }
-    } catch { if (call === sequence.current) setError('无法取得字幕，请手动重试。'); }
+    } catch (error) { if (call === sequence.current) setError(error instanceof Error ? error.message : String(error)); }
   }
   useEffect(() => {
     if (visible && state.videoId) void ensure(state.videoId);

@@ -5,7 +5,7 @@ import { defaultModelSelection, modelSelectionSchema } from './models';
 // 顺序同时用于设置展示与跨平台收藏拼接；不改变各来源内部的行顺序。
 export const PLATFORMS = ['x', 'reddit', 'youtube', 'wechat', 'other'] as const;
 export const PLATFORM_NAMES = { x: 'X', reddit: 'Reddit', youtube: 'YouTube', wechat: '微信文章', other: 'Other' };
-const sourceSchema = z.object({ enabled: z.boolean(), path: z.string().max(4096) }).strict();
+const sourceSchema = z.object({ enabled: z.boolean(), path: z.string() }).strict();
 export const sessionModeSchema = z.enum(['memory', 'persistent']);
 export const sessionModesSchema = z.object({ x: sessionModeSchema, reddit: sessionModeSchema, youtube: sessionModeSchema,
   wechat: sessionModeSchema.default('memory'), other: sessionModeSchema.default('memory') }).strict();
@@ -18,9 +18,9 @@ export const settingsSchema = z.object({
     wechat: sourceSchema.default({ enabled: false, path: '' }), other: sourceSchema.default({ enabled: false, path: '' }) }).strict(),
   // 兼容 A1-A4 的配置；缺少会话设置时沿用内存模式，不自动持久化登录态。
   sessions: sessionModesSchema.default(defaultSessionModes),
-  notesPath: z.string().trim().max(4096).default(''),
+  notesPath: z.string().trim().default(''),
   model: modelSelectionSchema.default(defaultModelSelection),
-  localModel: z.object({ modelPath: z.string().trim().max(4096), serverPath: z.string().trim().max(4096) })
+  localModel: z.object({ modelPath: z.string().trim(), serverPath: z.string().trim() })
     .strict().refine(paths => !paths.modelPath.includes('\0') && !paths.serverPath.includes('\0'), '本地模型路径包含无效字符。')
     .default({ modelPath: '', serverPath: '' }),
   ai: z.object({ credentialId: z.uuid().nullable(), consentVersion: z.number().int().min(0).max(3) })

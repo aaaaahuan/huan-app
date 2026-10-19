@@ -6,7 +6,7 @@ import type { ReaderAction, ReaderLayout, ReaderState } from '@shared/contracts/
 import { validBookmarkUrl } from '@main/bookmarks/markdown';
 import type { createPlatformSessions } from './sessions';
 import type { Platform } from '@shared/contracts/settings';
-import type { PageContent, PageContext } from '@shared/contracts/page-context';
+import type { PageContext } from '@shared/contracts/page-context';
 import { extractReadablePage } from './readability';
 import { createPageStore } from './page-store';
 
@@ -20,8 +20,6 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
   let suspended = false;
   let captureController: AbortController | undefined;
   let cancelPageExtraction: (() => void) | undefined;
-  let contextRevision = 0;
-  let deadline: ReturnType<typeof setTimeout> | undefined;
   let layout: ReaderLayout = { x: 0, y: 0, width: 0, height: 0, visible: false };
   let state: ReaderState = { revision: 0, bookmarkId: null, pageId: null, phase: 'empty', url: '', title: '',
     message: '', notice: '', canGoBack: false, canGoForward: false, contentStatus: 'empty',
@@ -58,14 +56,12 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
     return state;
   }
 
-  function clearDeadline() { clearTimeout(deadline); deadline = undefined; }
   function cancelCapture() { captureController?.abort(); captureController = undefined; }
   function disposeView() {
     cancelCapture();
     cancelPageExtraction?.(); cancelPageExtraction = undefined;
     pages.clearCurrent();
     navigationEpoch++;
-    clearDeadline();
     const old = view;
     view = undefined;
     notifyContents();
@@ -74,23 +70,10 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
     // 切换收藏不能被远程页面的 beforeunload 留住，也不能保留隐藏的媒体进程。
     if (!old.webContents.isDestroyed()) old.webContents.close({ waitForBeforeUnload: false });
   }
-  function armDeadline(target: WebContentsView) {
-    clearDeadline();
-    deadline = setTimeout(() => {
-      if (view !== target) return;
-      cancelCapture();
-      navigationEpoch++;
-      const page = pages.current();
-      if (page) pages.fail(page.id);
-      publish({ phase: 'error', message: '页面加载超过 30 秒，请检查网络后重试。', captureMessage: '' });
-      target.webContents.stop();
-    }, 30_000);
-  }
   
   function load(target: WebContentsView, url: string) {
     if (view !== target || !validBookmarkUrl(url)) return;
     publish({ phase: 'loading', url, message: '', notice: '' });
-    armDeadline(target);
     // 加载失败通过 did-fail-load 展示；这里接住 Promise，避免取消导航产生未处理拒绝。
     void target.webContents.loadURL(url).catch(() => undefined);
   }
@@ -126,10 +109,11 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
     let navigationUrl = '';
 
     let extractionTimer: ReturnType<typeof setTimeout> | undefined;
-    let extractionRequest = 0;
+    let extractionController: AbortController | undefined;
     function cancelExtraction() {
       clearTimeout(extractionTimer);
-      extractionRequest++;
+      extractionController?.abort();
+      extractionController = undefined;
     }
     cancelPageExtraction = cancelExtraction;
     function scheduleExtraction() {
@@ -138,23 +122,27 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
       if (!active() || page?.status !== 'loading' || pages.metadata(page.id).manuallyManaged) return;
       const pageId = page.id;
       const epoch = navigationEpoch;
-      const request = extractionRequest;
-      const isCurrent = () => active() && navigationEpoch === epoch && extractionRequest === request;
-      let attempts = 0;
+      const controller = new AbortController();
+      extractionController = controller;
+      const isCurrent = () => active() && navigationEpoch === epoch && extractionController === controller && !controller.signal.aborted;
       async function attempt() {
         if (!isCurrent()) return;
-        attempts++;
         try {
-          const content = await extractReadablePage(contents, item.platform === 'other');
+          const content = await extractReadablePage(contents, controller.signal);
           if (!isCurrent()) return;
           if (content) { pages.complete(pageId, content); publish(); return; }
-          if (attempts < 4) extractionTimer = setTimeout(() => void attempt(), 1500);
-          else { pages.fail(pageId); publish(); console.warn('[Readability] 未识别到文章正文，已停止重试'); }
+          pages.fail(pageId);
+          publish({ captureMessage: '未提取到正文，可在页面内容显示后点击“页面上下文提取”重试。' });
         } catch (error) {
-          if (isCurrent()) { pages.fail(pageId); publish(); console.warn('[Readability] 提取失败', error); }
+          if (isCurrent()) {
+            pages.fail(pageId);
+            publish({ captureMessage: `正文提取失败：${error instanceof Error ? error.message : String(error)}` });
+          }
+        } finally {
+          if (extractionController === controller) extractionController = undefined;
         }
       }
-      // load 完成时动态正文可能尚未渲染；延迟首次提取，只对空结果有限重试。
+      // 等待加载后的动态正文渲染；用户也可随时手动采集。
       extractionTimer = setTimeout(() => void attempt(), 1500);
     }
     contents.once('destroyed', cancelExtraction);
@@ -188,10 +176,9 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
       cancelExtraction();
       navigationUrl = event.url;
       pages.begin(event.url, item.platform);
-      publish({ captureMessage: '' });
+      publish({ url: event.url, captureMessage: '' });
       if (event.isSameDocument) return;
       publish({ phase: 'loading', url: event.url, message: '', notice: '' });
-      armDeadline(target);
     });
 
     contents.on('did-finish-load', () => {
@@ -211,7 +198,6 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
     });
     contents.on('did-navigate-in-page', (_event, url, isMainFrame) => {
       if (active() && isMainFrame) {
-        clearDeadline();
         publish({ url, phase: 'ready', message: '' });
         scheduleExtraction();
       }
@@ -219,13 +205,11 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
     contents.on('page-title-updated', (_event, title) => { if (active()) publish({ title }); });
     contents.on('did-stop-loading', () => {
       if (!active()) return;
-      clearDeadline();
       publish(state.phase === 'loading' ? { phase: 'ready', message: '' } : {});
     });
     contents.on('did-fail-load', (_event, code, description, url, isMainFrame) => {
       if (!active() || !isMainFrame || code === -3) return;
       cancelCapture();
-      clearDeadline();
       const page = pages.current();
       if (page) pages.fail(page.id);
       publish({ phase: 'error', url, message: `页面加载失败（${description} / ${code}），可重试或选择其他收藏。`, captureMessage: '' });
@@ -236,14 +220,12 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
       cancelExtraction();
       const page = pages.current();
       if (page) pages.fail(page.id);
-      clearDeadline();
       publish({ phase: 'error', message: `页面进程已停止（${details.reason}），请重试。`, captureMessage: '' });
     });
     contents.on('destroyed', () => {
       if (view !== target) return;
       cancelCapture();
       cancelPageExtraction = undefined;
-      clearDeadline();
       view = undefined;
       notifyContents();
       pages.clearCurrent();
@@ -269,7 +251,7 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
     if (!item || !validBookmarkUrl(item.url)) return publish({ phase: 'error', message: '此收藏已不可用，请重新选择。' });
     bookmark = item;
     try { create(item); }
-    catch (error) { console.error('Reader creation failed', error); disposeView(); publish({ phase: 'error', message: '无法创建网页容器，请重试。' }); }
+    catch (error) { console.error('Reader creation failed', error); disposeView(); publish({ phase: 'error', message: `无法创建网页容器：${error instanceof Error ? error.message : String(error)}` }); }
     return state;
   }
 
@@ -279,7 +261,7 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
       const url = validBookmarkUrl(state.url) ? state.url : bookmark.url;
       disposeView();
       try { create({ ...bookmark, url }); }
-      catch { disposeView(); publish({ phase: 'error', message: '无法创建网页容器，请重试。' }); }
+      catch (error) { disposeView(); publish({ phase: 'error', message: `无法创建网页容器：${error instanceof Error ? error.message : String(error)}` }); }
       return state;
     }
     const contents = view?.webContents;
@@ -289,7 +271,6 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
       navigationEpoch++;
       const page = pages.current();
       if (page) pages.fail(page.id);
-      clearDeadline();
       publish({ phase: 'stopped', message: '已停止加载，可刷新页面继续。', captureMessage: '' });
       contents.stop();
     } else if (command === 'back' && contents.navigationHistory.canGoBack()) contents.navigationHistory.goBack();
@@ -307,18 +288,15 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
     const page = pages.current();
     if (id !== state.bookmarkId || !bookmark || !target || target.webContents.isDestroyed() || suspended
       || !page || page.id !== expectedPageId) return state;
-    if (state.phase !== 'ready') return publish({ captureMessage: state.phase === 'loading'
-      ? '页面仍在加载，请等待完成后采集。' : '页面尚未就绪，请重新加载后采集。' });
-    if (page.status === 'unsupported') return publish({ captureMessage: '当前页面不支持正文采集。' });
     if (captureController) return state;
+    const address = target.webContents.getURL();
+    // 导航提交前仍是旧 DOM，不能把旧正文保存到新 URL 的快照。
+    if (address !== state.url) return publish({ captureMessage: '新页面导航尚未提交，请在页面显示后再次提取。' });
     cancelPageExtraction?.();
     pages.fail(page.id);
     const controller = new AbortController();
     captureController = controller;
-    contextRevision++;
     const epoch = navigationEpoch;
-    const platform = bookmark.platform;
-    const address = target.webContents.getURL();
     const valid = () => captureController === controller && !controller.signal.aborted && view === target
       && !target.webContents.isDestroyed() && target.webContents.getURL() === address
       && navigationEpoch === epoch && pages.current()?.id === page.id && !suspended;
@@ -326,16 +304,15 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
     publish({ captureMessage });
     
     try {
-      const content = await extractReadablePage(target.webContents, platform === 'other', controller.signal);
+      const content = await extractReadablePage(target.webContents, controller.signal);
       if (!valid()) return state;
       if (!content) captureMessage = '未识别到可读正文，已有采集保持不变。';
       else {
         const added = pages.capture(page.id, content);
-        contextRevision++;
         captureMessage = added ? '已加入本页上下文。' : '正文已存在，已更新最新采集标记，未重复添加。';
       }
     } catch (error) {
-      if (valid()) captureMessage = `采集失败，已有上下文保持不变：${error instanceof Error ? error.message : '正文提取失败。'}`;
+      if (valid()) captureMessage = `采集失败，已有上下文保持不变：${error instanceof Error ? error.message : String(error)}`;
     } finally {
       if (captureController === controller) {
         captureController = undefined;
@@ -350,9 +327,7 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
     const page = pages.current();
     if (id !== state.bookmarkId || !bookmark || !target || target.webContents.isDestroyed() || suspended
       || !page || page.id !== expectedPageId) return state;
-    if (page.status === 'unsupported') return publish({ captureMessage: '当前页面不支持正文采集。' });
     cancelCapture(); cancelPageExtraction?.();
-    contextRevision++;
     pages.clearPage(page.id);
     return publish({ captureMessage: '本页上下文已清空，可重新采集。' });
   }
@@ -379,35 +354,15 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
     },
     freezeSnapshot() {
       const context: PageContext = suspended ? { pages: [] } : pages.snapshot();
-      const page = pages.current();
-      const target = view;
-      const epoch = navigationEpoch;
-      const frozenRevision = contextRevision;
-      const refresh = !suspended && !captureController && state.phase === 'ready' && bookmark?.platform === 'other' && target && page?.status === 'ready'
-        && !pages.metadata(page.id).manuallyManaged;
-      // 同步冻结目录与身份，刷新等待属于 AI run，停止和退出能取消；切页后不混入新正文。
-      return async (signal: AbortSignal) => {
+      // 发送时只冻结已采集的上下文；正文提取由页面加载和手动采集负责。
+      return (signal: AbortSignal) => {
         signal.throwIfAborted();
-        if (!refresh || !target || !page || frozenRevision !== contextRevision) return context;
-        let content: PageContent | null = null;
-        const valid = () => view === target && navigationEpoch === epoch && pages.current()?.id === page.id && !suspended;
-        if (valid()) {
-          try { content = await extractReadablePage(target.webContents, true, signal); }
-          catch { signal.throwIfAborted(); }
-        }
-        signal.throwIfAborted();
-        // 发送后的采集或清空只影响后续请求，不能让等待中的刷新改写本轮已冻结正文。
-        if (frozenRevision !== contextRevision) return context;
-        context.pages = context.pages.map(snapshot => snapshot.id !== page.id ? snapshot : valid() && content
-          ? pages.refreshed(snapshot, content)
-          : { ...snapshot, text: '', status: 'unavailable' });
         return context;
       };
     },
     sessionModes: sessions.modes,
     async clearSession(platform: Platform) {
       cancelCapture(); cancelPageExtraction?.();
-      contextRevision++;
       pages.clear();
       publish({ captureMessage: '' });
       for (const listener of sessionObservers) listener(platform);
@@ -424,8 +379,9 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
         return { ok: true, cancelled: false } as const;
       } catch (error) {
         console.error('Session clearing failed', error);
-        if (affected) publish({ phase: 'error', message: '会话未完全清除，请在设置中重试。' });
-        return { ok: false, message: '会话未完全清除，请重试。收藏与笔记未修改。' } as const;
+        const message = `会话未完全清除：${error instanceof Error ? error.message : String(error)}`;
+        if (affected) publish({ phase: 'error', message });
+        return { ok: false, message } as const;
       }
     },
     suspend(value: boolean) {
