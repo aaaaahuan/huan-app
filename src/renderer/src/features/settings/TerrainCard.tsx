@@ -6,7 +6,7 @@ export function TerrainCard({ value, autoRoot, onChange, onChoose }: {
 }) {
   return <section className="source-card">
     <h3>地形 / huan-path</h3>
-    <label className="source-path-label" htmlFor="terrain-root">地形数据目录 (Obsidian)</label>
+    <label className="source-path-label" htmlFor="terrain-root">地形数据目录</label>
     <div className="source-path-row">
       <Input id="terrain-root" value={value} maxLength={4096} placeholder={autoRoot || '请选择数据目录'}
         onChange={event => onChange(event.target.value)} />

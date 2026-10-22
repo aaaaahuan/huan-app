@@ -5,7 +5,7 @@ import { constants } from 'node:fs';
 import { extname, isAbsolute, join } from 'node:path';
 import { defaultSettings, PLATFORMS, settingsSchema, type Platform, type SettingsResult } from '@shared/contracts/settings';
 import { app } from 'electron';
-import { resolveTerrainDataDir, validateTerrainDataDir } from '@main/terrain/root';
+import { defaultTerrainDataDir, resolveTerrainDataDir, validateTerrainDataDir } from '@main/terrain/root';
 import { createCredentials } from './credentials';
 
 // 文件内容摘要作为修订标识，用于发现读取之后、保存之前已发生的外部修改。
@@ -50,7 +50,7 @@ export function createSettingsStore(directory: string) {
     let committed = false;
     const temporary = join(directory, `.settings-${randomUUID()}.tmp`);
     try {
-      try { await validateTerrainDataDir(resolveTerrainDataDir(parsed.data.terrain.dataDir, app.getPath('home'))); }
+      try { await validateTerrainDataDir(resolveTerrainDataDir(parsed.data.terrain.dataDir, defaultTerrainDataDir(app.getAppPath(), app.isPackaged, app.getPath('userData')))); }
       catch (error) { return { ok: false, message: error instanceof Error ? error.message : '地形数据目录无效。' }; }
       const fields: Partial<Record<Platform, string>> = {};
       for (const platform of PLATFORMS) {

@@ -7,7 +7,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { IPC_CHANNELS } from '@shared/ipc-channels';
 import type { TerrainStatus } from '@shared/contracts/terrain';
 
-import { resolveHuanPathRoot, validateHuanPathRoot, resolveTerrainDataDir, validateTerrainDataDir } from './root';
+import { resolveHuanPathRoot, validateHuanPathRoot, defaultTerrainDataDir, resolveTerrainDataDir, validateTerrainDataDir } from './root';
 
 const origin = 'http://127.0.0.1:8765';
 export function registerTerrain(assertTrusted: (event: IpcMainInvokeEvent) => void, loadDataDir: () => Promise<string>) {
@@ -63,7 +63,7 @@ export function registerTerrain(assertTrusted: (event: IpcMainInvokeEvent) => vo
     try {
       const root = resolveHuanPathRoot(process.env.HUAN_PATH_ROOT, app.isPackaged, app.getAppPath());
       await validateHuanPathRoot(root);
-      const dataDir = resolveTerrainDataDir(await loadDataDir(), app.getPath('home'));
+      const dataDir = resolveTerrainDataDir(await loadDataDir(), defaultTerrainDataDir(app.getAppPath(), app.isPackaged, app.getPath('userData')));
       await validateTerrainDataDir(dataDir);
       const existing = child;
       if (existing && running(existing) && await healthy() && running(existing)) {
@@ -102,7 +102,7 @@ export function registerTerrain(assertTrusted: (event: IpcMainInvokeEvent) => vo
   }
   ipcMain.handle(IPC_CHANNELS.terrain.autoRoot, event => {
     assertTrusted(event);
-    try { return resolveTerrainDataDir('', app.getPath('home')); }
+    try { return resolveTerrainDataDir('', defaultTerrainDataDir(app.getAppPath(), app.isPackaged, app.getPath('userData'))); }
     catch { return ''; }
   });
   ipcMain.handle(IPC_CHANNELS.terrain.ensure, event => {
@@ -119,7 +119,7 @@ export function registerTerrain(assertTrusted: (event: IpcMainInvokeEvent) => vo
       pending ??= Promise.resolve({ ok: false, message: '正在切换地形目录…' });
       const previous = pending;
       const change = previous.then(async () => {
-        const next = resolveTerrainDataDir(configured, app.getPath('home'));
+        const next = resolveTerrainDataDir(configured, defaultTerrainDataDir(app.getAppPath(), app.isPackaged, app.getPath('userData')));
         if (activeDataDir !== next) {
           const restart = child !== undefined;
           await stop();

@@ -14,8 +14,18 @@ export async function validateHuanPathRoot(root: string): Promise<void> {
   }
 }
 
-export function resolveTerrainDataDir(configured: string, home: string): string {
-  return configured.trim() || join(home, 'Library/Mobile Documents/iCloud~md~obsidian/Documents/huan-space/project/huan-project/huan-path');
+// 早期版本默认放在 Obsidian 笔记库；保存过该路径的配置视为未设置，回到仓库内默认目录。
+const LEGACY_OBSIDIAN_DATA_DIR = 'Library/Mobile Documents/iCloud~md~obsidian/Documents/huan-space/project/huan-project/huan-path';
+
+// 开发态默认使用仓库内 terrain-data/，随 huan-app 一起纳入 Git；安装版应用目录只读，改用 userData。
+export function defaultTerrainDataDir(appPath: string, packaged: boolean, userData: string): string {
+  return packaged ? join(userData, 'terrain-data') : resolve(appPath, 'terrain-data');
+}
+
+export function resolveTerrainDataDir(configured: string, fallback: string): string {
+  const value = configured.trim();
+  if (!value || resolve(value).replace(/\/+$/, '').endsWith(LEGACY_OBSIDIAN_DATA_DIR)) return fallback;
+  return value;
 }
 
 export async function validateTerrainDataDir(directory: string): Promise<void> {
