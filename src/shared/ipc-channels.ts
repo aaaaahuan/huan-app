@@ -1,6 +1,7 @@
 // 主进程与 preload 共用的通道名称；保持纯常量，避免给沙箱 preload 引入运行时依赖。
 // 请求使用 invoke/handle，browser.state 使用 send/on 推送状态；处理函数仍归属各业务模块。
 export const IPC_CHANNELS = {
+  terrain: { ensure: 'huan-app:terrain:ensure', autoRoot: 'huan-app:terrain:auto-root' },
   app: { status: 'huan-app:app:status' },
   algorithms: { get: 'huan-app:algorithms:get', refresh: 'huan-app:algorithms:refresh',
     setCompleted: 'huan-app:algorithms:set-completed', open: 'huan-app:algorithms:open',
@@ -25,6 +26,7 @@ export const IPC_CHANNELS = {
     subtitleUsage: 'huan-app:settings:subtitle-usage', openSubtitleAccount: 'huan-app:settings:subtitle-account',
     revealAIKey: 'huan-app:settings:reveal-ai-key',
     revealSubtitleKey: 'huan-app:settings:reveal-subtitle-key',
+    chooseDirectory: 'huan-app:settings:choose-directory',
     chooseFile: 'huan-app:settings:choose-file'
   },
   // 收藏帖子模块

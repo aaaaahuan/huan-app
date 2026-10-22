@@ -10,8 +10,9 @@ import { Button, IconButton } from '@renderer/components/Button';
 import { ReadingAssistant } from '@renderer/features/reading-assistant/ReadingAssistant';
 import { PanelDivider } from '@renderer/components/PanelDivider';
 import { usePanelWidths, type PanelSide } from './usePanelWidths';
-import { Navigation, type SystemPage } from './Navigation';
+import { Navigation, SHOW_ALGORITHMS, type SystemPage } from './Navigation';
 import { Translation } from '@renderer/features/translation/Translation';
+import { Terrain } from '@renderer/features/terrain/Terrain';
 import { AlgorithmTraining } from '@renderer/features/algorithms/AlgorithmTraining';
 import '@renderer/components/controls.css';
 import '@renderer/features/bookmarks/bookmarks.css';
@@ -33,7 +34,7 @@ export function App() {
   const navigationPending = useRef(false);
   // 下列界面状态仅保留在本轮运行中，不写回 Obsidian 或收藏副本。
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<'sources' | 'ai' | 'subtitles'>('sources');
+  const [settingsTab, setSettingsTab] = useState<'sources' | 'ai' | 'subtitles' | 'terrain'>('sources');
   const [feedback, setFeedback] = useState('');
   const [collapsed, setCollapsed] = useState(false);
   const [aiCollapsed, setAICollapsed] = useState(false);
@@ -88,7 +89,7 @@ export function App() {
   const enabled = library?.sources.some((source) => source.state !== 'disabled');
   const hasItems = library?.sources.some((source) => source.items.length > 0);
   const failures = library?.sources.filter((source) => source.state === 'cached' || source.state === 'error') ?? [];
-  async function openSettings(tab: 'sources' | 'ai' | 'subtitles' = 'sources') {
+  async function openSettings(tab: 'sources' | 'ai' | 'subtitles' | 'terrain' = 'sources') {
     // 原生视图不受 DOM z-index 约束，确认隐藏后才能打开设置对话框。
     try { await window.huanApp.browser.suspend(true); setFeedback(''); setSettingsTab(tab); setSettingsOpen(true); }
     catch (error) { setError(String(error)); }
@@ -98,6 +99,7 @@ export function App() {
     void window.huanApp.browser.suspend(activePage !== 'reading').catch(error => setFeedback(String(error)));
   }
   async function navigate(page: SystemPage) {
+    if (!SHOW_ALGORITHMS && page === 'algorithms') page = 'reading';
     if (page === activePage || navigationPending.current) return;
     navigationPending.current = true; setNavigationBusy(true); setFeedback('');
     try {
@@ -185,7 +187,8 @@ export function App() {
       </Reader>
     </div>
     <Translation active={activePage === 'translation'} selection={modelSelection} modelChanging={modelSaving} />
-    <AlgorithmTraining active={activePage === 'algorithms'} blocked={settingsOpen || navigationBusy} />
+    <Terrain active={activePage === 'terrain'} settingsRevision={revision} onOpenSettings={() => { setSettingsTab('terrain'); void openSettings('terrain'); }} />
+    {SHOW_ALGORITHMS && <AlgorithmTraining active={activePage === 'algorithms'} blocked={settingsOpen || navigationBusy} />}
     </div>
     </div>
     {settingsOpen ? <SettingsPanel initialTab={settingsTab} onClose={closeSettings} onSaved={() => {

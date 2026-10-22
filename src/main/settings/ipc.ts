@@ -78,6 +78,18 @@ export function registerSettings(window: BrowserWindow, store: ReturnType<typeof
     assertTrusted(event);
     return shell.openExternal('https://transcriptguru.io/dashboard');
   });
+  ipcMain.handle(IPC_CHANNELS.settings.chooseDirectory, async event => {
+    assertTrusted(event);
+    if (choosing) return { ok: false, message: '目录选择窗口已打开。' };
+    choosing = true;
+    try {
+      const result = await dialog.showOpenDialog(window, {
+        title: '选择地形数据目录', buttonLabel: '选择目录', properties: ['openDirectory']
+      });
+      return { ok: true, path: result.canceled ? null : result.filePaths[0] ?? null };
+    } catch { return { ok: false, message: '无法选择目录，请直接填写绝对路径。' }; }
+    finally { choosing = false; }
+  });
   ipcMain.handle(IPC_CHANNELS.settings.chooseFile, async (event) => {
     assertTrusted(event);
     // 防止重复点击打开多层原生选择器；取消只返回 null，不清除原配置。

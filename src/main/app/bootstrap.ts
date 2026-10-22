@@ -29,6 +29,7 @@ import { createTranslateAgentConfig } from '@main/ai/agent/translate-agent';
 import { createKeyTestAgentConfig } from '@main/ai/agent/key-test-agent';
 import { createAlgorithmLibrary } from '@main/algorithms/library';
 import { registerAlgorithms } from '@main/algorithms/ipc';
+import { registerTerrain } from '@main/terrain/service';
 import { createAlgorithmNotes } from '@main/algorithms/notes';
 
 // 协议权限必须在 app ready 前声明；生产界面通过 app:// 加载，不依赖开发服务器。
@@ -76,7 +77,7 @@ if (!app.requestSingleInstanceLock()) {
         return new Response(content, { headers: {
           'Content-Type': mime[extname(path)] ?? 'application/octet-stream',
           'X-Content-Type-Options': 'nosniff',
-          'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'none'; base-uri 'none'; frame-src 'none'; object-src 'none'"
+          'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'none'; base-uri 'none'; frame-src http://127.0.0.1:8765; object-src 'none'"
         } });
       } catch { return new Response(null, { status: 404 }); }
     });
@@ -133,6 +134,11 @@ if (!app.requestSingleInstanceLock()) {
     registerSubtitles(subtitles, playback, assertTrusted);
     pageHost.observeSessionClear(platform => { if (platform === 'youtube') subtitles.clear(); });
 
+    const terrain = registerTerrain(assertTrusted, async () => {
+      const result = await settings.load();
+      if (!result.ok) throw new Error(result.message);
+      return result.settings.terrain.dataDir;
+    });
     const localModel = createLocalModelRuntime(contents, async () => {
       const result = await settings.load();
       if (!result.ok) throw new Error(result.message);
@@ -155,6 +161,7 @@ if (!app.requestSingleInstanceLock()) {
     const reading = registerReading(window, pageHost, settings, assertTrusted, subtitles.snapshot, readingAgent);
     const translation = registerTranslation(contents, assertTrusted, localModel, translateAgent);
     registerSettings(window, settings, assertTrusted, async value => {
+      await terrain.configure(value.terrain.dataDir);
       await subtitles.configure(value);
       await bookmarks.update(value);
     }, subtitles.usage);
@@ -169,6 +176,7 @@ if (!app.requestSingleInstanceLock()) {
     app.on('will-quit', event => {
       event.preventDefault();
       finalizingQuit ??= (async () => {
+        await terrain.close().catch(error => console.error('Terrain shutdown failed', error));
         try { translation.close(); }
         catch (error) { console.error('Translation shutdown failed', error); }
         await reading.close().catch(error => console.error('Reading conversations close failed', error));

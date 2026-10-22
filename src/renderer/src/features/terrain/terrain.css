@@ -1,0 +1,4 @@
+.terrain-system { display: flex; flex: 1; min-height: 0; min-width: 0; }
+.terrain-system[hidden] { display: none; }
+.terrain-frame { width: 100%; flex: 1; border: 0; background: var(--surface); }
+.terrain-status { margin: auto; max-width: 660px; padding: 32px; color: var(--muted); text-align: center; white-space: pre-wrap; overflow-wrap: anywhere; }

@@ -18,7 +18,9 @@ export const settingsSchema = z.object({
     wechat: sourceSchema.default({ enabled: false, path: '' }), other: sourceSchema.default({ enabled: false, path: '' }) }).strict(),
   // 兼容 A1-A4 的配置；缺少会话设置时沿用内存模式，不自动持久化登录态。
   sessions: sessionModesSchema.default(defaultSessionModes),
-  notesPath: z.string().trim().default(''),
+  // 丢弃旧代码目录设置；数据目录独立配置，缺省时使用主进程计算的默认路径。
+  terrain: z.object({ dataDir: z.string().trim().max(4096).default(''), huanPathRoot: z.unknown().optional() }).strict().transform(({ dataDir }) => ({ dataDir })).default({ dataDir: '' }),
+  notesPath: z.string().trim().max(4096).default(''),
   model: modelSelectionSchema.default(defaultModelSelection),
   localModel: z.object({ modelPath: z.string().trim(), serverPath: z.string().trim() })
     .strict().refine(paths => !paths.modelPath.includes('\0') && !paths.serverPath.includes('\0'), '本地模型路径包含无效字符。')
@@ -32,7 +34,7 @@ export type Settings = z.infer<typeof settingsSchema>;
 export type Platform = typeof PLATFORMS[number];
 // 每次返回新对象，首次启动不猜测用户路径，也不自动启用未配置的来源。
 export function defaultSettings(): Settings {
-  return { version: 1, sources: {
+  return { version: 1, terrain: { dataDir: '' }, sources: {
     x: { enabled: false, path: '' }, reddit: { enabled: false, path: '' },
     youtube: { enabled: false, path: '' }, wechat: { enabled: false, path: '' }, other: { enabled: false, path: '' }
   }, sessions: defaultSessionModes(), notesPath: '', model: defaultModelSelection(), localModel: { modelPath: '', serverPath: '' },
@@ -46,6 +48,7 @@ export type SettingsResult =
 export interface SettingsAPI {
   load(): Promise<SettingsResult>;
   save(settings: Settings, revision: string | null, keyChange?: string | null, subtitleKeyChange?: string | null): Promise<SettingsResult>;
+  chooseDirectory(): Promise<{ ok: true; path: string | null } | { ok: false; message: string }>;
   chooseFile(): Promise<{ ok: true; path: string | null } | { ok: false; message: string }>;
   subtitleUsage(): Promise<SubtitleUsage>;
   revealAIKey(credentialId: string): Promise<SavedKeyResult>;

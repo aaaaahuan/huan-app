@@ -7,13 +7,15 @@ import { SourceCard } from './SourceCard';
 import { SessionCard } from './SessionCard';
 import { AICard } from './AICard';
 import { SubtitleCard } from './SubtitleCard';
+import { TerrainCard } from './TerrainCard';
 import './settings.css';
 
 export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
-  onClose(): void; onSaved(): void; initialTab?: 'sources' | 'ai' | 'subtitles';
+  onClose(): void; onSaved(): void; initialTab?: 'sources' | 'ai' | 'subtitles' | 'terrain';
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [draft, setDraft] = useState<Settings>();
+  const [autoRoot, setAutoRoot] = useState('');
   const [baseline, setBaseline] = useState('');
   // 修订标识原样交回主进程，用于检查用户编辑期间磁盘配置是否已变化。
   const [revision, setRevision] = useState<string | null>(null);
@@ -22,7 +24,7 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
   const [message, setMessage] = useState('');
   const [fields, setFields] = useState<Partial<Record<Platform, string>>>({});
   const [confirmClose, setConfirmClose] = useState(false);
-  const [tab, setTab] = useState<'sources' | 'sessions' | 'ai' | 'subtitles'>(initialTab);
+  const [tab, setTab] = useState<'sources' | 'sessions' | 'ai' | 'subtitles' | 'terrain'>(initialTab);
   const [keyChange, setKeyChange] = useState<string | null>();
   const [subtitleKeyChange, setSubtitleKeyChange] = useState<string | null>();
   const [aiMessage, setAIMessage] = useState('');
@@ -46,6 +48,7 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
       (result) => { if (!cancelled) accept(result); },
       error => { if (!cancelled) setMessage(String(error)); }
     ).finally(() => { if (!cancelled) setLoading(false); });
+    void window.huanApp.terrain.autoRoot().then(value => { if (!cancelled) setAutoRoot(value); }, () => { if (!cancelled) setMessage('无法读取地形默认目录。'); });
     void window.huanApp.browser.sessionModes().then(
       (value) => { if (!cancelled) setActiveModes(value); },
       error => { if (!cancelled) setSessionMessage(String(error)); }
@@ -88,6 +91,15 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
       // 取消系统文件选择器不等于清空路径，保留用户之前的输入。
       else if (result.path !== null) update(platform, { path: result.path });
     } catch (error) { setMessage(String(error)); }
+    finally { setBusy(false); }
+  }
+  async function chooseTerrain() {
+    setBusy(true);
+    try {
+      const result = await window.huanApp.settings.chooseDirectory();
+      if (!result.ok) setMessage(result.message);
+      else if (result.path !== null) setDraft(previous => previous ? { ...previous, terrain: { dataDir: result.path ?? '' } } : previous);
+    } catch { setMessage('无法选择目录，请重试。'); }
     finally { setBusy(false); }
   }
   async function save() {
@@ -140,8 +152,8 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
       <form className="settings-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
         <div className="settings-layout">
         <div className="settings-navigation">
-        <Tabs<'sources' | 'sessions' | 'ai' | 'subtitles'> className="settings-tabs" label="设置分类" orientation="vertical" value={tab} onChange={setTab} disabled={busy || confirmClose}
-          options={[{ value: 'sources', label: '收藏来源' }, { value: 'sessions', label: '登录与隐私' }, { value: 'ai', label: 'AI 伴读' }, { value: 'subtitles', label: '字幕服务' }]} />
+        <Tabs<'sources' | 'sessions' | 'ai' | 'subtitles' | 'terrain'> className="settings-tabs" label="设置分类" orientation="vertical" value={tab} onChange={setTab} disabled={busy || confirmClose}
+          options={[{ value: 'sources', label: '收藏来源' }, { value: 'sessions', label: '登录与隐私' }, { value: 'ai', label: 'AI 伴读' }, { value: 'subtitles', label: '字幕服务' }, { value: 'terrain', label: '地形' }]} />
         </div>
         <div className="settings-body">
           <div id="sources-panel" role="tabpanel" aria-labelledby="sources-tab" hidden={tab !== 'sources'}>
@@ -179,6 +191,13 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
           <div role="tabpanel" id="subtitles-panel" aria-labelledby="subtitles-tab" hidden={tab !== 'subtitles'}>
             {draft ? <fieldset className="settings-sources" disabled={busy || confirmClose}>
               <SubtitleCard credentialId={draft.subtitles.credentialId} value={subtitleKeyChange} active={tab === 'subtitles'} onChange={setSubtitleKeyChange} />
+            </fieldset> : <p>正在读取设置…</p>}
+          </div>
+          <div role="tabpanel" id="terrain-panel" aria-labelledby="terrain-tab" hidden={tab !== 'terrain'}>
+            {draft ? <fieldset className="settings-sources" disabled={busy || confirmClose}>
+              <TerrainCard value={draft.terrain.dataDir} autoRoot={autoRoot}
+                onChange={dataDir => { setDraft({ ...draft, terrain: { dataDir } }); setMessage(''); }}
+                onChoose={() => void chooseTerrain()} />
             </fieldset> : <p>正在读取设置…</p>}
           </div>
           {message ? <p role="alert" className="settings-error">{message}</p> : null}

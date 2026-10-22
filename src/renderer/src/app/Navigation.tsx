@@ -1,6 +1,8 @@
 import { Button } from '@renderer/components/Button';
 
-export type SystemPage = 'reading' | 'translation' | 'algorithms';
+export const SHOW_ALGORITHMS = false;
+
+export type SystemPage = 'reading' | 'translation' | 'algorithms' | 'terrain';
 export function Navigation({ active, busy, onChange }: {
   active: SystemPage; busy: boolean; onChange(page: SystemPage): void;
 }) {
@@ -14,10 +16,12 @@ export function Navigation({ active, busy, onChange }: {
         disabled={busy} onClick={() => onChange('translation')}>
         翻译
       </Button>
-      <Button className="navigation-item" aria-label="算法训练" aria-current={active === 'algorithms' ? 'page' : undefined}
+      {SHOW_ALGORITHMS && <Button className="navigation-item" aria-label="算法训练" aria-current={active === 'algorithms' ? 'page' : undefined}
         disabled={busy} onClick={() => onChange('algorithms')}>
         算法训练
-      </Button>
+      </Button>}
+      <Button className="navigation-item" aria-label="地形" aria-current={active === 'terrain' ? 'page' : undefined}
+        disabled={busy} onClick={() => onChange('terrain')}>地形</Button>
     </div>
   </nav>;
 }
