@@ -1,6 +1,6 @@
 import { Button } from '@renderer/components/Button';
 
-export const SHOW_ALGORITHMS = false;
+export const SHOW_ALGORITHMS = true;
 
 export type SystemPage = 'reading' | 'translation' | 'algorithms' | 'terrain';
 export function Navigation({ active, busy, onChange }: {
