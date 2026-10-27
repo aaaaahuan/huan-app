@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 // 兼容当前 Python 服务；原生 API 就绪前不改变 preload 与 iframe 的约定。
 export type TerrainStatus = { ok: true; url: string } | { ok: false; message: string };
-export interface TerrainAPI { autoRoot(): Promise<string>; ensure(): Promise<TerrainStatus> }
+export interface TerrainAPI { autoRoot(): Promise<string>; ensure(): Promise<TerrainStatus>; listJobs(): Promise<TerrainListResult>; getJob(input: TerrainJobRequest): Promise<TerrainGetResult> }
 
 export const terrainJobIdSchema = z.string().regex(/^\d{8}-\d{6}-[a-f0-9]{10}$/);
 export const terrainStageKeySchema = z.enum(['parse', 'dem', 'terrain', 'features', 'photos', 'scale', 'export', 'preview']);
@@ -13,7 +13,7 @@ export const terrainStageSchema = z.object({
   key: terrainStageKeySchema,
   name: z.string(),
   status: z.enum(['pending', 'running', 'done', 'failed']),
-  elapsed_seconds: secondsSchema.nullable(),
+  elapsed_seconds: secondsSchema.nullable().optional(),
   detail: z.string(),
   started_at: secondsSchema.optional(),
   finished_at: secondsSchema.optional()
@@ -60,3 +60,20 @@ export const terrainExportModelSchema = terrainJobRequestSchema.extend({ format:
 export type TerrainJobRequest = z.infer<typeof terrainJobRequestSchema>;
 export type TerrainUpload = z.infer<typeof terrainUploadSchema>;
 export type TerrainExportModel = z.infer<typeof terrainExportModelSchema>;
+
+// 只验证 summary 所需字段；其余历史元数据原样接受。
+export const terrainMetadataSchema = z.object({
+  route_info: z.object({ name: z.string().optional(), date: z.string().optional() }).passthrough().optional(),
+  photos: z.object({ total: z.number().int().nonnegative().optional() }).passthrough().optional(),
+  houses: z.object({ placed_points: z.array(z.unknown()).optional() }).passthrough().optional()
+}).passthrough();
+export const terrainPhotoHousesSchema = z.object({
+  method: z.string().nullable().optional(),
+  points: z.array(z.object({ has_house: z.union([z.boolean(), z.literal('uncertain')]).optional() }).passthrough()).optional()
+}).passthrough();
+export interface TerrainJobList {
+  jobs: TerrainJobSummary[];
+  diagnostics: { id: string; message: string }[];
+}
+export type TerrainListResult = ({ ok: true } & TerrainJobList) | { ok: false; message: string };
+export type TerrainGetResult = { ok: true; job: TerrainJobSummary } | { ok: false; message: string };

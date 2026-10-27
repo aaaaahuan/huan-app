@@ -3,7 +3,7 @@
 export const IPC_CHANNELS = {
   terrain: {
     ensure: 'huan-app:terrain:ensure', autoRoot: 'huan-app:terrain:auto-root',
-    // 原生迁移预留；Phase 0 尚未注册 handler 或开放 preload 方法。
+    // listJobs/getJob 已接通原生只读实现；其余原生通道仍预留。
     status: 'huan-app:terrain:status', listJobs: 'huan-app:terrain:list-jobs',
     getJob: 'huan-app:terrain:get-job', upload: 'huan-app:terrain:upload', retry: 'huan-app:terrain:retry',
     getHouses: 'huan-app:terrain:get-houses', saveHouses: 'huan-app:terrain:save-houses',

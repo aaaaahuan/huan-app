@@ -4,7 +4,7 @@
 
 ## 当前状态与迁移方式
 
-`bootstrap.ts` 继续调用 `service.ts` 的 `registerTerrain`；该文件成为兼容门面，原实现原样移到 `python-service.ts`。preload、Terrain.tsx、端口、进程生命周期、设置切换与 iframe 均保持原行为。新增通道只是预留常量，没有注册 handler，也不向 window.huanApp 暴露未完成方法。
+`bootstrap.ts` 继续调用 `service.ts` 的 `registerTerrain`；该文件成为兼容门面，原实现原样移到 `python-service.ts`。preload、Terrain.tsx、端口、进程生命周期、设置切换与 iframe 均保持原行为。Phase 1 已接通 listJobs/getJob 原生只读 handler 与 preload；其余新增通道仍为预留。只读方法不调用 Python，也不初始化或写入数据目录。
 
 本分支采用最终硬切换，不增加长期 feature flag：先补原生只读库与资源访问，再开发独立原生工作台和流水线；原生全链路验收后一次切换 bootstrap/preload/Terrain，删除 Python 启动器、root.ts 中 Python 路径探测与 loopback CSP。中途不能让新旧调度器同时写同一作品。设置 `settings.terrain.dataDir`、开发默认 terrain-data、安装默认 userData 的含义不变。
 
@@ -49,7 +49,7 @@ main 管理目录、网络、任务及 Electron 能力；worker 只接受主进�
 
 ## IPC 与资源取代 HTTP
 
-统一前缀 `huan-app:terrain:`。所有未来 handler 经 bootstrap 注入的 assertTrusted 验证主窗口主 frame，再解析 Zod 入参；preload 使用固定方法，不提供任意通道或任意本机路径访问。Phase 0 只保留已接通的 ensure/autoRoot。
+统一前缀 `huan-app:terrain:`。所有未来 handler 经 bootstrap 注入的 assertTrusted 验证主窗口主 frame，再解析 Zod 入参；preload 使用固定方法，不提供任意通道或任意本机路径访问。ensure/autoRoot 仍沿用 Python 实现；Phase 1 新增 listJobs/getJob。
 
 | HTTP / 行为 | 原生通道（本期预留） | 目标语义 |
 | --- | --- | --- |
@@ -63,7 +63,7 @@ main 管理目录、网络、任务及 Electron 能力；worker 只接受主进�
 | 下载 /models | openModelsDir、exportModel | `{id}` / `{id, format: stl\|3mf}`；shell 打开已校验目录，或原生另存为对话框；无任意输出路径参数 |
 | /jobs/:id/web/*、models/* | 专用只读 terrain 协议 | 不把 HTML/JS 当特权应用执行；原生 viewer 仅读资产；导出独立网页仍可包含受控模板 |
 
-原生操作返回 `{ok:true,...}` 或 `{ok:false,message}`；upload/retry 返回持久化 status；getJob 返回 summary。房屋/道路详细响应 schema 在实施阶段按原文件格式补齐，不虚构空数据。status 不复用旧 TerrainStatus（旧类型专门描述 Python URL）。本期不扩展 TerrainAPI，避免向 renderer 承诺不存在的能力。
+原生操作返回 `{ok:true,...}` 或 `{ok:false,message}`；upload/retry 返回持久化 status；getJob 返回 summary。房屋/道路详细响应 schema 在实施阶段按原文件格式补齐，不虚构空数据。status 不复用旧 TerrainStatus（旧类型专门描述 Python URL）。Phase 1 的 TerrainAPI 新增 listJobs() → {ok:true,jobs,diagnostics} 与 getJob({id}) → {ok:true,job}，失败统一为 {ok:false,message}；可信 sender 检查位于业务错误捕获外。每次读取当前配置，jobs 根不存在时返回空列表且不创建目录，其他目录读取失败明确返回错误。
 
 专用协议建议 `terrain://jobs/<id>/web/<relative>`，app ready 前声明，只在 UI session 注册，允许 GET；协议需检查可信 UI 来源上下文并仅提供当前数据根内 completed 作品的白名单资源。先校验 ID，再 realpath 验证文件及基目录均在当前 jobs 根内，拒绝 symlink 越界、编码分隔符、遍历、其他目录与非白名单后缀。返回精确 MIME/nosniff，不提供脚本执行入口；生产 CSP 仅为资源添加必要的 terrain scheme，不放开远程脚本或特权 UI。metadata 内相对路径按所属资源解析，不信任绝对路径、旧 preview_url 或 file URL。大二进制通过流响应而非 IPC 拷贝；上传复制峰值与取消后的临时文件清理需专项验证。
 
@@ -113,3 +113,11 @@ viewer 对齐 web/features.js 的地表组合顺序、路线间隙、河流/湖�
 5. Phase 5：房屋/道路编辑补齐、聚落/标注、异常恢复及打包验收；一次硬切，移除 Python/HTTP/iframe 依赖，确认无 Python 环境仍可完整使用。
 
 主要风险：GDAL/GEOS/scipy 的数值等价、WASM 打包和内存、旧 metadata 版本差异、系统代理、导出网页的本地资源与许可、视觉 API 当前配置边界。依赖具体版本、误差阈值与大上传传输方式必须在相应阶段实测定案，不阻塞本期脚手架。
+
+## Phase 1 只读实现
+
+`library.ts` 按 ID 逆序枚举作品，逐项校验 status 与目录 ID 一致；坏 JSON、必需字段无效、非法目录或越界链接进入 diagnostics，不影响其余作品。可选 metadata/photo_houses 缺失或结构损坏使用 summary 默认值，访问权限与安全边界错误仍反馈。共享持久化 schema 保留未知字段，阶段 elapsed_seconds 兼容缺省/null。
+
+`assets.ts` 提供 resolveJobAsset(dataRoot,id,area,path) 和 readJobAssetJson(dataRoot,id,path)，仅读 completed 作品。ID、路径分段、jobs/job/资源目录和文件 realpath、文件类型及后缀均受校验；禁止编码路径片段、反斜杠、遍历和符号链接越界。后缀沿用参考 server.py；本阶段只提供主进程解析/读取 helper，尚未注册资源协议，也没有将 HTML/JS 提供给特权 renderer 执行。
+
+验证采用 /tmp 中完整复制的旧 completed 作品及临时夹具，不增加仓库测试脚本或框架，不启动可能恢复真实任务的 Python/iframe。Phase 2 可先做原生 WorkList，通过新增 IPC 列出作品并保留 iframe 预览；资源协议及原生 viewer 另行实现。
