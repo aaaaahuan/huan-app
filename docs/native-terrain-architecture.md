@@ -1,6 +1,16 @@
 # 原生地形迁移架构
 
 
+## Phase 8 切片 1：构建线程隔离
+
+生产 createJob/retryJob 通过固定 `out/main/terrain-worker.js` 执行原流水线，主进程仅创建任务、保留同 job 锁与接收终态；raster 解码、目标网格、路线 KD tree、Manifold、导出及预览资产写入均在线程中。入口参数为主进程确定的 root/job/status，结果校验状态 schema 与 job ID；线程退出后才释放锁。异常退出读取最近落盘进度并保存 failed，可重试。
+
+构建将 geotiff 纳入 bundle，并把其可选 `web-worker` Pool 后端替换为明确报错的禁用后端。当前 `readRasters` 不使用 Pool，解码已在整个任务的 worker 中；这样不加载上游 web-worker 对普通 Node workerData 的错误解构，不修改 node_modules、不改变 TIFF 解码算法、不新增依赖。后续若使用嵌套 Pool，必须重新实现/验收适配，不能直接启用。
+
+本切片保持 upload/retry 等待终态，尚无并发数量上限、快速返回、取消、退出/目录切换中止和启动恢复；configure/close 行为不变。不同任务现在各占线程，需要后续有界调度。没有将此切片称为完整调度完成。安装包/asar worker 加载未验收。
+
+真实 Phase7 KML/DEM/WorldCover 复用，线程构建 STL SHA256 与 Phase7 完全一致；同配置 Python 对照的路线距离逐点相同，classes 仍差 639/259164。隔离 Electron 主线程 20ms 心跳首次最大延迟 32ms、最终构建复验 3ms，图层开关、缺源、重试、同 job 互斥、缺 worker 错误持久化、STL/3MF 独立读取通过。记录见 `/tmp/codex-native-terrain/phase8-report.md`。以下 Phase7 章节为几何功能基线，其中「主进程 CPU/WASM」已被本节替代，其余未完成项保留。
+
 ## 当前状态：Phase 7 路线 / WorldCover 与新作品预览（部分完成）
 
 原生上传在 DEM 核心上增加路线与 WorldCover 林/草/雪。路线按模型毫米每 0.06 mm 加密，KD 最近样本查询与 Python cKDTree 语义一致；距离 <0.72 mm 保持 0.8 mm 抬升，0.72–0.85 mm 线性收边。森林使用 features.json 默认 0.32 mm + 0.12 mm 符号纹理，草地/冰雪仅分类着色。尚无参数配置入口，不读取参考仓库配置；未知分类保持普通地形。

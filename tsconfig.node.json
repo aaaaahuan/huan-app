@@ -4,7 +4,8 @@
     "tsBuildInfoFile": "./.cache/tsconfig.node.tsbuildinfo",
     "paths": {
       "@shared/*": ["./src/shared/*"],
-      "@main/*": ["./src/main/*"]
+      "@main/*": ["./src/main/*"],
+      "web-worker": ["./src/workers/geotiff-no-pool.ts"]
     },
     "target": "ES2022",
     "module": "ESNext",

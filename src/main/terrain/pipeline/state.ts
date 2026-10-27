@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { rename, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { TerrainJobStatus } from '@shared/contracts/terrain';
 
@@ -9,6 +9,12 @@ export const STAGES = [
   ['export', '导出与校验'], ['preview', '生成网页预览']
 ] as const;
 export const pendingStages = (): TerrainJobStatus['stages'] => STAGES.map(([key, name]) => ({ key, name, status: 'pending', elapsed_seconds: null, detail: '' }));
+// 写入路径不能沿用只读资源解析对目录内链接的容忍策略。
+export async function directory(path: string) {
+  await mkdir(path, { recursive: true });
+  if (!(await lstat(path)).isDirectory()) throw new Error('写入目录不能是符号链接');
+  return realpath(path);
+}
 export async function writeBytes(path: string, value: Uint8Array | string) {
   const temp = `${path}.${randomUUID()}.tmp`;
   try { await writeFile(temp, value, { flag: 'wx' }); await rename(temp, path); }
