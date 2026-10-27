@@ -44,7 +44,8 @@ export async function buildTerrain(grid: HeightGrid, layers?: SurfaceLayers): Pr
     const x = ids.reduce((sum, id) => sum + vertices[id * 3], 0) / 3;
     const y = ids.reduce((sum, id) => sum + vertices[id * 3 + 1], 0) / 3;
     const sample = Math.round(y / size[1] * (ny - 1)) * nx + Math.round(x / size[0] * (nx - 1));
-    materials[i] = layers.distanceAt(x, y) < .72 ? 4 : layers.classes[sample];
+    const gap = ids.some(id => layers.routeGap[id]);
+    materials[i] = layers.distanceAt(x, y) < .72 && !gap ? 4 : layers.classes[sample];
   }
   const { Mesh, Manifold } = await loadManifold();
   const solid = new Manifold(new Mesh({ numProp: 3, vertProperties: Float32Array.from(vertices), triVerts: Uint32Array.from(triangles), faceID: materials }));

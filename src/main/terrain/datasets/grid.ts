@@ -5,7 +5,7 @@ import type { HeightGrid } from '../geometry/terrain';
 import { sampleRaster, type RasterClip } from './raster';
 import { writeJson, writeBytes } from '../pipeline/state';
 
-export async function targetGrid(job: string, bounds: Bounds, zone: number, south: boolean, dem: RasterClip[], worldcover: RasterClip[]): Promise<HeightGrid> {
+export async function targetGrid(job: string, bounds: Bounds, zone: number, south: boolean, dem: RasterClip[], worldcover: RasterClip[], routeElevations: number[] = [], preserved?: { base_mm: number; vertical_exaggeration: number }): Promise<HeightGrid> {
   const projection = proj4('EPSG:4326', `+proj=utm +zone=${zone} ${south ? '+south' : ''} +datum=WGS84 +units=m +no_defs`);
   const extent = [bounds[2] - bounds[0], bounds[3] - bounds[1]], scale = 200 / Math.max(...extent);
   const size: [number, number] = [extent[0] * scale, extent[1] * scale];
@@ -20,8 +20,11 @@ export async function targetGrid(job: string, bounds: Bounds, zone: number, sout
     if (c === null) missingClasses++;
     low = Math.min(low, elevations[i]); high = Math.max(high, elevations[i]);
   }
-  const exaggeration = Math.max(1, Math.min(2, 72 / Math.max((high - low) * scale, 0.01)));
-  const grid = { width, height, size, elevations, classes, scale, base: 4, exaggeration };
+  const exaggeration = preserved?.vertical_exaggeration ?? Math.max(1, Math.min(2, 72 / Math.max((high - low) * scale, 0.01)));
+  let routeMinimum = Infinity;
+  for (const h of routeElevations) routeMinimum = Math.min(routeMinimum, h);
+  const base = preserved?.base_mm ?? Math.max(4, 4 + Math.max(0, low - routeMinimum) * scale * exaggeration);
+  const grid = { width, height, size, elevations, classes, scale, base, exaggeration };
   // 固定小端序和南→北行序，持久目标网格可独立重载，不依赖内存 TIFF 句柄。
   const bytes = Buffer.alloc(elevations.length * 4);
   elevations.forEach((v, i) => bytes.writeFloatLE(v, i * 4));

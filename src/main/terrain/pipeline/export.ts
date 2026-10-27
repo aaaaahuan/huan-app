@@ -23,8 +23,8 @@ export function validateMesh(mesh: PrintableMesh) {
   if ([...edges.values()].some(n => n !== 0) || [...counts.values()].some(n => n !== 2) || volume <= 0) throw new Error('网格不封闭或绕序不一致');
   return { vertices: v.length / 3, triangles: t.length / 3, dimensions_mm: high.map((n, k) => n - low[k]), volume_mm3: volume, watertight: true, winding_consistent: true };
 }
-export async function exportTerrain(job: string, mesh: PrintableMesh) {
-  if (mesh.materials.length !== mesh.triangles.length / 3 || mesh.materials.some(id => id >= palette.length)) throw new Error('面材质来源无效');
+export async function exportTerrain(job: string, mesh: PrintableMesh, colors = palette) {
+  if (mesh.materials.length !== mesh.triangles.length / 3 || mesh.materials.some(id => id >= colors.length)) throw new Error('面材质来源无效');
   const report = validateMesh(mesh), { vertices: v, triangles: t } = mesh;
   const bytes = new Uint8Array(84 + report.triangles * 50), view = new DataView(bytes.buffer);
   view.setUint32(80, report.triangles, true);
@@ -35,7 +35,7 @@ export async function exportTerrain(job: string, mesh: PrintableMesh) {
     if (!length) throw new Error('退化三角形');
     [...normal.map(n => n / length), ...points.flat()].forEach((n, k) => view.setFloat32(84 + i / 3 * 50 + k * 4, n, true));
   }
-  const model = `<?xml version="1.0" encoding="UTF-8"?><model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><resources><basematerials id="1">${palette.map(p => `<base name="${p.name}" displaycolor="${p.hex}FF"/>`).join('')}</basematerials><object id="2" type="model"><mesh><vertices>${Array.from({ length: v.length / 3 }, (_, i) => `<vertex x="${v[3 * i]}" y="${v[3 * i + 1]}" z="${v[3 * i + 2]}"/>`).join('')}</vertices><triangles>${Array.from({ length: t.length / 3 }, (_, i) => `<triangle v1="${t[3 * i]}" v2="${t[3 * i + 1]}" v3="${t[3 * i + 2]}" pid="1" p1="${mesh.materials[i]}"/>`).join('')}</triangles></mesh></object></resources><build><item objectid="2"/></build></model>`;
+  const model = `<?xml version="1.0" encoding="UTF-8"?><model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><resources><basematerials id="1">${colors.map(p => `<base name="${p.name}" displaycolor="${p.hex}FF"/>`).join('')}</basematerials><object id="2" type="model"><mesh><vertices>${Array.from({ length: v.length / 3 }, (_, i) => `<vertex x="${v[3 * i]}" y="${v[3 * i + 1]}" z="${v[3 * i + 2]}"/>`).join('')}</vertices><triangles>${Array.from({ length: t.length / 3 }, (_, i) => `<triangle v1="${t[3 * i]}" v2="${t[3 * i + 1]}" v3="${t[3 * i + 2]}" pid="1" p1="${mesh.materials[i]}"/>`).join('')}</triangles></mesh></object></resources><build><item objectid="2"/></build></model>`;
   await mkdir(join(job, 'models'), { recursive: true });
   if (!(await lstat(join(job, 'models'))).isDirectory()) throw new Error('模型目录不能是符号链接');
   await writeBytes(join(job, 'models/terrain.stl'), bytes);
@@ -48,6 +48,6 @@ export async function exportTerrain(job: string, mesh: PrintableMesh) {
   if (!stl.equals(bytes)) throw new Error('STL 写入后校验失败');
   const archive = unzipSync(await readFile(join(job, 'models/terrain.3mf')));
   if (strFromU8(archive['3D/3dmodel.model']) !== model) throw new Error('3MF 写入后校验失败');
-  await writeJson(join(job, 'models/validation.json'), { ...report, materials: palette.filter(p => mesh.materials.includes(p.id)), limitations: ['OSM 要素、房屋和刻度尚未迁移'], serialization: 'STL bytes and 3MF XML round-trip; independent reader verification required' });
+  await writeJson(join(job, 'models/validation.json'), { ...report, materials: colors.filter(p => mesh.materials.includes(p.id)), face_material_counts: Object.fromEntries(colors.map(p => [p.name, mesh.materials.filter(id => id === p.id).length])), limitations: ['照片与独立房屋尚未迁移'], serialization: 'STL bytes and 3MF XML round-trip; independent reader verification required' });
   return report;
 }

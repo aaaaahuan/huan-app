@@ -23,6 +23,9 @@ importers:
       fflate:
         specifier: 0.8.3
         version: 0.8.3
+      geos-wasm:
+        specifier: 3.1.1
+        version: 3.1.1
       geotiff:
         specifier: 3.0.5
         version: 3.0.5
@@ -1916,6 +1919,9 @@ packages:
   gensync@1.0.0-beta.2:
     resolution: {integrity: sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg==}
     engines: {node: '>=6.9.0'}
+
+  geos-wasm@3.1.1:
+    resolution: {integrity: sha512-igWIBE9Ua2f2dw+MjaF3ogwUB45tLSTVdCYBpsHa9fenmtgyfaspjDhWTBhEaftZxATdEPaSwS707ELFYVvm9w==}
 
   geotiff@3.0.5:
     resolution: {integrity: sha512-OWcL9S9+yDZ6iAlXMt32T1iwUApJM8UiD47xbm6ZP1h33d10fqkPs14EG/ttT5EnefpZSx3G15iDFC5FxUNUwA==}
@@ -5205,6 +5211,8 @@ snapshots:
       - supports-color
 
   gensync@1.0.0-beta.2: {}
+
+  geos-wasm@3.1.1: {}
 
   geotiff@3.0.5:
     dependencies:

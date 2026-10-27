@@ -211,3 +211,15 @@ DEM 在目标顶点逆投影后做严格 bilinear；WorldCover nearest。PixelIs
 地形使用与 Python 相同的顶面三角对角线、CCW 边界、侧壁及底面扇形，随后经 manifold-3d 验收并显式 delete。保存面来源数组；当前所有面均为 Terrain，尚未建立多材质布尔组合。导出前独立检查无向边恰好两面、有向边抵消、正体积和有限坐标；写入采用临时文件原子替换，之后核对 STL 字节与解压后的 3MF XML。开发验证另用 Python trimesh/XML 重载两种文件检查封闭性、绕序、尺寸、体积及 3MF 材质索引。尚无运行时完整独立格式解析器、跨文件事务或安装包验收。
 
 **未完成的调度边界仍保留**：upload/retry IPC 等待终态；CPU/WASM 在 main，geotiff 普通 worker 的 workerData 问题尚未解决；没有后台队列、取消及 configure/close 中止。为避免 Python 启动恢复改写原生 queued/running，旧服务启动前拒绝包含此类状态或损坏状态的作品库；中断原生任务需要先重试。该门禁不是跨调度器互斥或恢复实现。后续必须在原生 viewer 硬切之前补齐。
+
+## Phase 9 切片 A+C：OSM 打印水体与侧壁海拔刻度
+
+默认要素配置内置自只读 huan-path `4e7f285/config/features.json`，可用任务目录 `features.json` 提供完整同构配置；读取时严格校验数值、颜色、间隙与枚举，缺失文件使用默认，损坏文件明确失败。网络代理仅交给主进程/worker 下载器，不写预览 metadata。没有新增配置 UI。保留任务 spec 中显式 `preserve_imported_assets` 的底座/夸大值；普通任务使用 Python 的 clip(72 / 地形毫米高差, 1, 2) 与记录最低海拔补厚底座，并在南/东 DEM 剖面面积较大的侧面生成刻度。
+
+新增锁定 `geos-wasm@3.1.1`（GEOS 3.13，包声明 LGPL-3.0-or-later）：用于 relations 分段 outer/inner 的 noding、polygonize、union/difference、buffer(0) 修复、范围相交及 river/stream 圆缓冲。运行于现有 worker，ESM 动态加载，WASM 在该包 JS 内自包含。没有用 WorldCover80 冒充 OSM 水体；水 > 冰雪 > 林 > 草建立来源互斥掩膜。河相对地形下切，逐湖多边形局部中位数减深度后限制最低 0.8mm；路线跨水时以 max(base, surface) 为净高基准。compose 同步实现 houses 条件下 route_gap 抑制路线的语义；独立 pin 房屋及圆缺口生成仍属于下一切片。
+
+海拔刻度移植确定性笔画字体、轨迹首尾记录海拔、配置侧面优先的多侧/降 intervals 自动布局、移动星号、边界剖面裁剪及外凸深度/内嵌 0.15mm。刻度独立网格供 Viewer 开关；打印布尔合并后读取 Manifold faceID，材质8进入3MF。可编辑预览仍保留原高度场拓扑，不使用布尔重排网格。水、刻度 available 仅在实际图层存在时启用。
+
+完整默认配置下，西湖与雨崩真实缓存和原生/Python 产物见 `/tmp/codex-native-terrain/phase9/`。西湖主湖面原生约3.92613mm；Python 对照不禁用任何默认要素。两轨迹均无照片点，不能据此声称房屋路径验收。两端 STL/3MF 独立回读封闭。当前采样仍为直接 inverse UTM bilinear/nearest，Python 先 rasterio.merge 再 GDAL reproject；类别和高程存在边界/采样差异，详见 comparison.json，不以体积接近宣称完整 parity。点在 OSM 边界的 rasterize 与 GEOS intersects 也可能存在少量差异。
+
+本切片未完成照片/独立房屋、道路/聚落面新资产、后台立即返回/取消/恢复调度和安装包验收；这些不由 completed 状态代替验收。
