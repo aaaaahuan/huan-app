@@ -139,3 +139,28 @@ upload/retry 已通过固定 preload 方法和可信 sender + Zod 校验开放�
 默认展示原生 UploadView，支持拖放、文件选择、错误及防重复上传；工具栏「＋ 新建作品」返回上传页。成功后刷新列表并选择作品，通过现有 getJob 每秒轮询展示阶段及重试。上传/重试在卸载或选择变化后丢弃旧响应。只有选中 completed 作品才请求 ensure 并显示原 iframe；这样上传本身不启动 Python。失败终态避免旧服务启动恢复 queued/running 时改写原生任务，但旧 iframe 的内部操作仍属于过渡边界。
 
 使用 /tmp 下独立 Electron 窗口、真实原生 pipeline/library 与专用 IPC 验证拖放上传、非法文件、八阶段、列表刷新、重试快照和新建返回；未启动 Python 或完整应用配置。主进程临时断言覆盖目录/原始字节/状态 schema、大小上限、并发重试、原子写失败清理及链接目录拒绝；真实 jobs 用逐文件 SHA256 前后比对。无测试文件或依赖进入仓库。
+
+## Phase 4：真实解析、数据集边界与 WASM smoke
+
+原生 runner 已替换 Phase 3 占位：parse → dem（依次尝试 DEM、WorldCover、自然要素 OSM）→ terrain 明确失败停止。解析失败停在 parse；网络失败写 warnings、available=false 和空 OSM elements，不生成假高程、分类 TIFF 或网格。旧 completed 的 iframe 路径不变。当前仍是主进程异步执行、IPC 等待终态；持久队列、后台返回、取消、退出恢复及配置切换中断尚未实现，大范围下载可能使上传等待较久，不代表完整原生构建已可用。
+
+### 新依赖与输入安全
+
+本轮经 pnpm 增加锁定版本：fflate 0.8.3 只解压选定 KML；saxes 6.0.0 提供严格、有 namespace 的 XML 解析；proj4 2.22.0 做 WGS84/UTM 及 21 点边界加密；geotiff 3.0.5 读取真实 TIFF 窗口；manifold-3d 3.5.4 与 Python 基线同版本，用于真实闭合实体 smoke。未引入测试框架。manifold 包自身包含 CAD/glTF 等传递依赖；本轮仅加载核心 ESM/WASM，不启用其编辑器或 CLI。
+
+KMZ 在解压前审计中央目录：压缩文件 150 MB、最多 2500 项、解压总量 800 MB、KML 50 MB；拒绝多卷/ZIP64/加密/链接、重复名、绝对路径及 .. 路径，检查本地头名称/范围与中央目录一致。附件不解压、不读取 href。XML 仅 UTF-8、KML 2.2；禁用 DTD/实体，深度最多 64、节点最多 100 万。坐标最多 20 万，检查有限值、经纬度、跨日期线与 200 km 跨度。输出原始 `data/source.kml`、规范 `data/route.kml` 和 `data/route_info.json`（名称、UTC+8 BeginTime 日期或首个 when、坐标段数/UTM/边界、照片点索引）。缺失海拔以 0 保持 Python canonical 格式，同时记录 missing_altitude；不把它当 DEM。照片附件及 EXIF 后续迁移。
+
+### 数据集当前能力与未完成项
+
+- `network.ts` 使用 macOS 系统 curl（不依赖 Python）；代理来自传入的 config.network.proxy、HTTPS_PROXY/ALL_PROXY、scutil 系统 HTTP(S)/SOCKS 代理，off 和回环直连。代理凭据仅 stdin，错误只含数值 HTTP/curl 状态；同目录随机 .part + rename、失败清理、连接/总超时和 1 GB 响应上限。原生 settings 目前没有新增 network 配置 UI/持久字段，默认调用使用环境/系统回退；需要 config 的调用者通过 fetchFile(config) 注入。不读取 huan-path 配置，不把代理写进 spec。PAC/自动发现与带认证系统代理尚未验收。
+- `overpass.ts` 实现 90/105/240/60/20 秒策略、稳定镜像顺序和进程内慢端点 Set；仅完整 105 秒下载超时才降级，成功解除。缓存键保留旧 timeout:25 查询 SHA256 前 24 位，缓存全部在 dataRoot/cache；拒绝 remark/无 elements/旧 local 来源缓存。响应 JSON 上限 100 MB。道路/聚落的 /map 按面积或 HTTP 400 递归二分，深度 12，节点/way 去重；缺节点的 way 整条跳过，避免跨缺口连接。**丢弃 relations**，来源明确提示聚落覆盖可能不完整；509 普通失败。本轮流水线仅调用自然要素查询，道路/聚落 API 已实现但尚未接入预览。
+- `dem.ts` / `worldcover.ts` 按 Python 1°/3° tile 命名和官方 URL 下载并复用缓存，写来源、许可及 attribution。无 huan-path 缓存播种。EPSG:4326/方向检查后仅解码范围窗口；最多 16 tile、每层总裁剪最多 2000 万像元。Copernicus 实测为 PixelIsPoint，依据 [GDAL RFC 33](https://gdal.org/en/stable/development/rfc/rfc33_gtiff_pixelispoint.html) 将 tiepoint 移半像元后再按像元中心采样。DEM bilinear、WorldCover nearest 和 NODATA/null 支持跨 clip 查找；不对缺失邻点编造数值。
+- **尚未实现 rasterio 等价磁盘 mosaic / dem.tif / worldcover.tif、UTM 目标网格重投影及 GDAL NODATA 权重 parity**。裁剪目前是返回内存窗口，不持久保存大数组，缓存 TIFF + source.json 可复用。datasets.json 显式记录该限制；available 表示真实瓦片/窗口取得成功，不表示地形可构建。真实 DEM 单点已与 rasterio 比较；WorldCover 仅临时 TIFF/mock 下载验证，在线下载、边界拼接与完整区域覆盖验收后续补齐。失败记录也不保留之前成功的部分 tile 列表，这点尚未完全对齐 Python。
+
+### 几何与验证边界
+
+geometry/index.ts 动态 import manifold ESM，通过 createRequire(__filename) 定位 WASM，适用于当前 CJS main 和独立 CJS worker；显式 setup/delete。electron-builder 配置 unpack `**/manifold-3d/manifold.wasm`，loader 将 app.asar 路径映射到 app.asar.unpacked。Electron main 与独立 worker_threads 均已 smoke；安装包 asar 内真实加载尚未验收。boxSmoke 生成 2×3×4 box，导出 684 字节 binary STL；临时独立读取确认 12 面、每边两相反面、体积 24。该 box 不会写进任何任务产物。
+
+geometry/terrain.ts 仅列出 build_model.py 的 grid、路线距离场、Shapely/地表、房屋/刻度及导出迁移位置。本轮不声称地形 mesh parity。另发现将整个 pipeline（含 geotiff 的 web-worker 依赖）直接 require 到普通 worker 会触发其 workerData 假设错误；geometry 独立 worker 正常，后续 raster worker 需要隔离/验证加载方式，不能直接复制主进程入口。
+
+全部可写验收在 /tmp/codex-native-terrain/phase4：真实旧 KML 只读复制、恶意 ZIP/XML/坐标、代理优先级、真实本地 HTTP curl 超时/原子替换、mock Overpass 预算/慢镜像/缓存及 /map relation drop、临时 TIFF 采样/缓存、真实在线 DEM 和 rasterio 单点对照、隔离 Electron 工作台及 main/worker manifold。Overpass 在线请求 20 秒超时，WorldCover 在线未验收；没有以模拟数据替代在线结果。完整应用 bootstrap/Python 旧预览、完整地形与打包仍待后续。computer-use 获取 Electron 连续超时，隔离窗口的自动断言及已检查截图通过。
