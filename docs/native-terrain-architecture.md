@@ -129,3 +129,13 @@ Terrain 现在组合原生 Workbench/WorkList 与既有 Python iframe。列表�
 搜索同时匹配 name/filename，沿用 NFKC、小写、去空白和前缀/子串/字符顺序排名，同分保持库顺序；IME 完成后筛选，支持 Esc、清除及收起时清空。界面展示 n/total、逐项诊断、加载/空/失败及所选作品状态。settingsRevision 改变时重新挂载工作台，清空旧选择并取消旧响应；选择变化和轮询清理也会丢弃过期响应。原生列表与 iframe 内部操作暂不双向同步；原生资源协议、上传、流水线与 Three viewer 尚未实现。
 
 本轮用 /tmp 隔离 Electron 页面和模拟 IPC 验证界面与竞态，不启动会恢复任务的 Python 服务，不写真实作品。完整 IPC 读库沿用 Phase 1 已验证实现；实际 Python 预览联调仍需在临时 dataDir 中手动验收。
+
+## Phase 3：原生上传与状态
+
+upload/retry 已通过固定 preload 方法和可信 sender + Zod 校验开放，返回 `{ok:true,job:status}` 或中文错误。上传最大 150,000,000 字节，仅 KML/KMZ；创建 `jobs/<id>/input.kml|kmz`、`data/`、原子替换的 `status.json`，文件名去掉目录部分，`origin=native`。本期不做可选 tracks 归档，不新增依赖。八阶段及时间字段沿用 Python；Progress 提供 stage/detail/finish/fail。
+
+本期保留原始输入，ZIP/XML 解析、路线名称/日期/边界与照片索引留到 Phase 4。占位 runner 将 queued → running(parse) → failed，明确提示「构建流水线尚未迁移」，没有解析成功、DEM 或网格产物。retry 在进程内互斥，先快照完整旧 status 到 attempts，再复位八阶段并运行同一占位流程，保留未知字段及已有资产。遗留作品拒绝原生重试，避免与 Python ACTIVE 交叉写入；仍可在旧预览中操作。未建立持久队列、worker 或启动恢复。
+
+默认展示原生 UploadView，支持拖放、文件选择、错误及防重复上传；工具栏「＋ 新建作品」返回上传页。成功后刷新列表并选择作品，通过现有 getJob 每秒轮询展示阶段及重试。上传/重试在卸载或选择变化后丢弃旧响应。只有选中 completed 作品才请求 ensure 并显示原 iframe；这样上传本身不启动 Python。失败终态避免旧服务启动恢复 queued/running 时改写原生任务，但旧 iframe 的内部操作仍属于过渡边界。
+
+使用 /tmp 下独立 Electron 窗口、真实原生 pipeline/library 与专用 IPC 验证拖放上传、非法文件、八阶段、列表刷新、重试快照和新建返回；未启动 Python 或完整应用配置。主进程临时断言覆盖目录/原始字节/状态 schema、大小上限、并发重试、原子写失败清理及链接目录拒绝；真实 jobs 用逐文件 SHA256 前后比对。无测试文件或依赖进入仓库。

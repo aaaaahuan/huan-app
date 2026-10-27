@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@renderer/components/Button';
 import './terrain.css';
 import { Workbench } from './Workbench';
@@ -9,8 +9,11 @@ export function Terrain({ active, settingsRevision, onOpenSettings }: { active: 
   const url = ready?.settingsRevision === settingsRevision ? ready.url : '';
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
+  const [previewRequested, setPreviewRequested] = useState(false);
+  const requestPreview = useCallback(() => setPreviewRequested(true), []);
+  useEffect(() => { setPreviewRequested(false); setReady(null); }, [settingsRevision]);
   useEffect(() => {
-    if (!active) return;
+    if (!active || !previewRequested) return;
     let cancelled = false;
     setError('');
     void window.huanApp.terrain.ensure().then(result => {
@@ -19,9 +22,9 @@ export function Terrain({ active, settingsRevision, onOpenSettings }: { active: 
       else { setReady(null); setError(result.message); }
     }).catch(() => { if (!cancelled) { setReady(null); setError('无法连接地形服务，请重试。'); } });
     return () => { cancelled = true; };
-  }, [active, revision, settingsRevision]);
+  }, [active, revision, settingsRevision, previewRequested]);
   return <section className="terrain-system" hidden={!active} aria-label="地形">
-    <Workbench key={settingsRevision} active={active} previewUrl={url}>
+    <Workbench key={settingsRevision} active={active} previewUrl={url} onPreview={requestPreview}>
       <div className="terrain-status" role={error ? 'alert' : 'status'}>
         <p>{error || '正在启动地形服务…'}</p>
         {error ? <><Button onClick={() => { setError(''); setRevision(value => value + 1); }}>重试</Button><Button onClick={onOpenSettings}>打开设置</Button></> : null}
