@@ -2,7 +2,7 @@
 
 ## Phase 9b：独立房屋、预览道路/聚落与后台调度
 
-本节替代下方历史章节中 B/D/E 未完成的描述，A+C 保持原实现。upload/retry 在输入与 queued status 原子落盘后立即返回；进程内队列最多运行两个 worker，同 job 从准备重试到线程退出持有互斥。getJob 读取阶段进度；取消通过固定 cancel IPC，先终止 worker 和其跟踪的 curl 下载子进程，再按最近有效进度保存 failed（可重试）。切换作品目录等待旧目录任务停止，退出等待所有任务停止；队列中未启动的任务也保存失败。首次配置/访问作品库将中断的原生 queued/running 标为可重试失败，遗留任务和 completed 不自动改写。服务串行处理目录生命周期与上传/重试/取消，防止切换时仍有旧目录任务入队。进程崩溃后的随机 .tmp/.part 不作为有效状态/缓存使用；不根据遗留 worker_pid 杀进程。安装包/asar 仍未验收。
+本节替代下方历史章节中 B/D/E 未完成的描述，A+C 保持原实现。upload/retry 在输入与 queued status 原子落盘后立即返回；进程内队列最多运行两个 worker，同 job 从准备重试到线程退出持有互斥。getJob 读取阶段进度；取消通过固定 cancel IPC，先终止 worker 和其跟踪的 curl 下载子进程，再按最近有效进度保存 failed（可重试）。切换作品目录等待旧目录任务停止，退出等待所有任务停止；队列中未启动的任务也保存失败。首次配置/访问作品库将中断的原生 queued/running 标为可重试失败，遗留任务和 completed 不自动改写。服务串行处理目录生命周期与上传/重试/取消，防止切换时仍有旧目录任务入队。进程崩溃后的随机 .tmp/.part 不作为有效状态/缓存使用；不根据遗留 worker_pid 杀进程。安装包/asar 仍未验收：发布前需在真实 `.app`/`app.asar`（含 `app.asar.unpacked` 的 Manifold wasm）上做一次打包冒烟，开发态通过不代替安装包验收。
 
 房屋从任务内 data/photo_houses.json 读取人工判断，校验唯一照片索引、坐标与轨迹照片点；无判断时记录 uncertain，未运行照片自动识别。只支持已核验的 5_pin_house 设计：geometry/pin-house.json 内嵌参考 STL 的焊接网格、按 GLB body/accent 最近面映射的材质6/7、原 GLB 与来源 SHA256。运行时无需参考仓库/Python。设计为用户提供资源，不推断第三方授权。按配置 scale、sink 放置独立实体并要求与地形相交；圆形 route_gap 增加两倍网格对角线采样余量，面缺口同时检查顶点与质心。净距采用与 Python 相同的三角面到中心距离及 1.7×scale 包络下界；正下界保证 footprint 不重叠。布尔后 faceID 保留材质6/7进入3MF。预览保存未挖缺口的路线面和独立 face_gap，关闭房屋恢复完整路线。
 
@@ -46,7 +46,7 @@ viewer/features.ts 迁移高度/材质组合顺序、路线间隙、三角面采
 
 调度维持 Phase 5：upload/retry 等待终态，CPU/WASM 在 main。geotiff 的 web-worker 在普通 worker_threads 中解构 workerData 的 trap 尚未解决，不阻塞当前 main 构建与原生 viewer；下一期单独隔离 raster/mesh worker、后台返回、取消/退出/恢复。configure/close 不会中止构建，切换目录只影响后续请求；旧任务仍写创建时固定的目录。
 
-参考基线：只读 huan-path `4e7f285c84967a1772757bb25f15ff61934f11aa`。目标分支 `feat/native-terrain`，最终运行时不依赖 Python、HTTP 服务或 iframe。本文区分当前脚手架与后续目标；Phase 0 不实现构建流程，不新增依赖，不写作品库。
+参考基线：只读 huan-path `4e7f285c84967a1772757bb25f15ff61934f11aa`。目标分支 `feat/native-terrain`，最终运行时不依赖 Python、HTTP 服务或 iframe。下方 Phase 0–5 为迁移历史；原生流水线、Viewer、worker 调度与预览图层已在本分支落地，请以文首 Phase 9b 为准。
 
 ## 当前状态与迁移方式
 
@@ -56,7 +56,7 @@ viewer/features.ts 迁移高度/材质组合顺序、路线间隙、三角面采
 
 ## 模块地图与目录
 
-带「本期」的是 Phase 0 实际文件；其他是后续实施目标，避免用空实现冒充能力。
+目录地图最初用于 Phase 0 脚手架；下列路径多数已实现，空实现占位描述以文首 Phase 9b 为准。
 
 ```text
 src/shared/contracts/terrain.ts       # 本期：兼容状态类型、Zod 持久化结构、原生读写请求边界

@@ -18,7 +18,8 @@
     "lint": "eslint .",
     "check": "pnpm typecheck && pnpm lint && pnpm build",
     "pack:arm64": "pnpm build && electron-builder --mac --arm64 --dir",
-    "pack:x64": "pnpm build && electron-builder --mac --x64 --dir"
+    "pack:x64": "pnpm build && electron-builder --mac --x64 --dir",
+    "test:terrain": "node scripts/test-terrain.mjs"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

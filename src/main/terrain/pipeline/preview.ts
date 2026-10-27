@@ -42,8 +42,15 @@ export async function packagePreview(job: string, grid: HeightGrid, mesh: Printa
   if (scaleMesh) { await floats('layers/elevation_scale_vertices.bin', scaleMesh.vertices); await floats('layers/elevation_scale_faces.bin', scaleMesh.triangles); }
   if (available.rivers) await floats('layers/rivers.bin', layers.water);
   if (available.forest) await floats('layers/forest.bin', layers.forest);
-  const settlements = places ? await preparePlaces(places.root, job, places.geographic, places.projected, places.zone, places.south, grid.scale, places.warnings, places.fetch, grid) : undefined;
-  const roads = places ? await prepareRoads(places.root, job, places.geographic, places.projected, places.zone, places.south, grid.scale, places.warnings, places.fetch) : undefined;
+  // 道路/聚落/地名为 preview_only；单层失败记警告并跳过，不阻断核心预览与打印资产。
+  let settlements: Awaited<ReturnType<typeof preparePlaces>> | undefined;
+  let roads: Awaited<ReturnType<typeof prepareRoads>> | undefined;
+  if (places) {
+    try { settlements = await preparePlaces(places.root, job, places.geographic, places.projected, places.zone, places.south, grid.scale, places.warnings, places.fetch, grid); }
+    catch (error) { places.warnings.push(`聚落/地名预览失败：${error instanceof Error ? error.message : String(error)}`); }
+    try { roads = await prepareRoads(places.root, job, places.geographic, places.projected, places.zone, places.south, grid.scale, places.warnings, places.fetch); }
+    catch (error) { places.warnings.push(`道路预览失败：${error instanceof Error ? error.message : String(error)}`); }
+  }
   available.roads = Boolean(roads && Object.keys(roads.groups).length);
   available.settlements = Boolean(settlements?.areas.url);
   available.places = Boolean(settlements?.places.count);

@@ -55,9 +55,16 @@ export async function runNative(root: string, job: string, state: TerrainJobStat
     const mesh = await mergePrint(previewMesh, [...houseLayer.meshes, ...(scaleLayer.mesh ? [scaleLayer.mesh] : [])]);
     await progress.stage('export', '导出地形 STL / 多材质 3MF 并校验');
     const validation = await exportTerrain(job, mesh, featurePalette(config));
+    // 打印资产已落盘；预览/道路/聚落等 preview_only 失败只记警告，不回滚 completed。
     await progress.stage('preview', '封装原生 Viewer 网格与可切换地表图层');
     await directory(join(job, 'web'));
-    await packagePreview(job, grid, previewMesh, layers, { route_info: route, warnings, validation, houses: houseLayer.report, features: layers.report, elevation_scale: scaleLayer.report, palette: featurePalette(config), configuration: { effective } }, { root, geographic: route.bounds_wgs84, projected: route.bounds_projected, zone: route.utm_zone, south: route.hemisphere === 'S', warnings, fetch }, scaleLayer.mesh, houseLayer.faceGap, houseLayer.meshes.length > 0);
+    try {
+      await packagePreview(job, grid, previewMesh, layers, { route_info: route, warnings, validation, houses: houseLayer.report, features: layers.report, elevation_scale: scaleLayer.report, palette: featurePalette(config), configuration: { effective } }, { root, geographic: route.bounds_wgs84, projected: route.bounds_projected, zone: route.utm_zone, south: route.hemisphere === 'S', warnings, fetch }, scaleLayer.mesh, houseLayer.faceGap, houseLayer.meshes.length > 0);
+    } catch (error) {
+      const message = `预览封装失败：${error instanceof Error ? error.message : String(error)}`;
+      warnings.push(message);
+      state.warnings = warnings;
+    }
     await writeBytes(join(job, 'web/index.html'), '<!doctype html><meta charset="utf-8"><title>原生地形核心</title><h1>DEM 地形与底座</h1><p>已包含路线、OSM 水系/林区/冰川、WorldCover 林/草/雪与海拔刻度；请在应用内查看可切换图层的三维预览。</p><a href="../models/terrain.stl">下载 STL</a> · <a href="../models/terrain.3mf">下载 3MF</a>');
     await writeJson(join(job, 'spec.json'), { preserve_imported_assets: !!preserved, ...(preserved ? { model: preserved } : {}), route, warnings, datasets: availability, model: { size_mm: 200, padding_m: 1100, base_mm: grid.base, vertical_exaggeration: grid.exaggeration }, native_core_only: false, configuration: effective });
     await progress.finish();

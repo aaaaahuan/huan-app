@@ -40,7 +40,8 @@ export async function cancelJob(root: string, id: string, reason = '任务已取
   if (!task) throw new Error('任务当前未在队列中');
   if (task.done) { task.controller.abort(reason); await task.done; }
   else {
-    queue.splice(queue.indexOf(task), 1);
+    const i = queue.indexOf(task);
+    if (i >= 0) queue.splice(i, 1);
     try { await new Progress(job, task.state).fail(reason); } finally { active.delete(job); }
   }
   return readJobStatus(root, id);
@@ -48,7 +49,11 @@ export async function cancelJob(root: string, id: string, reason = '任务已取
 export async function stopJobs(root?: string, reason = '应用退出，任务已中断，可重试') {
   // 先移除所有排队任务，防止线程结束时 pump 启动待中止的任务。
   const tasks = [...active.values()].filter(task => !root || task.root === root);
-  for (const task of tasks) if (!task.done) queue.splice(queue.indexOf(task), 1);
+  for (const task of tasks) {
+    if (task.done) continue;
+    const i = queue.indexOf(task);
+    if (i >= 0) queue.splice(i, 1);
+  }
   await Promise.all(tasks.map(async task => {
     if (task.done) { task.controller.abort(reason); await task.done; }
     else { try { await new Progress(task.job, task.state).fail(reason); } finally { active.delete(task.job); } }

@@ -46,7 +46,9 @@ export async function prepareRoads(root: string, job: string, geographic: Bounds
   const size = [(bounds[2] - bounds[0]) * scale, (bounds[3] - bounds[1]) * scale];
   const buffers = { major: [] as number[], secondary: [] as number[], local: [] as number[], trail: [] as number[] };
   const counts = { major: 0, secondary: 0, local: 0, trail: 0 };
-  for (const el of raw.elements) {
+  let overflow = false;
+  const roadsFloatLimit = Number(process.env.HUAN_TERRAIN_ROADS_FLOAT_LIMIT) || 18_000_000;
+  ways: for (const el of raw.elements) {
     const kind = classify(el.tags?.highway ?? '');
     if (el.type !== 'way' || !kind) continue;
     const parsed = geometry.safeParse(el.geometry); if (!parsed.success) continue;
@@ -61,10 +63,15 @@ export async function prepareRoads(root: string, job: string, geographic: Bounds
       for (let j = 0; j < n; j++) {
         const u = [a[0] + dx * j / n, a[1] + dy * j / n], v = [a[0] + dx * (j + 1) / n, a[1] + dy * (j + 1) / n];
         for (const [p, sign] of [[u, -1], [v, -1], [v, 1], [u, -1], [v, 1], [u, 1]] as const) buffers[kind].push(Math.max(0, Math.min(size[0], p[0] + sign * nx)), Math.max(0, Math.min(size[1], p[1] + sign * ny)), 0);
-        if (buffers[kind].length > 18_000_000) throw new Error('道路预览超过安全上限');
+        if (buffers[kind].length > roadsFloatLimit) { overflow = true; break ways; }
       }
     }
     if (included) counts[kind]++;
+  }
+  if (overflow) {
+    warnings.push('道路预览超过安全上限，已跳过道路图层');
+    for (const kind of Object.keys(styles) as (keyof typeof styles)[]) await rm(join(job, 'web', `layers/roads_${kind}.bin`), { force: true });
+    return { count: 0, counts: { major: 0, secondary: 0, local: 0, trail: 0 }, groups: {}, preview_only: true, lift_mm: .07 };
   }
   const groups: Record<string, typeof styles.major & { vertices: string; vertex_count: number }> = {};
   for (const kind of Object.keys(styles) as (keyof typeof styles)[]) {

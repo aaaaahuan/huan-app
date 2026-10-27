@@ -3,12 +3,8 @@
 export const IPC_CHANNELS = {
   terrain: {
     readAsset: 'huan-app:terrain:read-asset', ensure: 'huan-app:terrain:ensure', autoRoot: 'huan-app:terrain:auto-root',
-    // listJobs/getJob 已接通原生只读实现；其余原生通道仍预留。
-    status: 'huan-app:terrain:status', listJobs: 'huan-app:terrain:list-jobs',
-    getJob: 'huan-app:terrain:get-job', upload: 'huan-app:terrain:upload', retry: 'huan-app:terrain:retry', cancel: 'huan-app:terrain:cancel',
-    getHouses: 'huan-app:terrain:get-houses', saveHouses: 'huan-app:terrain:save-houses',
-    importRoads: 'huan-app:terrain:import-roads', openModelsDir: 'huan-app:terrain:open-models-dir',
-    exportModel: 'huan-app:terrain:export-model'
+    listJobs: 'huan-app:terrain:list-jobs', getJob: 'huan-app:terrain:get-job',
+    upload: 'huan-app:terrain:upload', retry: 'huan-app:terrain:retry', cancel: 'huan-app:terrain:cancel'
   },
   app: { status: 'huan-app:app:status' },
   algorithms: { get: 'huan-app:algorithms:get', refresh: 'huan-app:algorithms:refresh',
