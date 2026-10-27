@@ -6,7 +6,7 @@ import type { HuanAppAPI } from '@shared/contracts/app';
 
 // 通道名固定在这里；页面不能自行指定任意 IPC 通道或直接调用文件系统。
 const api: HuanAppAPI = {
-  terrain: Object.freeze({ autoRoot: () => ipcRenderer.invoke(IPC_CHANNELS.terrain.autoRoot), ensure: () => ipcRenderer.invoke(IPC_CHANNELS.terrain.ensure),
+  terrain: Object.freeze({ readAsset: (input: Parameters<HuanAppAPI['terrain']['readAsset']>[0]) => ipcRenderer.invoke(IPC_CHANNELS.terrain.readAsset, input), autoRoot: () => ipcRenderer.invoke(IPC_CHANNELS.terrain.autoRoot), ensure: () => ipcRenderer.invoke(IPC_CHANNELS.terrain.ensure),
     listJobs: () => ipcRenderer.invoke(IPC_CHANNELS.terrain.listJobs),
     upload: (input: TerrainUpload) => ipcRenderer.invoke(IPC_CHANNELS.terrain.upload, input),
     retry: (input: TerrainJobRequest) => ipcRenderer.invoke(IPC_CHANNELS.terrain.retry, input),

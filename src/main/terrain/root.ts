@@ -1,19 +1,6 @@
 import { mkdir, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 
-export function resolveHuanPathRoot(environment: string | undefined, packaged: boolean, appPath: string): string {
-  if (environment?.trim()) return resolve(environment.trim());
-  if (packaged) throw new Error('安装版请通过 HUAN_PATH_ROOT 环境变量指定 huan-path 代码目录。');
-  return resolve(dirname(appPath), 'huan-path');
-}
-
-export async function validateHuanPathRoot(root: string): Promise<void> {
-  for (const file of ['server.py', '.venv/bin/python']) {
-    try { if (!(await stat(join(root, file))).isFile()) throw new Error('Invalid file'); }
-    catch { throw new Error(`huan-path 代码目录缺少文件：${join(root, file)}。请检查 HUAN_PATH_ROOT 和 Python 环境。`); }
-  }
-}
-
 // 早期版本默认放在 Obsidian 笔记库；保存过该路径的配置视为未设置，回到仓库内默认目录。
 const LEGACY_OBSIDIAN_DATA_DIR = 'Library/Mobile Documents/iCloud~md~obsidian/Documents/huan-space/project/huan-project/huan-path';
 

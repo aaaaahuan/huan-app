@@ -1,4 +1,19 @@
-# 原生地形迁移架构（Phase 0）
+# 原生地形迁移架构
+
+
+## 当前状态：Phase 6 原生预览硬切
+
+Terrain/Workbench 已使用本仓库 Three viewer，删除 python-service.ts 及 HUAN_PATH_ROOT 探测；bootstrap configure/close 为无操作，ensure 仅返回兼容提示，生产 CSP frame-src 为 none。下方 Phase 0–5 章节记录迁移历史，涉及 Python/iframe 的说明已被本节取代。
+
+新增 three 0.186.1 和开发类型 @types/three 0.186.0，使用 npm OrbitControls、STLLoader、GLTFLoader，避免复制参考 vendor。Three 仅负责显示；不会替代 Manifold 打印实体。
+
+采用固定 readAsset IPC（契约、preload、可信主 frame 检查同步维护）。请求仅包含 job ID、web/models 区域与相对路径；复用 assets.ts 完成状态、realpath、目录内边界及后缀校验，额外拒绝 HTML/JS/CSS，单文件最多150MB，返回 Uint8Array。不向 renderer 暴露本机路径，不执行旧网页。相较流协议，此方案有二进制复制峰值，后续大模型可替换为流式只读协议；当前真实旧作品已通过。
+
+viewer/features.ts 迁移高度/材质组合顺序、路线间隙、三角面采样、居民区避让、房屋 GLB、刻度与道路宽度调整；places.ts 保留半网格射线遮挡、120ms 节流、镜头停止补算、400标签上限与防重叠，地表切换后重新锚定。可选图层失败时禁用并保留原因；基本网格缺失时明确报错。没有 preview_layers 的旧网格保留面材质显示；native_core_only 作品读取已保存 STL，显示核心能力说明及下载。
+
+选项切换不写任何作品。卸载清理 RAF、ResizeObserver、OrbitControls、标签 DOM、几何体、材质和 WebGL；过期异步响应不更新 React 或附着标签。照片浏览/编辑与道路导入仍未迁移，本期没有增加任何 mesh 功能。
+
+调度维持 Phase 5：upload/retry 等待终态，CPU/WASM 在 main。geotiff 的 web-worker 在普通 worker_threads 中解构 workerData 的 trap 尚未解决，不阻塞当前 main 构建与原生 viewer；下一期单独隔离 raster/mesh worker、后台返回、取消/退出/恢复。configure/close 不会中止构建，切换目录只影响后续请求；旧任务仍写创建时固定的目录。
 
 参考基线：只读 huan-path `4e7f285c84967a1772757bb25f15ff61934f11aa`。目标分支 `feat/native-terrain`，最终运行时不依赖 Python、HTTP 服务或 iframe。本文区分当前脚手架与后续目标；Phase 0 不实现构建流程，不新增依赖，不写作品库。
 

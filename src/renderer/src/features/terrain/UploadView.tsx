@@ -23,7 +23,7 @@ export function UploadView({ onCreated }: { onCreated(id: string): void }) {
   }
   return <div className="terrain-upload" onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); void upload(event.dataTransfer.files[0]); }} aria-busy={uploading}>
     <h2>新建作品</h2><p>拖入 KML / KMZ 轨迹，或选择文件（最大 150 MB）。</p>
-    <p>当前仅保存原始轨迹与任务状态，构建流水线尚未迁移。</p>
+    <p>当前生成 DEM 地形与底座；路线、地表浮雕、房屋和刻度将在后续支持。</p>
     <input ref={input} type="file" accept=".kml,.kmz" aria-label="选择轨迹文件" hidden disabled={uploading}
       onChange={event => { void upload(event.target.files?.[0]); event.target.value = ''; }} />
     <Button variant="primary" disabled={uploading} onClick={() => input.current?.click()}>{uploading ? '正在上传…' : '选择轨迹文件'}</Button>

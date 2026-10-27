@@ -77,7 +77,7 @@ if (!app.requestSingleInstanceLock()) {
         return new Response(content, { headers: {
           'Content-Type': mime[extname(path)] ?? 'application/octet-stream',
           'X-Content-Type-Options': 'nosniff',
-          'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'none'; base-uri 'none'; frame-src http://127.0.0.1:8765; object-src 'none'"
+          'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'none'; base-uri 'none'; frame-src 'none'; object-src 'none'"
         } });
       } catch { return new Response(null, { status: 404 }); }
     });
