@@ -21,7 +21,7 @@ export async function targetGrid(job: string, bounds: Bounds, zone: number, sout
     low = Math.min(low, elevations[i]); high = Math.max(high, elevations[i]);
   }
   const exaggeration = Math.max(1, Math.min(2, 72 / Math.max((high - low) * scale, 0.01)));
-  const grid = { width, height, size, elevations, scale, base: 4, exaggeration };
+  const grid = { width, height, size, elevations, classes, scale, base: 4, exaggeration };
   // 固定小端序和南→北行序，持久目标网格可独立重载，不依赖内存 TIFF 句柄。
   const bytes = Buffer.alloc(elevations.length * 4);
   elevations.forEach((v, i) => bytes.writeFloatLE(v, i * 4));

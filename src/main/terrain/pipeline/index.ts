@@ -1,14 +1,16 @@
 import { randomBytes } from 'node:crypto';
-import { lstat, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, realpath, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { terrainUploadSchema, type TerrainJobStatus, type TerrainUpload } from '@shared/contracts/terrain';
 import { readJobStatus, resolveJobFile, resolveJobPath } from '../assets';
 import { pendingStages, Progress, writeJson, writeBytes } from './state';
-import { PIPELINE_PENDING, parseJobTrack } from './tracks';
+import { PIPELINE_PENDING, parseJobTrack, parseTrack } from './tracks';
 import { prepareFeatures } from '../datasets';
 import { buildTerrain } from '../geometry/terrain';
 import { targetGrid } from '../datasets/grid';
 import { exportTerrain } from './export';
+import { surfaceLayers } from '../geometry/features';
+import { packagePreview } from './preview';
 import type { FetchFile } from '../datasets/network';
 
 const active = new Set<string>();
@@ -42,18 +44,20 @@ async function runNative(root: string, job: string, state: TerrainJobStatus, fet
     await progress.detail(Object.entries(availability).map(([key, available]) => `${key}：${available ? '已获取' : '不可用（见警告）'}`).join('；'));
     await progress.stage('terrain', '真实 DEM 目标网格与 Manifold 封闭实体');
     const grid = await targetGrid(job, route.bounds_projected, route.utm_zone, route.hemisphere === 'S', rasters.dem, rasters.worldcover);
-    const mesh = await buildTerrain(grid);
-    warnings.push('本作品仅包含真实 DEM 与底座；路线、地表浮雕、房屋、海拔刻度尚未迁移');
-    await progress.stage('features', '未实现地表浮雕；不将分类数据冒充实体');
+    const { coordinates } = parseTrack(await readFile(join(job, 'data/route.kml')), state.filename);
+    const layers = surfaceLayers(grid, coordinates, route.bounds_projected, route.utm_zone, route.hemisphere === 'S');
+    const mesh = await buildTerrain(grid, layers);
+    warnings.push('本作品含路线及 WorldCover 林/草/雪；OSM 水系/林区/冰川、房屋及海拔刻度尚未迁移');
+    await progress.stage('features', '已生成路线及 WorldCover 林区浮雕、草地与雪材质');
     await progress.stage('photos', '未实现照片与房屋');
     await progress.stage('scale', '未实现海拔刻度');
-    await progress.stage('export', '导出 DEM 核心 STL / 单材质 3MF 并校验');
+    await progress.stage('export', '导出地形 STL / 多材质 3MF 并校验');
     const validation = await exportTerrain(job, mesh);
-    await progress.stage('preview', '封装下载页与元数据；应用内通过 STL 原生预览');
+    await progress.stage('preview', '封装原生 Viewer 网格与可切换地表图层');
     await directory(join(job, 'web'));
-    await writeJson(join(job, 'web/metadata.json'), { route_info: route, warnings, validation, native_core_only: true });
-    await writeBytes(join(job, 'web/index.html'), '<!doctype html><meta charset="utf-8"><title>原生地形核心</title><h1>DEM 地形与底座</h1><p>路线、地表、房屋、刻度尚未实现；请在应用内查看三维预览。</p><a href="../models/terrain.stl">下载 STL</a> · <a href="../models/terrain.3mf">下载 3MF</a>');
-    await writeJson(join(job, 'spec.json'), { route, warnings, datasets: availability, model: { size_mm: 200, padding_m: 1100, base_mm: grid.base, vertical_exaggeration: grid.exaggeration }, native_core_only: true });
+    await packagePreview(job, grid, mesh, layers, { route_info: route, warnings, validation });
+    await writeBytes(join(job, 'web/index.html'), '<!doctype html><meta charset="utf-8"><title>原生地形核心</title><h1>DEM 地形与底座</h1><p>已包含路线与 WorldCover 林/草/雪；请在应用内查看可切换图层的三维预览。</p><a href="../models/terrain.stl">下载 STL</a> · <a href="../models/terrain.3mf">下载 3MF</a>');
+    await writeJson(join(job, 'spec.json'), { route, warnings, datasets: availability, model: { size_mm: 200, padding_m: 1100, base_mm: grid.base, vertical_exaggeration: grid.exaggeration }, native_core_only: false });
     await progress.finish();
   } catch (error) { await progress.fail(error instanceof Error ? error.message : '原生流水线失败'); }
   return state;

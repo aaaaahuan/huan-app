@@ -6,7 +6,7 @@ import { SaxesParser } from 'saxes';
 import proj4 from 'proj4';
 import { writeJson } from './state';
 
-export const PIPELINE_PENDING = '等待解析 KML/KMZ；地形网格与导出尚未迁移';
+export const PIPELINE_PENDING = '等待解析 KML/KMZ 并构建原生地形';
 const MAX_XML = 50_000_000;
 type Node = { tag: string; uri: string; text: string; attrs: Record<string, string>; children: Node[] };
 const K = 'http://www.opengis.net/kml/2.2';

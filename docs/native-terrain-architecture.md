@@ -1,7 +1,17 @@
 # 原生地形迁移架构
 
 
-## 当前状态：Phase 6 原生预览硬切
+## 当前状态：Phase 7 路线 / WorldCover 与新作品预览（部分完成）
+
+原生上传在 DEM 核心上增加路线与 WorldCover 林/草/雪。路线按模型毫米每 0.06 mm 加密，KD 最近样本查询与 Python cKDTree 语义一致；距离 <0.72 mm 保持 0.8 mm 抬升，0.72–0.85 mm 线性收边。森林使用 features.json 默认 0.32 mm + 0.12 mm 符号纹理，草地/冰雪仅分类着色。尚无参数配置入口，不读取参考仓库配置；未知分类保持普通地形。
+
+geometry/features.ts 负责距离和高度场；terrain.ts 用 Manifold 验收封闭实体，保留原始顶点/面次序给 Viewer，顶面按质心最近顶点分类并用真实路线距离覆盖为路线材质。STL 与标准 3MF 使用同一实体；3MF 每面 p1 保存类别来源，未实施布尔合并的来源传播。
+
+pipeline/preview.ts 保存 vertices/faces/face_materials 和 base_z/classes/route_distance/face_route，实际存在林区才保存 forest.bin。metadata.preview_layers.available 仅为实际已生成类别启用；水、房屋、刻度、道路、聚落、地名为 false。新 completed 作品直接使用现有 Three Viewer 开关，Phase5 核心旧作品继续 STL 回退。预览开关不改打印输出。下载 HTML 只供下载，不作为预览运行时。
+
+OSM 多边形/水系/湖面、房屋实体与间隙、海拔刻度尚未迁移；WorldCover 80 水类不冒充 Python 的 OSM 水掩膜。调度维持 upload/retry 等终态与主进程 CPU/WASM；没有声称后台轮询、worker、取消或恢复完成。完整 parity 未通过；真实夹具路线距离数组逐点相同，但 DEM/GDAL 采样及分类边界仍不同。详情与指标见 /tmp/codex-native-terrain/phase7-report.md。
+
+## Phase 6 原生预览硬切（历史）
 
 Terrain/Workbench 已使用本仓库 Three viewer，删除 python-service.ts 及 HUAN_PATH_ROOT 探测；bootstrap configure/close 为无操作，ensure 仅返回兼容提示，生产 CSP frame-src 为 none。下方 Phase 0–5 章节记录迁移历史，涉及 Python/iframe 的说明已被本节取代。
 
