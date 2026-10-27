@@ -40,7 +40,7 @@ export async function runNative(root: string, job: string, state: TerrainJobStat
     const validation = await exportTerrain(job, mesh);
     await progress.stage('preview', '封装原生 Viewer 网格与可切换地表图层');
     await directory(join(job, 'web'));
-    await packagePreview(job, grid, mesh, layers, { route_info: route, warnings, validation });
+    await packagePreview(job, grid, mesh, layers, { route_info: route, warnings, validation }, { root, geographic: route.bounds_wgs84, projected: route.bounds_projected, zone: route.utm_zone, south: route.hemisphere === 'S', warnings, fetch });
     await writeBytes(join(job, 'web/index.html'), '<!doctype html><meta charset="utf-8"><title>原生地形核心</title><h1>DEM 地形与底座</h1><p>已包含路线与 WorldCover 林/草/雪；请在应用内查看可切换图层的三维预览。</p><a href="../models/terrain.stl">下载 STL</a> · <a href="../models/terrain.3mf">下载 3MF</a>');
     await writeJson(join(job, 'spec.json'), { route, warnings, datasets: availability, model: { size_mm: 200, padding_m: 1100, base_mm: grid.base, vertical_exaggeration: grid.exaggeration }, native_core_only: false });
     await progress.finish();

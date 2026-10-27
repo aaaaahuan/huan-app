@@ -3,9 +3,12 @@ import { join } from 'node:path';
 import type { HeightGrid, PrintableMesh } from '../geometry/terrain';
 import { palette, type SurfaceLayers } from '../geometry/features';
 import { writeBytes, writeJson } from './state';
+import { preparePlaces } from '../overlays';
+import type { Bounds } from './tracks';
+import type { FetchFile } from '../datasets/network';
 
 // 使用未经布尔重排的高度场拓扑；图层开关仅重组显示，不改写打印资产。
-export async function packagePreview(job: string, grid: HeightGrid, mesh: PrintableMesh, layers: SurfaceLayers, metadata: Record<string, unknown>) {
+export async function packagePreview(job: string, grid: HeightGrid, mesh: PrintableMesh, layers: SurfaceLayers, metadata: Record<string, unknown>, places?: { root: string; geographic: Bounds; projected: Bounds; zone: number; south: boolean; warnings: string[]; fetch?: FetchFile }) {
   for (const path of ['web', 'web/layers']) {
     await mkdir(join(job, path), { recursive: true });
     if (!(await lstat(join(job, path))).isDirectory()) throw new Error('预览目录不能是符号链接');
@@ -23,6 +26,9 @@ export async function packagePreview(job: string, grid: HeightGrid, mesh: Printa
   await writeBytes(join(job, 'web/layers/classes.bin'), layers.classes);
   await writeBytes(join(job, 'web/layers/face_route.bin'), Uint8Array.from(mesh.materials.subarray(0, top), id => id === 4 ? 1 : 0));
   if (available.forest) await floats('layers/forest.bin', layers.forest);
+  const settlements = places ? await preparePlaces(places.root, job, places.geographic, places.projected, places.zone, places.south, grid.scale, places.warnings, places.fetch) : undefined;
+  available.places = Boolean(settlements?.places.count);
   await writeJson(join(job, 'web/metadata.json'), { ...metadata, size: grid.size, palette, native_core_only: false,
-    preview_layers: { grid: [grid.width, grid.height], top_faces: top, available, base: './layers/base_z.bin', classes: './layers/classes.bin', distance: './layers/route_distance.bin', face_route: './layers/face_route.bin', ...(available.forest ? { forest: './layers/forest.bin' } : {}) } });
+    ...(settlements ? { settlements } : {}),
+    preview_layers: { grid: [grid.width, grid.height], top_faces: top, available, base: './layers/base_z.bin', classes: './layers/classes.bin', distance: './layers/route_distance.bin', face_route: './layers/face_route.bin', ...(available.forest ? { forest: './layers/forest.bin' } : {}), ...(available.places ? { places: settlements?.places.url } : {}) } });
 }
