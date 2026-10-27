@@ -164,3 +164,15 @@ geometry/index.ts 动态 import manifold ESM，通过 createRequire(__filename) 
 geometry/terrain.ts 仅列出 build_model.py 的 grid、路线距离场、Shapely/地表、房屋/刻度及导出迁移位置。本轮不声称地形 mesh parity。另发现将整个 pipeline（含 geotiff 的 web-worker 依赖）直接 require 到普通 worker 会触发其 workerData 假设错误；geometry 独立 worker 正常，后续 raster worker 需要隔离/验证加载方式，不能直接复制主进程入口。
 
 全部可写验收在 /tmp/codex-native-terrain/phase4：真实旧 KML 只读复制、恶意 ZIP/XML/坐标、代理优先级、真实本地 HTTP curl 超时/原子替换、mock Overpass 预算/慢镜像/缓存及 /map relation drop、临时 TIFF 采样/缓存、真实在线 DEM 和 rasterio 单点对照、隔离 Electron 工作台及 main/worker manifold。Overpass 在线请求 20 秒超时，WorldCover 在线未验收；没有以模拟数据替代在线结果。完整应用 bootstrap/Python 旧预览、完整地形与打包仍待后续。computer-use 获取 Electron 连续超时，隔离窗口的自动断言及已检查截图通过。
+
+## Phase 5：DEM 可打印核心（部分交付）
+
+原生 runner 现在可从真实 DEM 完成封闭地形、底座、binary STL 和标准单材质 3MF，并将任务标为 completed。`web/index.html` 仅为下载页，明确提示路线、地表浮雕、房屋、海拔刻度和三维预览未实现；旧完成作品仍沿用 iframe。八阶段中尚未实现的功能以 detail 明示跳过，completed 只表示本轮 DEM 核心导出完成，不代表完整模型 parity。
+
+`prepareFeatures` 将真实解码窗口交给 terrain；`data/grid.json`、`elevation.f32`（Float32 小端）、`worldcover.u8`（0 表示未知）保存可重载的目标网格。行序南→北，UTM 范围沿用 route 的 1100 m padding，长边 200 mm、网格间距不超过 0.32 mm、底座 4 mm、高度夸张 clamp(72 / 地形毫米高差, 1, 2)。这些是当前固定默认值，尚无模型参数配置入口，也未迁移 Python 根据记录海拔增加底座厚度的规则。
+
+DEM 在目标顶点逆投影后做严格 bilinear；WorldCover nearest。PixelIsPoint 仍先将 tiepoint 转为像元边缘。此方法不等价于 rasterio/GDAL 缩小时的面积加权重投影：真实样本高程差最大约 2.293 m、平均约 0.290 m；同范围仅 DEM+底座核心体积相对差约 0.00751%。没有将这个结果称为完整地表/路线 parity。
+
+地形使用与 Python 相同的顶面三角对角线、CCW 边界、侧壁及底面扇形，随后经 manifold-3d 验收并显式 delete。保存面来源数组；当前所有面均为 Terrain，尚未建立多材质布尔组合。导出前独立检查无向边恰好两面、有向边抵消、正体积和有限坐标；写入采用临时文件原子替换，之后核对 STL 字节与解压后的 3MF XML。开发验证另用 Python trimesh/XML 重载两种文件检查封闭性、绕序、尺寸、体积及 3MF 材质索引。尚无运行时完整独立格式解析器、跨文件事务或安装包验收。
+
+**未完成的调度边界仍保留**：upload/retry IPC 等待终态；CPU/WASM 在 main，geotiff 普通 worker 的 workerData 问题尚未解决；没有后台队列、取消及 configure/close 中止。为避免 Python 启动恢复改写原生 queued/running，旧服务启动前拒绝包含此类状态或损坏状态的作品库；中断原生任务需要先重试。该门禁不是跨调度器互斥或恢复实现。后续必须在原生 viewer 硬切之前补齐。

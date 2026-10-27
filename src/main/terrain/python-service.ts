@@ -9,6 +9,8 @@ import type { TerrainStatus } from '@shared/contracts/terrain';
 
 import { resolveHuanPathRoot, validateHuanPathRoot, defaultTerrainDataDir, resolveTerrainDataDir, validateTerrainDataDir } from './root';
 
+import { listJobs } from './library';
+
 const origin = 'http://127.0.0.1:8765';
 export function registerTerrain(assertTrusted: (event: IpcMainInvokeEvent) => void, loadDataDir: () => Promise<string>) {
   let child: ChildProcess | undefined;
@@ -65,6 +67,11 @@ export function registerTerrain(assertTrusted: (event: IpcMainInvokeEvent) => vo
       await validateHuanPathRoot(root);
       const dataDir = resolveTerrainDataDir(await loadDataDir(), defaultTerrainDataDir(app.getAppPath(), app.isPackaged, app.getPath('userData')));
       await validateTerrainDataDir(dataDir);
+      // Python 启动恢复并不识别 native；不能让它改写仍在运行或上次中断的原生任务。
+      const library = await listJobs(dataDir);
+      if (library.diagnostics.length || library.jobs.some(job => job.origin === 'native' && (job.status === 'queued' || job.status === 'running'))) {
+        return { ok: false, message: '作品库包含活动/中断的原生任务或无法读取的状态；请先完成原生任务重试，再启动旧预览。' };
+      }
       const existing = child;
       if (existing && running(existing) && await healthy() && running(existing)) {
         return { ok: true, url: `${origin}/?huanApp=1` };

@@ -9,11 +9,12 @@ export const STAGES = [
   ['export', '导出与校验'], ['preview', '生成网页预览']
 ] as const;
 export const pendingStages = (): TerrainJobStatus['stages'] => STAGES.map(([key, name]) => ({ key, name, status: 'pending', elapsed_seconds: null, detail: '' }));
-export async function writeJson(path: string, value: unknown) {
+export async function writeBytes(path: string, value: Uint8Array | string) {
   const temp = `${path}.${randomUUID()}.tmp`;
-  try { await writeFile(temp, JSON.stringify(value, null, 2), { flag: 'wx' }); await rename(temp, path); }
+  try { await writeFile(temp, value, { flag: 'wx' }); await rename(temp, path); }
   finally { await rm(temp, { force: true }); }
 }
+export function writeJson(path: string, value: unknown) { return writeBytes(path, JSON.stringify(value, null, 2)); }
 const now = () => Date.now() / 1000;
 export class Progress {
   constructor(readonly job: string, readonly state: TerrainJobStatus) {}

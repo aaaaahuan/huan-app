@@ -4,12 +4,14 @@ import { writeJson } from '../pipeline/state';
 import { prepareDem } from './dem';
 import { prepareWorldcover } from './worldcover';
 import { overpass } from './overpass';
+import type { RasterClip } from './raster';
 import { fetchFile, type FetchFile } from './network';
 export async function prepareFeatures(root: string, job: string, bounds: Bounds, warnings: string[], fetch: FetchFile = fetchFile()) {
   const result = { dem: false, worldcover: false, osm: false };
+  const rasters: { dem: RasterClip[]; worldcover: RasterClip[] } = { dem: [], worldcover: [] };
   for (const [key, label, prepare] of [
-    ['dem', 'DEM', () => prepareDem(root, job, bounds, fetch)],
-    ['worldcover', 'WorldCover', () => prepareWorldcover(root, job, bounds, fetch)],
+    ['dem', 'DEM', async () => { rasters.dem = await prepareDem(root, job, bounds, fetch); }],
+    ['worldcover', 'WorldCover', async () => { rasters.worldcover = await prepareWorldcover(root, job, bounds, fetch); }],
     ['osm', 'OSM', async () => {
       const { doc, source } = await overpass(root, bounds, 'natural', fetch);
       await writeJson(join(job, 'data/osm_features_raw.json'), doc);
@@ -28,6 +30,6 @@ export async function prepareFeatures(root: string, job: string, bounds: Bounds,
       if (key === 'osm') await writeJson(join(job, 'data/osm_features_raw.json'), { elements: [] });
     }
   }
-  await writeJson(join(job, 'data/datasets.json'), { ...result, warnings, raster_output: '缓存 TIFF 与内存裁剪已实现；任务 TIFF mosaic / GDAL 重投影 parity 待实现' });
-  return result;
+  await writeJson(join(job, 'data/datasets.json'), { ...result, warnings, raster_output: '缓存 TIFF 与内存裁剪；terrain 阶段保存 vertex-centered UTM elevation.f32 / worldcover.u8 / grid.json；非 GDAL 重投影' });
+  return { ...result, rasters };
 }
