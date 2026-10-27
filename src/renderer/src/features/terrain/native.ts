@@ -1,3 +1,3 @@
-// TODO(native-terrain): 按 app/ui/upload.js、web/features.js、web/places.js 拆分原生工作台与预览。
-// 见 docs/native-terrain-architecture.md；当前 Terrain.tsx 继续使用原 iframe。
+// 原生工作台入口见 Workbench.tsx；资源协议与 Three viewer 待后续迁移。
+// 见 docs/native-terrain-architecture.md，预览暂时继续使用 Python iframe。
 export {};

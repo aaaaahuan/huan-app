@@ -121,3 +121,11 @@ viewer 对齐 web/features.js 的地表组合顺序、路线间隙、河流/湖�
 `assets.ts` 提供 resolveJobAsset(dataRoot,id,area,path) 和 readJobAssetJson(dataRoot,id,path)，仅读 completed 作品。ID、路径分段、jobs/job/资源目录和文件 realpath、文件类型及后缀均受校验；禁止编码路径片段、反斜杠、遍历和符号链接越界。后缀沿用参考 server.py；本阶段只提供主进程解析/读取 helper，尚未注册资源协议，也没有将 HTML/JS 提供给特权 renderer 执行。
 
 验证采用 /tmp 中完整复制的旧 completed 作品及临时夹具，不增加仓库测试脚本或框架，不启动可能恢复真实任务的 Python/iframe。Phase 2 可先做原生 WorkList，通过新增 IPC 列出作品并保留 iframe 预览；资源协议及原生 viewer 另行实现。
+
+## Phase 2 已交付：原生列表与过渡预览
+
+Terrain 现在组合原生 Workbench/WorkList 与既有 Python iframe。列表通过 listJobs 独立读取，5 秒刷新；选中作品通过 getJob 每秒读取状态。列表自身不调用 ensure；进入地形页时 iframe 仍沿用原有 ensure 启动路径。ensure 已返回服务 URL 后，选择成功会在该 URL 上设置 job 查询参数，保留 huanApp 参数，不使用旧 status.preview_url 导航。
+
+搜索同时匹配 name/filename，沿用 NFKC、小写、去空白和前缀/子串/字符顺序排名，同分保持库顺序；IME 完成后筛选，支持 Esc、清除及收起时清空。界面展示 n/total、逐项诊断、加载/空/失败及所选作品状态。settingsRevision 改变时重新挂载工作台，清空旧选择并取消旧响应；选择变化和轮询清理也会丢弃过期响应。原生列表与 iframe 内部操作暂不双向同步；原生资源协议、上传、流水线与 Three viewer 尚未实现。
+
+本轮用 /tmp 隔离 Electron 页面和模拟 IPC 验证界面与竞态，不启动会恢复任务的 Python 服务，不写真实作品。完整 IPC 读库沿用 Phase 1 已验证实现；实际 Python 预览联调仍需在临时 dataDir 中手动验收。

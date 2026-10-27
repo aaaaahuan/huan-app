@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@renderer/components/Button';
 import './terrain.css';
+import { Workbench } from './Workbench';
 
 export function Terrain({ active, settingsRevision, onOpenSettings }: { active: boolean; settingsRevision: number; onOpenSettings(): void }) {
   const [ready, setReady] = useState<{ url: string; settingsRevision: number } | null>(null);
@@ -20,11 +21,11 @@ export function Terrain({ active, settingsRevision, onOpenSettings }: { active: 
     return () => { cancelled = true; };
   }, [active, revision, settingsRevision]);
   return <section className="terrain-system" hidden={!active} aria-label="地形">
-    {url ? <iframe className="terrain-frame" title="地形作品空间" src={url}
-      sandbox="allow-scripts allow-same-origin allow-downloads" /> :
+    <Workbench key={settingsRevision} active={active} previewUrl={url}>
       <div className="terrain-status" role={error ? 'alert' : 'status'}>
         <p>{error || '正在启动地形服务…'}</p>
         {error ? <><Button onClick={() => { setError(''); setRevision(value => value + 1); }}>重试</Button><Button onClick={onOpenSettings}>打开设置</Button></> : null}
-      </div>}
+      </div>
+    </Workbench>
   </section>;
 }
