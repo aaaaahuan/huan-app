@@ -4,7 +4,10 @@ import { rm } from 'node:fs/promises';
 import type { Bounds } from '../pipeline/tracks';
 import { overpass, type OsmDocument } from '../datasets/overpass';
 import { fetchFile, type FetchFile } from '../datasets/network';
-import { writeJson } from '../pipeline/state';
+import { osmMasks } from '../geometry/osm';
+import { defaultFeatures } from '../config';
+import type { HeightGrid } from '../geometry/terrain';
+import { writeBytes, writeJson } from '../pipeline/state';
 
 const styles = {
   city: { rank: 1, font_px: 17 }, town: { rank: 2, font_px: 15 },
@@ -35,7 +38,7 @@ export function placeLabels(raw: OsmDocument, bounds: Bounds, zone: number, sout
   return { labels: kept, styles, preview_only: true, dropped_over_limit: Math.max(0, labels.length - 400) };
 }
 
-export async function preparePlaces(root: string, job: string, geographic: Bounds, projected: Bounds, zone: number, south: boolean, scale: number, warnings: string[], fetch: FetchFile = fetchFile()) {
+export async function preparePlaces(root: string, job: string, geographic: Bounds, projected: Bounds, zone: number, south: boolean, scale: number, warnings: string[], fetch: FetchFile = fetchFile(), grid?: HeightGrid) {
   let raw: OsmDocument = { elements: [] };
   const license = { license: 'ODbL 1.0', attribution: '© OpenStreetMap contributors', license_url: 'https://www.openstreetmap.org/copyright' };
   let source: Record<string, unknown>;
@@ -52,5 +55,15 @@ export async function preparePlaces(root: string, job: string, geographic: Bound
   const path = join(job, 'web/layers/places.json');
   if (doc.labels.length) await writeJson(path, doc);
   else await rm(path, { force: true });
-  return { preview_only: true, places: { count: doc.labels.length, dropped_over_limit: doc.dropped_over_limit, url: doc.labels.length ? './layers/places.json' : null, lift_mm: .6 } };
+  const areaStyles = { 3: { key: 'industrial', label: '工业区', color: '#9C93AE' }, 2: { key: 'commercial', label: '商业区', color: '#D4A35E' }, 1: { key: 'residential', label: '居民区', color: '#C98C7E' } };
+  const codes = new Uint8Array(grid ? grid.width * grid.height : 0);
+  if (grid) for (const code of [3, 2, 1]) {
+    const selected = raw.elements.filter(el => code === 3 ? el.tags?.landuse === 'industrial' : code === 2 ? ['commercial', 'retail'].includes(el.tags?.landuse ?? '') : el.tags?.landuse === 'residential');
+    if (!selected.length) continue;
+    const masks = await osmMasks({ elements: selected.map(el => ({ ...el, tags: { landuse: 'forest' } })) }, grid, projected, zone, south, defaultFeatures);
+    masks.forest.forEach((hit, i) => { if (hit) codes[i] = code; });
+  }
+  const areaPath = join(job, 'web/layers/settlements.bin'), hasAreas = codes.some(Boolean);
+  if (hasAreas) await writeBytes(areaPath, codes); else await rm(areaPath, { force: true });
+  return { preview_only: true, areas: { styles: areaStyles, grid: grid ? [grid.width, grid.height] : [], url: hasAreas ? './layers/settlements.bin' : null, cells: { residential: codes.filter(c => c === 1).length, commercial: codes.filter(c => c === 2).length, industrial: codes.filter(c => c === 3).length }, sampling: 'GEOS vertex-centre intersects; boundary pixels can differ from rasterio rasterize' }, places: { count: doc.labels.length, dropped_over_limit: doc.dropped_over_limit, url: doc.labels.length ? './layers/places.json' : null, lift_mm: .6 } };
 }

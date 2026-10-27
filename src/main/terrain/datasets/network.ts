@@ -1,3 +1,4 @@
+import { parentPort } from 'node:worker_threads';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdir, rename, rm, stat } from 'node:fs/promises';
@@ -39,6 +40,7 @@ export function fetchFile(config: NetworkConfig = {}): FetchFile {
     try {
       await new Promise<void>((resolve, reject) => {
         const child = spawn('/usr/bin/curl', ['-fsSL', '--connect-timeout', '10', '--max-time', String(timeout), '--max-filesize', '1000000000', '-A', 'HuanPathTerrain/2.0 local-model', '-K', '-', '--noproxy', 'localhost,127.0.0.1,::1', '-o', temp, parsed.href], { stdio: ['pipe', 'ignore', 'pipe'] });
+        if (child.pid) parentPort?.postMessage({ child: 'start', pid: child.pid });
         let diagnostic = '', killed = false;
         const timer = setTimeout(() => { killed = true; child.kill('SIGKILL'); }, (timeout + 0.2) * 1000);
         child.stderr.on('data', (data: Buffer) => { if (diagnostic.length < 4096) diagnostic += data.toString(); });
@@ -47,6 +49,7 @@ export function fetchFile(config: NetworkConfig = {}): FetchFile {
         child.once('error', () => { clearTimeout(timer); reject(new DownloadError('无法启动系统 curl')); });
         child.once('close', code => {
           clearTimeout(timer);
+          if (child.pid) parentPort?.postMessage({ child: 'end', pid: child.pid });
           const status = diagnostic.match(/(?:error: |returned error: )(\d{3})/)?.[1];
           if (code === 0) resolve();
           else reject(new DownloadError(killed || code === 28 ? '下载超时' : `下载失败：${status ? `HTTP ${status}` : `curl exit ${code}`}`, status ? Number(status) : undefined, killed || code === 28));

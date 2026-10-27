@@ -1,5 +1,16 @@
 # 原生地形迁移架构
 
+## Phase 9b：独立房屋、预览道路/聚落与后台调度
+
+本节替代下方历史章节中 B/D/E 未完成的描述，A+C 保持原实现。upload/retry 在输入与 queued status 原子落盘后立即返回；进程内队列最多运行两个 worker，同 job 从准备重试到线程退出持有互斥。getJob 读取阶段进度；取消通过固定 cancel IPC，先终止 worker 和其跟踪的 curl 下载子进程，再按最近有效进度保存 failed（可重试）。切换作品目录等待旧目录任务停止，退出等待所有任务停止；队列中未启动的任务也保存失败。首次配置/访问作品库将中断的原生 queued/running 标为可重试失败，遗留任务和 completed 不自动改写。服务串行处理目录生命周期与上传/重试/取消，防止切换时仍有旧目录任务入队。进程崩溃后的随机 .tmp/.part 不作为有效状态/缓存使用；不根据遗留 worker_pid 杀进程。安装包/asar 仍未验收。
+
+房屋从任务内 data/photo_houses.json 读取人工判断，校验唯一照片索引、坐标与轨迹照片点；无判断时记录 uncertain，未运行照片自动识别。只支持已核验的 5_pin_house 设计：geometry/pin-house.json 内嵌参考 STL 的焊接网格、按 GLB body/accent 最近面映射的材质6/7、原 GLB 与来源 SHA256。运行时无需参考仓库/Python。设计为用户提供资源，不推断第三方授权。按配置 scale、sink 放置独立实体并要求与地形相交；圆形 route_gap 增加两倍网格对角线采样余量，面缺口同时检查顶点与质心。净距采用与 Python 相同的三角面到中心距离及 1.7×scale 包络下界；正下界保证 footprint 不重叠。布尔后 faceID 保留材质6/7进入3MF。预览保存未挖缺口的路线面和独立 face_gap，关闭房屋恢复完整路线。
+
+新任务从真实 OSM 生成按四档道路分类/裁剪/0.12mm加密的 ribbon bins，及工业/商业/居民区优先覆盖的 settlements.bin、places.json。聚落复用 GEOS 多边形拓扑；顶点中心 intersects 与 Python rasterio 边界可能有差异；OSM API 降级仍会丢弃 relations，并由 source 记录。available 仅在实际写出对应资产后启用；失败或空数据不伪造图层。道路与地名沿现有 Viewer 重新锚定/深度测试/地形遮挡，聚落只影响预览顶面颜色，不改变打印网格。
+
+验收记录位于 `/tmp/codex-native-terrain/phase9b/phase9b-report.md`。爱心线和雨崩真实夹具都没有照片点，房屋真实照片路径明确跳过；另以人工合成照片点验证几何开/关、uncertain、scale/sink/clearance 与 Python compose+Manifold 对照。栅格采样差异和照片自动判断仍不在本轮完成声明内。
+
+
 
 ## Phase 8 切片 1：构建线程隔离
 

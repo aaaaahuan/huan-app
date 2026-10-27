@@ -48,6 +48,6 @@ export async function exportTerrain(job: string, mesh: PrintableMesh, colors = p
   if (!stl.equals(bytes)) throw new Error('STL 写入后校验失败');
   const archive = unzipSync(await readFile(join(job, 'models/terrain.3mf')));
   if (strFromU8(archive['3D/3dmodel.model']) !== model) throw new Error('3MF 写入后校验失败');
-  await writeJson(join(job, 'models/validation.json'), { ...report, materials: colors.filter(p => mesh.materials.includes(p.id)), face_material_counts: Object.fromEntries(colors.map(p => [p.name, mesh.materials.filter(id => id === p.id).length])), limitations: ['照片与独立房屋尚未迁移'], serialization: 'STL bytes and 3MF XML round-trip; independent reader verification required' });
+  await writeJson(join(job, 'models/validation.json'), { ...report, materials: colors.filter(p => mesh.materials.includes(p.id)), face_material_counts: Object.fromEntries(colors.map(p => [p.name, mesh.materials.filter(id => id === p.id).length])), limitations: ['照片附件解析与自动房屋识别尚未迁移'], serialization: 'STL bytes and 3MF XML round-trip; independent reader verification required' });
   return report;
 }

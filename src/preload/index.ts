@@ -9,6 +9,7 @@ const api: HuanAppAPI = {
   terrain: Object.freeze({ readAsset: (input: Parameters<HuanAppAPI['terrain']['readAsset']>[0]) => ipcRenderer.invoke(IPC_CHANNELS.terrain.readAsset, input), autoRoot: () => ipcRenderer.invoke(IPC_CHANNELS.terrain.autoRoot), ensure: () => ipcRenderer.invoke(IPC_CHANNELS.terrain.ensure),
     listJobs: () => ipcRenderer.invoke(IPC_CHANNELS.terrain.listJobs),
     upload: (input: TerrainUpload) => ipcRenderer.invoke(IPC_CHANNELS.terrain.upload, input),
+    cancel: (input: TerrainJobRequest) => ipcRenderer.invoke(IPC_CHANNELS.terrain.cancel, input),
     retry: (input: TerrainJobRequest) => ipcRenderer.invoke(IPC_CHANNELS.terrain.retry, input),
     getJob: (input: TerrainJobRequest) => ipcRenderer.invoke(IPC_CHANNELS.terrain.getJob, input) }),
   app: Object.freeze({ getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.app.status) }),
