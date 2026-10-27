@@ -50,7 +50,7 @@ export function createSettingsStore(directory: string) {
     let committed = false;
     const temporary = join(directory, `.settings-${randomUUID()}.tmp`);
     try {
-      try { await validateTerrainDataDir(resolveTerrainDataDir(parsed.data.terrain.dataDir, defaultTerrainDataDir(app.getAppPath(), app.isPackaged, app.getPath('userData')))); }
+      try { await validateTerrainDataDir(resolveTerrainDataDir(parsed.data.terrain.dataDir, defaultTerrainDataDir(app.getAppPath(), app.isPackaged, app.getPath('userData'), __dirname))); }
       catch (error) { return { ok: false, message: error instanceof Error ? error.message : '地形数据目录无效。' }; }
       const fields: Partial<Record<Platform, string>> = {};
       for (const platform of PLATFORMS) {

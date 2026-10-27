@@ -10,7 +10,7 @@ import { defaultTerrainDataDir, resolveTerrainDataDir } from './root';
 
 export function registerTerrain(assertTrusted: (event: IpcMainInvokeEvent) => void, loadDataDir: () => Promise<string>) {
   // 只读方法独立解析当前配置，不调用会建目录、恢复任务或启动 Python 的路径。
-  const dataRoot = async () => resolveTerrainDataDir(await loadDataDir(), defaultTerrainDataDir(app.getAppPath(), app.isPackaged, app.getPath('userData')));
+  const dataRoot = async () => resolveTerrainDataDir(await loadDataDir(), defaultTerrainDataDir(app.getAppPath(), app.isPackaged, app.getPath('userData'), __dirname));
   ipcMain.handle(IPC_CHANNELS.terrain.listJobs, async (event): Promise<TerrainListResult> => {
     assertTrusted(event);
     try { return { ok: true, ...await listJobs(await dataRoot()) }; }
