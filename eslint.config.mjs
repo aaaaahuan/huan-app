@@ -3,7 +3,7 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['node_modules/**', 'out/**', 'release/**', '.cache/**'] },
+  { ignores: ['node_modules/**', 'out/**', 'release/**', '.cache/**', 'terrain-data/**', 'work/**', 'src/main/terrain/__tests__/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   { files: ['**/*.mjs'], languageOptions: { globals: { console: 'readonly', process: 'readonly', Buffer: 'readonly', URL: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly' } } }

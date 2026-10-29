@@ -6,16 +6,17 @@ import react from '@vitejs/plugin-react';
 // 别名需与两个 tsconfig 的 paths 对齐；它们只用于模块导入，不用于运行时文件路径。
 export default defineConfig({
   main: {
-    resolve: { alias: { '@shared': resolve('src/shared'), '@main': resolve('src/main') } },
+    resolve: { alias: { '@shared': resolve('src/shared'), '@main': resolve('src/main'), 'web-worker': resolve('src/workers/geotiff-no-pool.ts') } },
     // 固定主进程文件名，和 package.json 的 main 字段保持一致。
     build: {
-      // 让 Readability 经过 Vite 处理，将 ?raw 转换为源码字符串。
+      // Readability 处理 ?raw；GeoTIFF 纳入 bundle，替换不兼容普通 Node worker 的可选 Pool 后端。
       externalizeDeps: {
-        exclude: ['@mozilla/readability'],
+        exclude: ['@mozilla/readability', 'geotiff', 'web-worker'],
       },
       rollupOptions: {
         input: {
           index: resolve('src/main/index.ts'),
+          'terrain-worker': resolve('src/workers/terrain.ts'),
         },
         output: {
           format: 'cjs',

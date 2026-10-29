@@ -1,0 +1,11 @@
+.terrain-native-viewer { display: flex; flex: 1; min-height: 440px; flex-direction: column; gap: 8px; padding: 12px; }
+.terrain-viewer-actions, .terrain-feature-controls { display: flex; flex-wrap: wrap; gap: 6px; }
+.terrain-feature-controls button[aria-pressed="true"] { background: #d8e5d9; }
+.terrain-native-viewer > p { margin: 0; font-size: 12px; color: #526257; }
+.terrain-canvas-host { position: relative; flex: 1; min-height: 350px; overflow: hidden; border-radius: 10px; }
+.terrain-canvas-host canvas { display: block; width: 100%; height: 100%; }
+.terrain-place-labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.terrain-place-label { position: absolute; left: 0; top: 0; white-space: nowrap; font-weight: 600; line-height: 1; color: #fff7df; text-shadow: 0 0 3px #152327, 0 1px 3px #152327; }
+.terrain-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; color: #526257; }
+.terrain-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.terrain-legend i { width: 9px; height: 9px; border-radius: 2px; }

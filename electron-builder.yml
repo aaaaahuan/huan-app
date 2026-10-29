@@ -2,6 +2,8 @@
 appId: com.huan.app
 productName: huan-app
 asar: true
+asarUnpack:
+  - "**/manifold-3d/manifold.wasm"
 directories:
   # 最终应用产物目录，与源码编译输出 out 分开。
   output: release

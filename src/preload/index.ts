@@ -1,11 +1,17 @@
 // 隔离上下文中的桥接脚本：仅开放业务方法，不向页面暴露 ipcRenderer 或文件系统。
 import { IPC_CHANNELS } from '@shared/ipc-channels';
 import { contextBridge, ipcRenderer } from 'electron';
+import type { TerrainJobRequest, TerrainUpload } from '@shared/contracts/terrain';
 import type { HuanAppAPI } from '@shared/contracts/app';
 
 // 通道名固定在这里；页面不能自行指定任意 IPC 通道或直接调用文件系统。
 const api: HuanAppAPI = {
-  terrain: Object.freeze({ autoRoot: () => ipcRenderer.invoke(IPC_CHANNELS.terrain.autoRoot), ensure: () => ipcRenderer.invoke(IPC_CHANNELS.terrain.ensure) }),
+  terrain: Object.freeze({ readAsset: (input: Parameters<HuanAppAPI['terrain']['readAsset']>[0]) => ipcRenderer.invoke(IPC_CHANNELS.terrain.readAsset, input), autoRoot: () => ipcRenderer.invoke(IPC_CHANNELS.terrain.autoRoot),
+    listJobs: () => ipcRenderer.invoke(IPC_CHANNELS.terrain.listJobs),
+    upload: (input: TerrainUpload) => ipcRenderer.invoke(IPC_CHANNELS.terrain.upload, input),
+    cancel: (input: TerrainJobRequest) => ipcRenderer.invoke(IPC_CHANNELS.terrain.cancel, input),
+    retry: (input: TerrainJobRequest) => ipcRenderer.invoke(IPC_CHANNELS.terrain.retry, input),
+    getJob: (input: TerrainJobRequest) => ipcRenderer.invoke(IPC_CHANNELS.terrain.getJob, input) }),
   app: Object.freeze({ getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.app.status) }),
 
   // 算法训练服务

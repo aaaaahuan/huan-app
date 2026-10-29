@@ -1,7 +1,11 @@
 // 主进程与 preload 共用的通道名称；保持纯常量，避免给沙箱 preload 引入运行时依赖。
 // 请求使用 invoke/handle，browser.state 使用 send/on 推送状态；处理函数仍归属各业务模块。
 export const IPC_CHANNELS = {
-  terrain: { ensure: 'huan-app:terrain:ensure', autoRoot: 'huan-app:terrain:auto-root' },
+  terrain: {
+    readAsset: 'huan-app:terrain:read-asset', autoRoot: 'huan-app:terrain:auto-root',
+    listJobs: 'huan-app:terrain:list-jobs', getJob: 'huan-app:terrain:get-job',
+    upload: 'huan-app:terrain:upload', retry: 'huan-app:terrain:retry', cancel: 'huan-app:terrain:cancel'
+  },
   app: { status: 'huan-app:app:status' },
   algorithms: { get: 'huan-app:algorithms:get', refresh: 'huan-app:algorithms:refresh',
     setCompleted: 'huan-app:algorithms:set-completed', open: 'huan-app:algorithms:open',

@@ -1,0 +1,25 @@
+.terrain-sidebar { display: flex; flex-direction: column; width: 280px; min-width: 220px; border-right: 1px solid var(--border); background: var(--surface); }
+.terrain-sidebar--collapsed { width: 48px; min-width: 48px; }
+.terrain-list-header { display: flex; align-items: center; justify-content: space-between; padding: 12px; gap: 8px; }
+.terrain-list-header h2 { margin: 0; font-size: 15px; }
+.terrain-list-header small { color: var(--muted); font-weight: normal; }
+.terrain-list-content { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.terrain-list-content[hidden] { display: none; }
+.terrain-search { display: flex; align-items: center; gap: 4px; padding: 0 10px 12px; }
+.terrain-search .ui-icon-input { flex: 1; min-width: 0; }
+.terrain-search input { width: 100%; min-width: 0; }
+.terrain-list-scroll { overflow: auto; padding: 0 10px 12px; color: var(--muted); overflow-wrap: anywhere; }
+.terrain-work-items { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.terrain-work-card.ui-button { width: 100%; height: auto; display: flex; flex-direction: column; align-items: stretch; gap: 6px; text-align: left; white-space: normal; padding: 12px; }
+.terrain-work-card span, .terrain-work-card small { color: var(--muted); font-size: 12px; }
+.terrain-work-card[aria-current] { background: var(--surface-hover, #eef4ed); border-color: var(--accent, #849d7e); }
+.terrain-diagnostics { margin-top: 16px; font-size: 12px; }
+.terrain-diagnostics summary { cursor: pointer; }
+.terrain-preview { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1; }
+.terrain-selection { padding: 10px 16px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+
+.terrain-toolbar { padding: 10px 16px; border-bottom: 1px solid var(--border-color, #e8e5df); }
+.terrain-upload { margin: 32px; padding: 48px 24px; border: 2px dashed #d9d8ce; border-radius: 12px; text-align: center; }
+.terrain-upload p, .terrain-progress p { color: #72766d; }
+.terrain-progress { padding: 20px 32px; overflow: auto; }
+.terrain-progress li { padding: 6px; }

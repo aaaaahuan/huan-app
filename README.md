@@ -236,12 +236,12 @@ Pi Agent Core / Pi AI / Pi Coding Agent 固定为 0.87.1，运行于主进程；
 每步暂停等待用户 Review。测试证据见 [A0 记录](docs/a0-review.md)，旧 S0 记录仅保留为历史。
 
 
-### 地形工作台（huan-path）
+### 原生地形工作台
 
-顶部「地形」完整嵌入 huan-path 作品空间，复用其 KML/KMZ 上传、阶段进度、重试、作品列表、3D 控件、照片与模型下载。首次进入时通过主进程 IPC 启动服务，切换系统保留页面与后台生成任务；完全退出应用时清理本次启动的 Python 进程组。服务固定使用本机 8765 端口，仅复用本应用拉起且仍在运行的服务；若端口被其他进程占用，须先停掉旧进程后重试。
+顶部「地形」使用 React 作品列表和 Three.js 原生预览，不启动 Python、server.py 或 iframe，也不要求 HUAN_PATH_ROOT。旧 completed 作品直接读取保存的 web 网格与图层，支持水、林、草、雪、道路、房屋、海拔刻度、地名遮挡和居民区显示切换。缺失的可选图层显示不可用，加载失败显示原因。原生 DEM 核心作品从 STL 显示简单网格，并提供 STL / 3MF 下载；不补造缺失图层。照片浏览和房屋判断编辑尚未迁移。
 
-开发态代码目录依次使用 `HUAN_PATH_ROOT` 环境变量、同级 `../huan-path`；安装版必须设置 `HUAN_PATH_ROOT`，代码目录不是设置项。启动时校验 `server.py` 与 `.venv/bin/python`，Python 依赖按 huan-path 的 `requirements.txt` 安装。设置 → 地形中的「地形数据目录」对应 `terrain.dataDir`，留空时开发态使用仓库内 `terrain-data/`（仓库仅提交原始轨迹 `terrain-data/tracks/`；本机生成作品在 `terrain-data/jobs/`，已 gitignore），安装版应用目录只读，默认改用 `~/.huan-app/terrain-data/`。早期保存为 Obsidian `huan-space/project/huan-project/huan-path` 的配置视为未设置，自动回到默认目录；仍可手动改为其他绝对路径。目录必须为绝对路径；不存在时要求父目录存在，保存及启动会创建内部 `jobs/` 和 `tracks/`。服务分别通过 `HUAN_PATH_JOBS_DIR`、`HUAN_PATH_TRACKS_DIR` 使用这两个目录。更换数据目录会等待自有服务退出并重载地形页面。旧 `terrain.huanPathRoot` 设置会被忽略。未自动安装 Python 或依赖，也未把 huan-path 打入安装包。
+设置 → 地形中的「地形数据目录」对应 `terrain.dataDir`。留空时开发态使用仓库内 `terrain-data/`，安装版使用 `~/.huan-app/terrain-data/`；保存设置时校验绝对路径并创建 jobs/tracks。切换目录会重新挂载工作台，丢弃旧选择与迟到的响应。列表与资源读取本身不创建或修改作品。
 
-Terrain iframe 的 sandbox 需要 `allow-scripts allow-same-origin allow-downloads`；缺少 `allow-same-origin` 会因 huan-path 的 Host/Origin 校验返回 403。
+原生上传生成 DEM、底座、抬升路线与 WorldCover 林区浮雕、草地/冰雪材质，导出面分类多材质 3MF，并保存新作品的原生 Viewer 网格及可切换地表图层。参数目前固定为参考 features.json 默认值；OSM 水系/林区/冰川、房屋和刻度尚未迁移。upload/retry 仍等待构建终态；raster、CPU/WASM 与导出已隔离到任务 worker，主进程保留同 job 互斥。后台有界队列、快速返回、取消、目录切换中止与退出恢复尚未实现。旧作品重试会归档原状态并转入原生重建队列。缺失的轨迹海拔不参与底座和刻度计算；完全无海拔时关闭轨迹来源的刻度。只读资源通过受信任主 frame IPC、完成状态校验、realpath 边界及文件类型白名单读取，不执行保存作品中的 HTML/JS。
 
-验证：运行 `pnpm check`，随后 `pnpm dev`，点击「地形」，应看到淡色上传页；选择 KML/KMZ 后生成作品，可查看各阶段、进入三维展示并操作图层/照片/下载。切到阅读、翻译后返回，当前作品与控件状态应保留。`Cmd+Q` 后，应用自行启动的 `server.py` 与构建子进程应退出。当前无测试运行器，不新增测试依赖；手动验收包括旧设置迁移、取消选择、无效目录/server.py 为目录时拒绝保存、清空回退自动目录、切换两个目录后 jobs/ 对应、外部进程占用端口时不复用也不终止。启动失败时界面提供错误详情、打开设置与重试；修复环境后可直接重试。嵌入主题只在 `?huanApp=1` 时启用，独立 huan-path 页面保持原有外观。
+验证使用 /tmp Electron harness 的临时作品库；运行 `pnpm typecheck`、改动文件 eslint 与 `pnpm build`。实现与阶段限制见 [原生地形架构](docs/native-terrain-architecture.md)。
