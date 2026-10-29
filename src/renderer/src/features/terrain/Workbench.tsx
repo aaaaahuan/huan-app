@@ -38,6 +38,7 @@ export function Workbench({ active }: { active: boolean }) {
   return <>
     <WorkList {...state} onSelect={id => { generation.current++; setRetrying(false); setError(''); setCreating(false); state.select(id); }} onRefresh={state.refresh} />
     <div className="terrain-preview">
+      <p className="settings-note">照片浏览和房屋判断编辑尚未迁移；现有房屋数据仍可预览。</p>
       <div className="terrain-toolbar"><Button onClick={() => { generation.current++; setCreating(true); setRetrying(false); setError(''); }}>＋ 新建作品</Button></div>
       {creating ? <UploadView onCreated={id => { state.select(id); state.refresh(); setCreating(false); }} /> : <>
 
@@ -49,7 +50,7 @@ export function Workbench({ active }: { active: boolean }) {
         <ol>{state.job.stages.map(stage => <li key={stage.key}>{stage.name} · {{ pending: '待执行', running: '进行中', done: '已完成', failed: '失败' }[stage.status]}<p>{stage.detail}</p></li>)}</ol>
         {['queued', 'running'].includes(state.job.status) ? <Button disabled={retrying} onClick={() => void cancel()}>{retrying ? '正在取消…' : '取消任务'}</Button> : null}
         <Button disabled={retrying || ['queued', 'running'].includes(state.job.status)} onClick={() => void retry()}>{retrying ? '正在重试…' : '重试任务'}</Button>
-      </div> : state.job?.status === 'completed' ? <Viewer key={state.job.id} id={state.job.id} /> : <p role="status">请选择作品</p>}
+      </div> : state.job?.status === 'completed' ? <Viewer key={state.job.id} id={state.job.id} active={active} /> : <p role="status">请选择作品</p>}
       </>}
     </div>
   </>;

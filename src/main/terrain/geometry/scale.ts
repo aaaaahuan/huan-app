@@ -19,8 +19,9 @@ export async function elevationScale(cfg: FeatureConfig['elevation_scale'], grid
   for (const h of routeElevations) { routeLow = Math.min(routeLow, h); routeHigh = Math.max(routeHigh, h); }
   const endpoints = cfg.source === 'terrain_min_max' ? [low, high] : [routeElevations[0], routeElevations[routeElevations.length - 1]];
   const statistics = Object.fromEntries(Object.entries(profiles).map(([side, p]) => [side, { area_mm2: p.reduce((sum, v, i) => sum + (i ? (v + p[i - 1]) / 2 : 0), 0) * size[side === 'south' || side === 'north' ? 0 : 1] / (p.length - 1), max_z_mm: Math.max(...p) }]));
-  const report: Record<string, unknown> = { source: cfg.source, source_endpoints_m: endpoints, dem_mapping_range_m: [low, high], route_recorded_min_max_m: [routeLow, routeHigh], enabled: cfg.enabled, side: cfg.side, side_statistics: statistics, ticks: [], mode: 'emboss', color: cfg.color, material_id: 8, preview_vertices: './layers/elevation_scale_vertices.bin', preview_faces: './layers/elevation_scale_faces.bin' };
+  const report: Record<string, unknown> = { source: cfg.source, source_endpoints_m: endpoints, dem_mapping_range_m: [low, high], route_recorded_min_max_m: routeElevations.length ? [routeLow, routeHigh] : null, enabled: cfg.enabled, side: cfg.side, side_statistics: statistics, ticks: [], mode: 'emboss', color: cfg.color, material_id: 8, preview_vertices: './layers/elevation_scale_vertices.bin', preview_faces: './layers/elevation_scale_faces.bin' };
   if (!cfg.enabled) return { report };
+  if (cfg.source === 'route_start_end' && !routeElevations.length) return { report: { ...report, enabled: false, note: '轨迹缺少记录海拔，未生成海拔刻度' } };
   const h = cfg.text_height_mm, w = h * .54, t = cfg.stroke_mm, space = t * .8, gap = 1.5, depth = cfg.depth_mm, embed = .15;
   function layout(intervals: number, side: Side): Tick[] | undefined {
     const p = profiles[side].map(v => v - .6), length = size[side === 'south' || side === 'north' ? 0 : 1], ticks: Tick[] = [], occupied: { x: number; z: number; width: number }[] = [];

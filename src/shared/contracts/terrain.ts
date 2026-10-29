@@ -1,9 +1,7 @@
 import { z } from 'zod';
 
-// ensure 仅保留旧调用方兼容响应，不再启动服务；预览通过固定只读资产 API。
-export type TerrainStatus = { ok: true; url: string } | { ok: false; message: string };
 export type TerrainAssetResult = { ok: true; content: Uint8Array } | { ok: false; message: string };
-export interface TerrainAPI { readAsset(input: {id: string; area: 'web' | 'models'; path: string}): Promise<TerrainAssetResult>; autoRoot(): Promise<string>; ensure(): Promise<TerrainStatus>; listJobs(): Promise<TerrainListResult>; getJob(input: TerrainJobRequest): Promise<TerrainGetResult>; upload(input: TerrainUpload): Promise<TerrainWriteResult>; cancel(input: TerrainJobRequest): Promise<TerrainWriteResult>; retry(input: TerrainJobRequest): Promise<TerrainWriteResult> }
+export interface TerrainAPI { readAsset(input: {id: string; area: 'web' | 'models'; path: string}): Promise<TerrainAssetResult>; autoRoot(): Promise<string>; listJobs(): Promise<TerrainListResult>; getJob(input: TerrainJobRequest): Promise<TerrainGetResult>; upload(input: TerrainUpload): Promise<TerrainWriteResult>; cancel(input: TerrainJobRequest): Promise<TerrainWriteResult>; retry(input: TerrainJobRequest): Promise<TerrainWriteResult> }
 
 export const terrainJobIdSchema = z.string().regex(/^\d{8}-\d{6}-[a-f0-9]{10}$/);
 export const terrainStageKeySchema = z.enum(['parse', 'dem', 'terrain', 'features', 'photos', 'scale', 'export', 'preview']);

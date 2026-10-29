@@ -242,6 +242,6 @@ Pi Agent Core / Pi AI / Pi Coding Agent 固定为 0.87.1，运行于主进程；
 
 设置 → 地形中的「地形数据目录」对应 `terrain.dataDir`。留空时开发态使用仓库内 `terrain-data/`，安装版使用 `~/.huan-app/terrain-data/`；保存设置时校验绝对路径并创建 jobs/tracks。切换目录会重新挂载工作台，丢弃旧选择与迟到的响应。列表与资源读取本身不创建或修改作品。
 
-原生上传生成 DEM、底座、抬升路线与 WorldCover 林区浮雕、草地/冰雪材质，导出面分类多材质 3MF，并保存新作品的原生 Viewer 网格及可切换地表图层。参数目前固定为参考 features.json 默认值；OSM 水系/林区/冰川、房屋和刻度尚未迁移。upload/retry 仍等待构建终态；raster、CPU/WASM 与导出已隔离到任务 worker，主进程保留同 job 互斥。后台有界队列、快速返回、取消、目录切换中止与退出恢复尚未实现。旧作品不允许原生重试。只读资源通过受信任主 frame IPC、完成状态校验、realpath 边界及文件类型白名单读取，不执行保存作品中的 HTML/JS。
+原生上传生成 DEM、底座、抬升路线与 WorldCover 林区浮雕、草地/冰雪材质，导出面分类多材质 3MF，并保存新作品的原生 Viewer 网格及可切换地表图层。参数目前固定为参考 features.json 默认值；OSM 水系/林区/冰川、房屋和刻度尚未迁移。upload/retry 仍等待构建终态；raster、CPU/WASM 与导出已隔离到任务 worker，主进程保留同 job 互斥。后台有界队列、快速返回、取消、目录切换中止与退出恢复尚未实现。旧作品重试会归档原状态并转入原生重建队列。缺失的轨迹海拔不参与底座和刻度计算；完全无海拔时关闭轨迹来源的刻度。只读资源通过受信任主 frame IPC、完成状态校验、realpath 边界及文件类型白名单读取，不执行保存作品中的 HTML/JS。
 
 验证使用 /tmp Electron harness 的临时作品库；运行 `pnpm typecheck`、改动文件 eslint 与 `pnpm build`。实现与阶段限制见 [原生地形架构](docs/native-terrain-architecture.md)。

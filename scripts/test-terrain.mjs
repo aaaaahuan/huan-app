@@ -1,13 +1,12 @@
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { build } from 'file:///Users/huan/Desktop/workspace/huan/huan-app/node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib/main.js';
+import { build } from 'esbuild';
+import { tmpdir } from 'node:os';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const out = join(root, 'out/terrain-tests');
-await rm(out, { recursive: true, force: true });
-await mkdir(out, { recursive: true });
+const out = await mkdtemp(join(tmpdir(), 'huan-terrain-tests-'));
 
 function remapPlugin(rules) {
   return {
@@ -64,4 +63,4 @@ await bundle('src/main/terrain/__tests__/export-overlay.test.ts', join(out, 'exp
 
 const args = ['--test', join(out, 'assets.test.js'), join(out, 'roads-overflow.test.js'), join(out, 'cancel.test.js'), join(out, 'export-overlay.test.js')];
 const child = spawn(process.execPath, args, { stdio: 'inherit', cwd: root, env: { ...process.env, NODE_NO_WARNINGS: '1' } });
-child.on('exit', code => process.exit(code ?? 1));
+child.on('exit', async code => { await rm(out, { recursive: true, force: true }); process.exit(code ?? 1); });

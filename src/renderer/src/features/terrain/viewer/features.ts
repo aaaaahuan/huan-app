@@ -37,9 +37,10 @@ export async function loadFeatures(meta: Metadata, read: ReadAsset, geo: THREE.B
     try { return await load(); } catch (e) { state[key] = false; failed[key] = e instanceof Error ? e.message : '加载失败'; }
   }
   const [base, classes, distance, faceRoute] = await Promise.all([f32(spec.base, count), u8(spec.classes, count), f32(spec.distance, count), u8(spec.face_route, spec.top_faces)]);
+  const housesPath = spec.houses;
   const [forest, rivers, houses, routeGap, faceGap, settlements] = await Promise.all([
     optional('forest', () => f32(spec.forest ?? '', count)), optional('rivers', () => f32(spec.rivers ?? '', count)),
-    optional('houses', () => f32(spec.houses ?? '', count)), spec.route_gap ? u8(spec.route_gap, count) : undefined,
+    housesPath ? optional('houses', () => f32(housesPath, count)) : undefined, spec.route_gap ? u8(spec.route_gap, count) : undefined,
     spec.face_gap ? u8(spec.face_gap, spec.top_faces) : undefined, optional('settlements', () => u8(spec.settlements ?? '', count))
   ]);
   const positions = geo.getAttribute('position'), indices = geo.index.array;

@@ -105,13 +105,11 @@ export async function retryJob(root: string, id: string): Promise<TerrainJobStat
   preparing.add(job);
   try {
     const old = await readJobStatus(root, id);
-    // Python 的 ACTIVE 不与原生共享；遗留任务不在这里重试，避免两个调度器写同一作品。
-    if (old.origin !== 'native') throw new Error('旧作品请在原预览中重试，原生流水线尚未迁移');
     await resolveJobFile(root, id, [old.input_file]);
     if ((await lstat(join(root, 'jobs', id))).isSymbolicLink()) throw new Error('不能写入链接作品目录');
     const attempts = await directory(join(job, 'attempts'));
     await writeJson(join(attempts, `${Date.now()}-${randomBytes(5).toString('hex')}.json`), old);
-    const state = reset(old);
+    const state = reset({ ...old, origin: 'native' });
     await writeJson(join(job, 'status.json'), state);
     enqueue(root, job, state);
     return state;

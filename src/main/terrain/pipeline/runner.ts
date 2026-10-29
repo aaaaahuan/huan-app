@@ -37,7 +37,8 @@ export async function runNative(root: string, job: string, state: TerrainJobStat
     await progress.detail(Object.entries(availability).map(([key, available]) => `${key}：${available ? '已获取' : '不可用（见警告）'}`).join('；'));
     await progress.stage('terrain', '真实 DEM 目标网格与 Manifold 封闭实体');
     const { coordinates } = parseTrack(await readFile(join(job, 'data/route.kml')), state.filename);
-    const grid = await targetGrid(job, route.bounds_projected, route.utm_zone, route.hemisphere === 'S', rasters.dem, rasters.worldcover, coordinates.map(p => p[2]), preserved);
+    const routeElevations = coordinates.flatMap(p => p[2] === undefined ? [] : [p[2]]);
+    const grid = await targetGrid(job, route.bounds_projected, route.utm_zone, route.hemisphere === 'S', rasters.dem, rasters.worldcover, routeElevations, preserved);
     await progress.stage('features', 'OSM 拓扑、局部湖水位及互斥地表掩膜');
     const raw: OsmDocument = JSON.parse(await readFile(join(job, 'data/osm_features_raw.json'), 'utf8'));
     const masks = await osmMasks(raw, grid, route.bounds_projected, route.utm_zone, route.hemisphere === 'S', config);
@@ -51,7 +52,7 @@ export async function runNative(root: string, job: string, state: TerrainJobStat
     const southArea = grid.elevations.subarray(0, grid.width).reduce((a, b) => a + b, 0) / grid.width * grid.size[0];
     let eastArea = 0; for (let y = 0; y < grid.height; y++) eastArea += grid.elevations[y * grid.width + grid.width - 1];
     if (!preserved) config.elevation_scale.side = southArea >= eastArea / grid.height * grid.size[1] ? 'south' : 'east';
-    const scaleLayer = await elevationScale(config.elevation_scale, grid, layers.base, coordinates.map(p => p[2]));
+    const scaleLayer = await elevationScale(config.elevation_scale, grid, layers.base, routeElevations);
     const mesh = await mergePrint(previewMesh, [...houseLayer.meshes, ...(scaleLayer.mesh ? [scaleLayer.mesh] : [])]);
     await progress.stage('export', '导出地形 STL / 多材质 3MF 并校验');
     const validation = await exportTerrain(job, mesh, featurePalette(config));

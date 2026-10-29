@@ -42,7 +42,7 @@ function nearest(root: Node, x: number, y: number) {
 }
 export function surfaceLayers(grid: HeightGrid, coordinates: Coordinate[], bounds: Bounds, zone: number, south: boolean, cfg: FeatureConfig = defaultFeatures, osm?: OsmMasks, routeGap = new Uint8Array(grid.width * grid.height)): SurfaceLayers {
   const projection = proj4('EPSG:4326', `+proj=utm +zone=${zone} ${south ? '+south' : ''} +datum=WGS84 +units=m +no_defs`);
-  const route: Point[] = coordinates.map(p => { const xy = projection.forward(p); return [(xy[0] - bounds[0]) * grid.scale, (xy[1] - bounds[1]) * grid.scale]; });
+  const route: Point[] = coordinates.map(p => { const xy = projection.forward([p[0], p[1]]); return [(xy[0] - bounds[0]) * grid.scale, (xy[1] - bounds[1]) * grid.scale]; });
   const dense: Point[] = [];
   for (let i = 1; i < route.length; i++) {
     const a = route[i - 1], b = route[i], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / .06));

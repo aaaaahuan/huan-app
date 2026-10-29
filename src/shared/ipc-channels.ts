@@ -2,7 +2,7 @@
 // 请求使用 invoke/handle，browser.state 使用 send/on 推送状态；处理函数仍归属各业务模块。
 export const IPC_CHANNELS = {
   terrain: {
-    readAsset: 'huan-app:terrain:read-asset', ensure: 'huan-app:terrain:ensure', autoRoot: 'huan-app:terrain:auto-root',
+    readAsset: 'huan-app:terrain:read-asset', autoRoot: 'huan-app:terrain:auto-root',
     listJobs: 'huan-app:terrain:list-jobs', getJob: 'huan-app:terrain:get-job',
     upload: 'huan-app:terrain:upload', retry: 'huan-app:terrain:retry', cancel: 'huan-app:terrain:cancel'
   },

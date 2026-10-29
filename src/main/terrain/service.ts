@@ -71,7 +71,6 @@ export function registerTerrain(assertTrusted: (event: IpcMainInvokeEvent) => vo
     }
   });
   ipcMain.handle(IPC_CHANNELS.terrain.autoRoot, event => { assertTrusted(event); return readyRoot(); });
-  ipcMain.handle(IPC_CHANNELS.terrain.ensure, event => { assertTrusted(event); return { ok: false, message: '已使用原生预览，无需启动服务。' }; });
   return {
     async configure(_configured: string) { void _configured; await readyRoot(); },
     async close() { closing = true; await lifecycle; await stopJobs(); }

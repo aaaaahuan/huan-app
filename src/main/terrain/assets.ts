@@ -34,7 +34,7 @@ export async function readJobStatus(dataRoot: string, id: string) {
   return status;
 }
 
-const suffixes = new Set(['.html', '.js', '.css', '.bin', '.json', '.glb', '.jpg', '.png', '.stl', '.3mf']);
+const suffixes = new Set(['.bin', '.json', '.glb', '.jpg', '.png', '.stl', '.3mf']);
 
 // 仅解析文件，不向 renderer 暴露任意本机路径或执行旧作品中的脚本。
 export async function resolveJobAsset(dataRoot: string, id: string, area: 'web' | 'models', path: string): Promise<string> {

@@ -14,7 +14,10 @@ function disposeScene(scene: THREE.Scene) {
   for (const m of materials) m.dispose();
   scene.clear();
 }
-export function Viewer({ id }: { id: string }) {
+export function Viewer({ id, active }: { id: string; active: boolean }) {
+  const animate = useRef<() => void>(() => {}), pause = useRef<() => void>(() => {});
+  const visible = useRef(active);
+  useEffect(() => { visible.current = active; if (active) animate.current(); else pause.current(); }, [active]);
   const host = useRef<HTMLDivElement>(null), toggle = useRef<(key: string) => void>(() => {}), reset = useRef<() => void>(() => {});
   const [controls, setControls] = useState<FeatureControl[]>([]), [status, setStatus] = useState('正在载入地形…'), [error, setError] = useState('');
   const [legend, setLegend] = useState<{ id: number; name: string; hex: string }[]>([]);
@@ -57,9 +60,12 @@ export function Viewer({ id }: { id: string }) {
       reset.current = resetView; toggle.current = key => features?.toggle(key);
       const resize = () => { if (!renderer) return; const w = Math.max(1, element.clientWidth), h = Math.max(1, element.clientHeight); camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h); };
       observer = new ResizeObserver(resize); observer.observe(element); resize(); resetView();
-      const render = () => { if (!alive || !renderer) return; orbit?.update(); features?.update(camera); renderer.render(scene, camera); frame = requestAnimationFrame(render); }; render();
+      const render = () => { if (!alive || !renderer || !visible.current) return; orbit?.update(); features?.update(camera); renderer.render(scene, camera); frame = requestAnimationFrame(render); };
+      pause.current = () => cancelAnimationFrame(frame);
+      animate.current = () => { cancelAnimationFrame(frame); render(); };
+      animate.current();
     })().catch(e => { if (alive) { setError(e instanceof Error ? e.message : '预览加载失败'); setStatus(''); } else { features?.dispose(); source?.dispose(); disposeScene(scene); } });
-    return () => { alive = false; cancelAnimationFrame(frame); observer?.disconnect(); orbit?.dispose(); features?.dispose(); source?.dispose(); disposeScene(scene); renderer?.dispose(); renderer?.domElement.remove(); toggle.current = () => {}; reset.current = () => {}; };
+    return () => { alive = false; animate.current = () => {}; pause.current = () => {}; cancelAnimationFrame(frame); observer?.disconnect(); orbit?.dispose(); features?.dispose(); source?.dispose(); disposeScene(scene); renderer?.dispose(); renderer?.domElement.remove(); toggle.current = () => {}; reset.current = () => {}; };
   }, [id]);
   async function download(format: 'stl' | '3mf') {
     try {

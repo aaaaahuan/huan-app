@@ -24,7 +24,6 @@ export async function packagePreview(job: string, grid: HeightGrid, mesh: Printa
   await floats('vertices.bin', mesh.vertices); await floats('faces.bin', mesh.triangles);
   await writeBytes(join(job, 'web/face_materials.bin'), Uint8Array.from(mesh.materials));
   if (hasHouses) {
-    await writeBytes(join(job, 'web/layers/houses.bin'), new Uint8Array(layers.base.length * 4));
     await writeBytes(join(job, 'web/layers/route_gap.bin'), layers.routeGap);
     if (faceGap) await writeBytes(join(job, 'web/layers/face_gap.bin'), faceGap);
   }
@@ -56,5 +55,5 @@ export async function packagePreview(job: string, grid: HeightGrid, mesh: Printa
   available.places = Boolean(settlements?.places.count);
   await writeJson(join(job, 'web/metadata.json'), { ...metadata, size: grid.size, palette: metadata.palette ?? palette, native_core_only: false,
     ...(settlements ? { settlements } : {}), ...(roads ? { roads } : {}),
-    preview_layers: { grid: [grid.width, grid.height], top_faces: top, available, base: './layers/base_z.bin', classes: './layers/classes.bin', distance: './layers/route_distance.bin', face_route: './layers/face_route.bin', ...(hasHouses ? { houses: './layers/houses.bin', route_gap: './layers/route_gap.bin', face_gap: './layers/face_gap.bin' } : {}), ...(available.settlements ? { settlements: settlements?.areas.url } : {}), ...(available.rivers ? { rivers: './layers/rivers.bin' } : {}), ...(available.forest ? { forest: './layers/forest.bin' } : {}), ...(available.places ? { places: settlements?.places.url } : {}) } });
+    preview_layers: { grid: [grid.width, grid.height], top_faces: top, available, base: './layers/base_z.bin', classes: './layers/classes.bin', distance: './layers/route_distance.bin', face_route: './layers/face_route.bin', ...(hasHouses ? { route_gap: './layers/route_gap.bin', face_gap: './layers/face_gap.bin' } : {}), ...(available.settlements ? { settlements: settlements?.areas.url } : {}), ...(available.rivers ? { rivers: './layers/rivers.bin' } : {}), ...(available.forest ? { forest: './layers/forest.bin' } : {}), ...(available.places ? { places: settlements?.places.url } : {}) } });
 }

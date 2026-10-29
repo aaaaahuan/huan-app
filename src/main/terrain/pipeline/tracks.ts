@@ -1,17 +1,16 @@
-import { readFile, writeFile, stat, rename, rm } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
+import { readFile, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { unzipSync } from 'fflate';
 import { SaxesParser } from 'saxes';
 import proj4 from 'proj4';
-import { writeJson } from './state';
+import { writeJson, writeBytes } from './state';
 
 export const PIPELINE_PENDING = '等待解析 KML/KMZ 并构建原生地形';
 const MAX_XML = 50_000_000;
 type Node = { tag: string; uri: string; text: string; attrs: Record<string, string>; children: Node[] };
 const K = 'http://www.opengis.net/kml/2.2';
 const G = 'http://www.google.com/kml/ext/2.2';
-export type Coordinate = [number, number, number];
+export type Coordinate = [number, number, number?];
 export type Bounds = [number, number, number, number];
 function children(node: Node, tag: string, uri = K) { return node.children.filter(n => n.tag === tag && n.uri === uri); }
 function descendants(node: Node, tag: string, uri = K): Node[] { return node.children.flatMap(n => [...(n.tag === tag && n.uri === uri ? [n] : []), ...descendants(n, tag, uri)]); }
@@ -89,7 +88,7 @@ export function parseTrack(raw: Uint8Array, filename: string) {
     const numbers = fields.map(v => v === '' ? NaN : Number(v));
     if (numbers.length < 2 || numbers.length > 3 || numbers.some(v => !Number.isFinite(v)) || Math.abs(numbers[0]) > 180 || numbers[1] < (photo ? -90 : -80) || numbers[1] > (photo ? 90 : 84)) throw new Error('坐标无效：仅支持经度 ±180、UTM 纬度 -80 至 84');
     if (!photo && numbers.length < 3) missingAltitude = true;
-    return [numbers[0], numbers[1], numbers[2] ?? 0];
+    return numbers.length === 3 ? [numbers[0], numbers[1], numbers[2]] : [numbers[0], numbers[1]];
   }
   const tracks = descendants(root, 'Track', G);
   let segments = tracks.map(n => children(n, 'coord', G).map(v => coord(v.text, /\s+/))).filter(s => s.length);
@@ -104,7 +103,7 @@ export function parseTrack(raw: Uint8Array, filename: string) {
   const zone = Math.max(1, Math.min(60, Math.floor((lon + 180) / 6) + 1));
   const projection = proj4('EPSG:4326', `+proj=utm +zone=${zone} ${lat < 0 ? '+south' : ''} +datum=WGS84 +units=m +no_defs`);
   const bounds: Bounds = [Infinity, Infinity, -Infinity, -Infinity];
-  for (const p of coordinates) { const [x, y] = projection.forward(p); bounds[0] = Math.min(bounds[0], x); bounds[1] = Math.min(bounds[1], y); bounds[2] = Math.max(bounds[2], x); bounds[3] = Math.max(bounds[3], y); }
+  for (const p of coordinates) { const [x, y] = projection.forward([p[0], p[1]]); bounds[0] = Math.min(bounds[0], x); bounds[1] = Math.min(bounds[1], y); bounds[2] = Math.max(bounds[2], x); bounds[3] = Math.max(bounds[3], y); }
   bounds[0] -= 1100; bounds[1] -= 1100; bounds[2] += 1100; bounds[3] += 1100;
   if (Math.max(bounds[2] - bounds[0], bounds[3] - bounds[1]) > 200000) throw new Error('模型跨度超过 200 km；请裁剪轨迹后重试');
   const geographic: Bounds = [Infinity, Infinity, -Infinity, -Infinity];
@@ -118,15 +117,10 @@ export function parseTrack(raw: Uint8Array, filename: string) {
     const value = children(pm, 'Point')[0], data = extended(pm);
     if (!value || !text(pm, 'styleUrl').includes('MarkerStylePicture') || !/^\d+$/.test(data.FileId ?? '')) return [];
     const p = coord(text(value, 'coordinates'), /,/, true);
-    return [{ file_id: data.FileId, longitude: p[0], latitude: p[1], recorded_altitude_m: text(value, 'coordinates').split(',').length > 2 ? p[2] : null, timestamp_ms: data.Time ?? null, name: text(pm, 'name'), note: data.description ?? '' }];
+    return [{ file_id: data.FileId, longitude: p[0], latitude: p[1], recorded_altitude_m: p[2] ?? null, timestamp_ms: data.Time ?? null, name: text(pm, 'name'), note: data.description ?? '' }];
   }).map((p, i) => ({ index: i + 1, ...p }));
   const info = { name: text(doc, 'name') || basename(filename).replace(/\.(kml|kmz)$/i, ''), date, point_count: coordinates.length, epsg: (lat < 0 ? 32700 : 32600) + zone, utm_zone: zone, hemisphere: lat < 0 ? 'S' : 'N', bounds_wgs84: geographic, bounds_projected: bounds, photo_points: photos, segments: segments.map(s => s.length), missing_altitude: missingAltitude, warnings: segments.length > 1 ? ['多个 Track 段按导出顺序连接，段间停录空隙可能形成连接线'] : [] };
   return { info, coordinates };
-}
-async function writeBytes(path: string, bytes: Uint8Array | string) {
-  const temp = `${path}.${randomUUID()}.tmp`;
-  try { await writeFile(temp, bytes, { flag: 'wx' }); await rename(temp, path); }
-  finally { await rm(temp, { force: true }); }
 }
 export async function parseJobTrack(job: string, inputFile: string, filename: string) {
   const path = join(job, inputFile);
