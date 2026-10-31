@@ -7,12 +7,15 @@ import { Select } from '@renderer/components/Select';
 import { Icon } from '@renderer/components/Icon';
 import { LoadingIndicator } from '@renderer/components/LoadingIndicator';
 import { ExecutionMetrics } from '@renderer/components/ExecutionMetrics';
+import { EnglishStudy } from './EnglishStudy';
+import { Vocabulary } from './Vocabulary';
 import './translation.css';
 
 const directions = [{ value: 'en-zh', label: '英语' }, { value: 'zh-en', label: '中文' }] as const;
 const modelLabels = { unloaded: '未加载', loading: '加载中', ready: '就绪', failed: '服务失败' };
 
 export function Translation({ active, selection, modelChanging }: { active: boolean; selection?: ModelSelection; modelChanging: boolean }) {
+  const [modal, setModal] = useState<'study' | 'vocabulary'>();
   const [direction, setDirection] = useState<TranslationDirection>('en-zh');
   const [draft, setDraft] = useState('');
   const [result, setResult] = useState<TranslationResult>();
@@ -62,7 +65,7 @@ export function Translation({ active, selection, modelChanging }: { active: bool
   }
   const onLeave = useEffectEvent(() => stop(true));
   useEffect(() => {
-    if (!active) onLeave();
+    if (!active) { onLeave(); setModal(undefined); }
     else textarea.current?.focus();
   }, [active]);
 
@@ -115,6 +118,7 @@ export function Translation({ active, selection, modelChanging }: { active: bool
     <div className="translation-content">
       <header className="translation-heading">
         <h1 id="translation-title">翻译</h1>
+        <div className="translation-study-actions"><Button disabled={busy || modelChanging} onClick={() => setModal('study')}>英语学习</Button><Button onClick={() => setModal('vocabulary')}>生词本</Button></div>
         <span className={`translation-model translation-model--${offline ? model.phase : 'ready'}`} role="status">
           <span className="translation-model-dot" />{offline ? '离线' : '在线'} · {displayedSelection ? selectedModelName(displayedSelection) : '读取配置中'}{offline ? ` · ${modelLabels[model.phase]}` : ''}
         </span>
@@ -156,5 +160,8 @@ export function Translation({ active, selection, modelChanging }: { active: bool
         {notice ? <p className="translation-notice" role="status">{notice}</p> : null}
       </form>
     </div>
+    {modal === 'study' ? <EnglishStudy onClose={() => setModal(undefined)} enabled={!!selection && !modelChanging}
+      modelKey={JSON.stringify(selection ?? null)} /> : null}
+    {modal === 'vocabulary' ? <Vocabulary onClose={() => setModal(undefined)} /> : null}
   </section>;
 }

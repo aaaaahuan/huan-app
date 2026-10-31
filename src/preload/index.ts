@@ -35,6 +35,11 @@ const api: HuanAppAPI = {
 
   // 翻译服务
   translation: Object.freeze({
+    lookup: request => ipcRenderer.invoke(IPC_CHANNELS.translation.lookup, request),
+    speak: request => ipcRenderer.invoke(IPC_CHANNELS.translation.speak, request),
+    stopSpeech: requestId => ipcRenderer.invoke(IPC_CHANNELS.translation.stopSpeech, requestId),
+    study: request => ipcRenderer.invoke(IPC_CHANNELS.translation.study, request),
+    vocabulary: () => ipcRenderer.invoke(IPC_CHANNELS.translation.vocabulary),
     getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.translation.getStatus),
     translate: request => ipcRenderer.invoke(IPC_CHANNELS.translation.translate, request),
     stop: requestId => ipcRenderer.invoke(IPC_CHANNELS.translation.stop, requestId),

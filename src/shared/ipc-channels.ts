@@ -13,7 +13,7 @@ export const IPC_CHANNELS = {
     saveNote: 'huan-app:algorithms:save-note', copyNote: 'huan-app:algorithms:copy-note',
     openNote: 'huan-app:algorithms:open-note', openNoteLink: 'huan-app:algorithms:open-note-link',
     notesChanged: 'huan-app:algorithms:notes-changed' },
-  translation: { getStatus: 'huan-app:translation:get-status', translate: 'huan-app:translation:translate',
+  translation: { lookup: 'huan-app:translation:lookup', speak: 'huan-app:translation:speak', stopSpeech: 'huan-app:translation:stop-speech', study: 'huan-app:translation:study', vocabulary: 'huan-app:translation:vocabulary', getStatus: 'huan-app:translation:get-status', translate: 'huan-app:translation:translate',
     stop: 'huan-app:translation:stop', copy: 'huan-app:translation:copy', status: 'huan-app:translation:status' },
   subtitles: { get: 'huan-app:subtitles:get', ensure: 'huan-app:subtitles:ensure',
     seek: 'huan-app:subtitles:seek', state: 'huan-app:subtitles:state' },

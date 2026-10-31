@@ -155,11 +155,12 @@ if (!app.requestSingleInstanceLock()) {
     // 创建不同模块专用的agent
     const readingAgent = aiService.createAgent(createReadingAgentConfig());
     const translateAgent = aiService.createAgent(createTranslateAgentConfig());
+    const lookupAgent = aiService.createAgent(createTranslateAgentConfig('translation-lookup'));
     const keyTestAgent = aiService.createAgent(createKeyTestAgentConfig(runId => keyTestKeys.get(runId)));
 
     registerModelControls(window, settings, assertTrusted, keyTestAgent, keyTestKeys);
     const reading = registerReading(window, pageHost, settings, assertTrusted, subtitles.snapshot, readingAgent);
-    const translation = registerTranslation(contents, assertTrusted, localModel, translateAgent);
+    const translation = registerTranslation(contents, assertTrusted, localModel, translateAgent, lookupAgent);
     registerSettings(window, settings, assertTrusted, async value => {
       await terrain.configure(value.terrain.dataDir);
       await subtitles.configure(value);
