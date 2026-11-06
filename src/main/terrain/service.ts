@@ -1,3 +1,5 @@
+import { getSummary, getPrintParams, savePrintParams, deleteJob } from './details';
+import { terrainSavePrintParamsSchema } from '@shared/contracts/terrain';
 import { readFile, stat } from 'node:fs/promises';
 import { extname } from 'node:path';
 import { resolveJobAsset } from './assets';
@@ -28,6 +30,26 @@ export function registerTerrain(assertTrusted: (event: IpcMainInvokeEvent) => vo
     return next;
   };
   const readyRoot = () => withRoot(async root => root);
+  ipcMain.handle(IPC_CHANNELS.terrain.delete, async (event, input: unknown) => {
+    assertTrusted(event);
+    try { await withRoot(root => deleteJob(root, terrainJobRequestSchema.parse(input).id)); return { ok: true }; }
+    catch (error) { return { ok: false, message: error instanceof Error ? error.message : '删除失败' }; }
+  });
+  ipcMain.handle(IPC_CHANNELS.terrain.getSummary, async (event, input: unknown) => {
+    assertTrusted(event);
+    try { return { ok: true, summary: await withRoot(root => getSummary(root, terrainJobRequestSchema.parse(input).id)) }; }
+    catch (error) { return { ok: false, message: error instanceof Error ? error.message : '读取摘要失败' }; }
+  });
+  ipcMain.handle(IPC_CHANNELS.terrain.getPrintParams, async (event, input: unknown) => {
+    assertTrusted(event);
+    try { return { ok: true, ...await withRoot(root => getPrintParams(root, terrainJobRequestSchema.parse(input).id)) }; }
+    catch (error) { return { ok: false, message: error instanceof Error ? error.message : '读取参数失败' }; }
+  });
+  ipcMain.handle(IPC_CHANNELS.terrain.savePrintParams, async (event, input: unknown) => {
+    assertTrusted(event);
+    try { const { id, params } = terrainSavePrintParamsSchema.parse(input); await withRoot(root => savePrintParams(root, id, params)); return { ok: true }; }
+    catch (error) { return { ok: false, message: error instanceof Error ? error.message : '保存参数失败' }; }
+  });
   ipcMain.handle(IPC_CHANNELS.terrain.cancel, async (event, input: unknown): Promise<TerrainWriteResult> => {
     assertTrusted(event);
     try { return { ok: true, job: await withRoot(root => cancelJob(root, terrainJobRequestSchema.parse(input).id)) }; }
@@ -51,6 +73,11 @@ export function registerTerrain(assertTrusted: (event: IpcMainInvokeEvent) => vo
     assertTrusted(event);
     try { return { ok: true, job: await withRoot(root => createJob(root, terrainUploadSchema.parse(input))) }; }
     catch (error) { return { ok: false, message: `上传失败：${error instanceof Error ? error.message : String(error)}` }; }
+  });
+  ipcMain.handle(IPC_CHANNELS.terrain.regenerate, async (event, input: unknown): Promise<TerrainWriteResult> => {
+    assertTrusted(event);
+    try { return { ok: true, job: await withRoot(root => retryJob(root, terrainJobRequestSchema.parse(input).id, true)) }; }
+    catch (error) { return { ok: false, message: `重新生成失败：${error instanceof Error ? error.message : String(error)}` }; }
   });
   ipcMain.handle(IPC_CHANNELS.terrain.retry, async (event, input: unknown): Promise<TerrainWriteResult> => {
     assertTrusted(event);

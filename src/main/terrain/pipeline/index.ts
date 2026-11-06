@@ -1,5 +1,6 @@
+import { getPrintParams } from '../details';
 import { randomBytes } from 'node:crypto';
-import { lstat, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { readFile, lstat, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { terrainUploadSchema, type TerrainJobStatus, type TerrainUpload } from '@shared/contracts/terrain';
 import { readJobStatus, resolveJobFile, resolveJobPath } from '../assets';
@@ -97,7 +98,7 @@ export async function createJob(root: string, input: TerrainUpload): Promise<Ter
     return state;
   } catch (error) { await rm(job, { recursive: true, force: true }); throw error; }
 }
-export async function retryJob(root: string, id: string): Promise<TerrainJobStatus> {
+export async function retryJob(root: string, id: string, regenerate = false): Promise<TerrainJobStatus> {
   await directory(join(root, 'jobs'));
   const job = await resolveJobPath(root, id);
   if (active.has(job) || preparing.has(job)) throw new Error('任务尚在运行');
@@ -105,8 +106,19 @@ export async function retryJob(root: string, id: string): Promise<TerrainJobStat
   preparing.add(job);
   try {
     const old = await readJobStatus(root, id);
+    if (old.status === 'running' || old.status === 'queued') throw new Error('任务尚在运行或排队');
     await resolveJobFile(root, id, [old.input_file]);
     if ((await lstat(join(root, 'jobs', id))).isSymbolicLink()) throw new Error('不能写入链接作品目录');
+    if (regenerate) {
+      const { params, model, saved } = await getPrintParams(root, id);
+      if (!saved) throw new Error('请先保存打印参数');
+      if (!model) throw new Error('缺少缓存网格或模型数据，无法按参数重新生成');
+      for (const name of ['grid.json', 'elevation.f32', 'worldcover.u8', 'osm_features_raw.json', 'route.kml', 'source.kml']) await resolveJobFile(root, id, ['data', name]);
+      const specPath = await resolveJobFile(root, id, ['spec.json']);
+      const spec: unknown = JSON.parse(await readFile(specPath, 'utf8'));
+      if (!spec || typeof spec !== 'object' || Array.isArray(spec)) throw new Error('作品 spec 无效');
+      await writeJson(specPath, { ...spec, print_params: params });
+    }
     const attempts = await directory(join(job, 'attempts'));
     await writeJson(join(attempts, `${Date.now()}-${randomBytes(5).toString('hex')}.json`), old);
     const state = reset({ ...old, origin: 'native' });

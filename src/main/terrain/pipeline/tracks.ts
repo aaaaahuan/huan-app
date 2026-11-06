@@ -119,7 +119,13 @@ export function parseTrack(raw: Uint8Array, filename: string) {
     const p = coord(text(value, 'coordinates'), /,/, true);
     return [{ file_id: data.FileId, longitude: p[0], latitude: p[1], recorded_altitude_m: p[2] ?? null, timestamp_ms: data.Time ?? null, name: text(pm, 'name'), note: data.description ?? '' }];
   }).map((p, i) => ({ index: i + 1, ...p }));
-  const info = { name: text(doc, 'name') || basename(filename).replace(/\.(kml|kmz)$/i, ''), date, point_count: coordinates.length, epsg: (lat < 0 ? 32700 : 32600) + zone, utm_zone: zone, hemisphere: lat < 0 ? 'S' : 'N', bounds_wgs84: geographic, bounds_projected: bounds, photo_points: photos, segments: segments.map(s => s.length), missing_altitude: missingAltitude, warnings: segments.length > 1 ? ['多个 Track 段按导出顺序连接，段间停录空隙可能形成连接线'] : [] };
+  // 仅累加各段内的水平 UTM 距离，停录断点之间不计入徒步里程。
+  let trackDistance = 0;
+  for (const segment of segments) for (let i = 1; i < segment.length; i++) {
+    const a = projection.forward([segment[i - 1][0], segment[i - 1][1]]), b = projection.forward([segment[i][0], segment[i][1]]);
+    trackDistance += Math.hypot(b[0] - a[0], b[1] - a[1]);
+  }
+  const info = { track_distance_km: trackDistance / 1000, name: text(doc, 'name') || basename(filename).replace(/\.(kml|kmz)$/i, ''), date, point_count: coordinates.length, epsg: (lat < 0 ? 32700 : 32600) + zone, utm_zone: zone, hemisphere: lat < 0 ? 'S' : 'N', bounds_wgs84: geographic, bounds_projected: bounds, photo_points: photos, segments: segments.map(s => s.length), missing_altitude: missingAltitude, warnings: segments.length > 1 ? ['多个 Track 段按导出顺序连接，段间停录空隙可能形成连接线'] : [] };
   return { info, coordinates };
 }
 export async function parseJobTrack(job: string, inputFile: string, filename: string) {

@@ -4,11 +4,11 @@ import { z } from 'zod';
 import { terrainJobSummarySchema, terrainMetadataSchema, terrainPhotoHousesSchema, type TerrainJobList } from '@shared/contracts/terrain';
 import { readJobStatus, resolveJobFile } from './assets';
 
-async function optionalJson<T>(root: string, id: string, parts: string[], schema: z.ZodType<T>): Promise<T | undefined> {
+export async function optionalJson<T>(root: string, id: string, parts: string[], schema: z.ZodType<T>): Promise<T | undefined> {
   try { return schema.parse(JSON.parse(await readFile(await resolveJobFile(root, id, parts), 'utf8'))); }
   catch (error) {
-    // 可选旧数据缺失、损坏或不符合结构时使用 summary 默认值；访问权限等错误须反馈。
-    if (error instanceof SyntaxError || error instanceof z.ZodError || (error instanceof Error && 'code' in error && error.code === 'ENOENT')) return undefined;
+    // 仅缺失的可选文件使用默认值；损坏、结构不符及访问错误须反馈，避免掩盖作品数据问题。
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return undefined;
     throw error;
   }
 }

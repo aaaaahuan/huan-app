@@ -14,7 +14,7 @@ function disposeScene(scene: THREE.Scene) {
   for (const m of materials) m.dispose();
   scene.clear();
 }
-export function Viewer({ id, active }: { id: string; active: boolean }) {
+export function Viewer({ id, active, onRetry, retrying }: { id: string; active: boolean; onRetry(): void; retrying: boolean }) {
   const animate = useRef<() => void>(() => {}), pause = useRef<() => void>(() => {});
   const visible = useRef(active);
   useEffect(() => { visible.current = active; if (active) animate.current(); else pause.current(); }, [active]);
@@ -33,6 +33,10 @@ export function Viewer({ id, active }: { id: string; active: boolean }) {
       const meta = metadataSchema.parse(JSON.parse(new TextDecoder().decode(await read('metadata.json'))));
       if (!alive) return;
       setLegend(meta.palette);
+      setControls(Object.keys(featureNames).filter(key => meta.feature_status ? ['present', 'failed'].includes(meta.feature_status[key]?.state) : meta.preview_layers?.available[key] === true).map(key => ({
+        key, enabled: meta.feature_status ? meta.feature_status[key]?.state === 'present' : true,
+        available: meta.feature_status?.[key]?.state !== 'failed', reason: meta.feature_status?.[key]?.state === 'failed' ? meta.feature_status[key].error ?? '生成失败' : undefined
+      })));
       renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.domElement.setAttribute('aria-label', '三维地形，拖动旋转，滚轮缩放'); renderer.domElement.tabIndex = 0; element.append(renderer.domElement);
       const camera = new THREE.PerspectiveCamera(36, 1, .1, 3000); camera.up.set(0, 0, 1);
@@ -76,8 +80,10 @@ export function Viewer({ id, active }: { id: string; active: boolean }) {
   }
   return <div className="terrain-native-viewer" data-job={id}>
     <div className="terrain-viewer-actions"><Button onClick={() => reset.current()}>重置视角</Button><Button onClick={() => void download('stl')}>下载 STL</Button><Button onClick={() => void download('3mf')}>下载 3MF</Button></div>
-    <div className="terrain-feature-controls" aria-label="预览图层">{controls.map(c => <Button key={c.key} disabled={!c.available} aria-pressed={c.enabled} title={c.reason} onClick={() => toggle.current(c.key)}>{featureNames[c.key]}{!c.available ? `（${c.reason ? '加载失败' : '未构建'}）` : ''}</Button>)}</div>
-    {controls.filter(c => c.reason).map(c => <p key={c.key} role="alert">{featureNames[c.key]}：{c.reason}</p>)}
+    <div className="terrain-feature-controls" aria-label="预览图层">{controls.map(c => <span className="terrain-feature-tag" key={c.key} tabIndex={c.reason ? 0 : undefined}>
+      <Button disabled={!c.available} aria-pressed={c.enabled} title={c.reason} onClick={() => toggle.current(c.key)}>{featureNames[c.key]}{c.reason ? '（失败）' : ''}</Button>
+      {c.reason ? <span className="terrain-feature-popover">{c.reason}<p>重试会重跑整单，复用 DEM 缓存，需要几分钟。</p><Button disabled={retrying} onClick={onRetry}>重试</Button></span> : null}
+    </span>)}</div>
     <div className="terrain-legend" aria-label="地表类别图例">{legend.filter(p => {
       const key: Record<number, string> = { 1: 'rivers', 2: 'forest', 3: 'snow', 5: 'grass', 6: 'houses', 7: 'houses', 8: 'elevation_scale' };
       return !key[p.id] || !controls.length || controls.some(c => c.key === key[p.id] && c.enabled);

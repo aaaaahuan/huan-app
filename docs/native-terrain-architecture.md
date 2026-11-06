@@ -234,3 +234,22 @@ DEM 在目标顶点逆投影后做严格 bilinear；WorldCover nearest。PixelIs
 完整默认配置下，西湖与雨崩真实缓存和原生/Python 产物见 `/tmp/codex-native-terrain/phase9/`。西湖主湖面原生约3.92613mm；Python 对照不禁用任何默认要素。两轨迹均无照片点，不能据此声称房屋路径验收。两端 STL/3MF 独立回读封闭。当前采样仍为直接 inverse UTM bilinear/nearest，Python 先 rasterio.merge 再 GDAL reproject；类别和高程存在边界/采样差异，详见 comparison.json，不以体积接近宣称完整 parity。点在 OSM 边界的 rasterize 与 GEOS intersects 也可能存在少量差异。
 
 本切片未完成照片/独立房屋、道路/聚落面新资产、后台立即返回/取消/恢复调度和安装包验收；这些不由 completed 状态代替验收。
+
+## 要素状态、作品菜单与 A1 打印估算
+
+原生 `packagePreview` 在 `web/metadata.json` 写 `feature_status`，根据 `data/*_source.json`、实际分类掩膜和输出数量分别记录 present/empty/failed/skipped。林区、草地、冰雪独立；照片附件解析尚未迁移，显式 skipped。runner 开始新一轮时清掉旧状态，失败收尾记录当前阶段错误。旧作品仅把 `preview_layers.available === true` 当作 present。失败 Tag 提供整单重试，继续复用下载缓存。
+
+`terrain.getSummary/delete/getPrintParams/savePrintParams` 通过集中 IPC、preload 和 shared 契约开放，主进程执行可信来源检查、Zod 输入校验和固定 ID 路径解析。摘要聚合元数据、spec、validation 和 status；警告跨文件按原文最大出现次数去重，再合并照片无附件等同类原因。删除是不可恢复的目录硬删，UI 二次确认；主进程拒绝 queued/running 和链接作品目录，只删除 jobs/id，不处理 cache 或 tracks。
+
+打印参数使用 A1 的 240mm 可用长边、0.4mm 喷嘴、0.2mm 层高、15% 填充和 PLA 1.24g/cm³。`shared/terrain-print.ts` 统一计算比例、XYZ、runner 同源的高度夸张与轨迹补厚底座、254mm 高度压缩及向上层高取整，取整后再次限制为不超过 254mm；手动底座范围为 4–20mm、步进 0.2mm。体积用 V0×(L/L0)²×(H/H0)，模型耗材用 V×1.24×(0.22+0.78×0.15)；四色换色约层数×1.2、每次冲刷0.6g、擦料塔0.15g/mm，时长按体积/5mm³/s加每次换色15秒并显示±20%范围。单色换色、冲刷和擦料塔为零。网格新增 route_minimum_m，旧网格可由 base/scale/exaggeration 反推最低轨迹海拔；缺少网格或模型度量时明确不提供估算。
+
+参数经校验后原子写入 `jobs/id/print_params.json`。下载按钮下载当前已有单对象、面材质 3MF。AMS 四槽建议仅为 Bambu Studio 映射提示，须在切片器确认；估算不是切片结果。
+
+
+### 按打印参数重新生成
+
+打印参数弹窗的“按参数重新生成”通过 `terrain.regenerate`（`huan-app:terrain:regenerate`）读取已保存的 `print_params.json`，不使用未保存的编辑值。`getPrintParams` 返回 `saved` 标识；尚未保存时按钮禁用并提示「请先保存打印参数」，主进程也以相同提示拒绝重新生成。主进程校验作品 ID、参数与缓存文件后，将参数快照写入 `spec.print_params`，复用 retry 的同作品准备锁、任务队列、worker、取消与失败恢复。内存 active/preparing 和磁盘 running/queued 均拒绝重复生成。
+
+重新生成跳过解析落盘与 DEM/WorldCover/自然要素获取阶段，复用 `source.kml`、`route.kml`、`elevation.f32`、`worldcover.u8`、`osm_features_raw.json`；保持缓存网格采样密度，按新长边改变毫米坐标。重跑 terrain、features、photos、scale、export、preview，因要素宽度、房屋间距和刻度使用毫米单位，不能直接缩放旧 STL。底座和自动高度夸张使用与弹窗相同的 `estimateTerrainPrint` 安全公式。重试继续使用 spec 中的参数快照。道路和地名预览沿用现有缓存获取流程。配色仍仅影响耗材估算，不拆分 3MF 部件。
+
+弹窗显示排队/生成中状态并禁用重复触发，轮询任务状态，完成后刷新模型估算，失败显示主进程错误并允许重试。缺少缓存的旧作品明确报错，不回退到联网下载。

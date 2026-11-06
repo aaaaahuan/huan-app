@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export type TerrainAssetResult = { ok: true; content: Uint8Array } | { ok: false; message: string };
-export interface TerrainAPI { readAsset(input: {id: string; area: 'web' | 'models'; path: string}): Promise<TerrainAssetResult>; autoRoot(): Promise<string>; listJobs(): Promise<TerrainListResult>; getJob(input: TerrainJobRequest): Promise<TerrainGetResult>; upload(input: TerrainUpload): Promise<TerrainWriteResult>; cancel(input: TerrainJobRequest): Promise<TerrainWriteResult>; retry(input: TerrainJobRequest): Promise<TerrainWriteResult> }
+export interface TerrainAPI { regenerate(input: TerrainJobRequest): Promise<TerrainWriteResult>; delete(input: TerrainJobRequest): Promise<TerrainActionResult>; getSummary(input: TerrainJobRequest): Promise<TerrainDetailResult>; getPrintParams(input: TerrainJobRequest): Promise<TerrainPrintResult>; savePrintParams(input: TerrainJobRequest & { params: TerrainPrintParams }): Promise<TerrainActionResult>; readAsset(input: {id: string; area: 'web' | 'models'; path: string}): Promise<TerrainAssetResult>; autoRoot(): Promise<string>; listJobs(): Promise<TerrainListResult>; getJob(input: TerrainJobRequest): Promise<TerrainGetResult>; upload(input: TerrainUpload): Promise<TerrainWriteResult>; cancel(input: TerrainJobRequest): Promise<TerrainWriteResult>; retry(input: TerrainJobRequest): Promise<TerrainWriteResult> }
 
 export const terrainJobIdSchema = z.string().regex(/^\d{8}-\d{6}-[a-f0-9]{10}$/);
 export const terrainStageKeySchema = z.enum(['parse', 'dem', 'terrain', 'features', 'photos', 'scale', 'export', 'preview']);
@@ -80,3 +80,25 @@ export type TerrainGetResult = { ok: true; job: TerrainJobSummary } | { ok: fals
 export type TerrainWriteResult = { ok: true; job: TerrainJobStatus } | { ok: false; message: string };
 
 export const terrainAssetRequestSchema = terrainJobRequestSchema.extend({ area: z.enum(['web', 'models']), path: z.string().min(1).max(240) });
+
+export const terrainFeatureStatusSchema = z.record(z.string(), z.object({
+  state: z.enum(['present', 'empty', 'failed', 'skipped']), error: z.string().optional(), source: z.string().optional(), count: z.number().nonnegative().optional()
+}));
+export type TerrainFeatureStatus = z.infer<typeof terrainFeatureStatusSchema>;
+export const terrainPrintParamsSchema = z.object({
+  longEdge: z.number().min(80).max(240), colors: z.enum(['four', 'single']),
+  base: z.number().min(4).max(20).refine(n => Math.abs(n * 5 - Math.round(n * 5)) < 1e-6).nullable()
+}).strict();
+export const terrainSavePrintParamsSchema = terrainJobRequestSchema.extend({ params: terrainPrintParamsSchema });
+export type TerrainPrintParams = z.infer<typeof terrainPrintParamsSchema>;
+export interface TerrainPrintModel {
+  extent: [number, number]; elevationRange: [number, number]; routeMinimum: number | null;
+  dimensions: [number, number, number]; volume: number;
+}
+export interface TerrainDetail {
+  job: TerrainJobSummary; features: TerrainFeatureStatus; warnings: { message: string; count: number }[];
+  metrics: Record<string, unknown>; files: { stl: boolean; '3mf': boolean };
+}
+export type TerrainActionResult = { ok: true } | { ok: false; message: string };
+export type TerrainDetailResult = { ok: true; summary: TerrainDetail } | { ok: false; message: string };
+export type TerrainPrintResult = { ok: true; saved: boolean; params: TerrainPrintParams; model: TerrainPrintModel | null } | { ok: false; message: string };

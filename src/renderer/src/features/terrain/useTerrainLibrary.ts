@@ -49,6 +49,6 @@ export function useTerrainLibrary(active: boolean) {
   }, [active, selectedId, revision]);
 
   const current = selection?.id === selectedId ? selection : undefined;
-  return { library, loading, error, selectedId, select: (id: string) => { if (id !== selectedId) setSelection(undefined); setSelectedId(id); }, job: current?.job,
+  return { library, loading, error, selectedId, select: (id: string | null) => { if (id !== selectedId) setSelection(undefined); setSelectedId(id); }, job: current?.job,
     selectionError: current?.error, refresh: () => setRevision(value => value + 1) };
 }

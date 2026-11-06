@@ -3,7 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { Metadata, ReadAsset } from './assets';
 import { loadPlaces } from './places';
 
-export const featureNames: Record<string, string> = { rivers: '河流/湖泊', forest: '林区', grass: '草地', snow: '冰雪', roads: '道路', houses: '房屋', elevation_scale: '海拔刻度', places: '地名', settlements: '居民区' };
+export const featureNames: Record<string, string> = { dem: 'DEM', track: '徒步线', photos: '照片', rivers: '河流/湖泊', forest: '林区', grass: '草地', snow: '冰雪', roads: '道路', houses: '房屋', elevation_scale: '海拔刻度', places: '地名', settlements: '居民区' };
 export interface FeatureControl { key: string; enabled: boolean; available: boolean; reason?: string }
 interface Layers { base: Float32Array; classes: Uint8Array; distance: Float32Array; forest?: Float32Array; rivers?: Float32Array; houses?: Float32Array; routeGap?: Uint8Array }
 export function composePreview(layers: Layers, state: Record<string, boolean>) {
@@ -99,7 +99,9 @@ export async function loadFeatures(meta: Metadata, read: ReadAsset, geo: THREE.B
     for (const pin of pins.children) pin.position.z = surfaceAt(pin.position.x, pin.position.y) - (meta.houses?.sink_mm ?? .4);
     pins.visible = !!state.houses; scale.visible = !!state.elevation_scale; roads.visible = !!state.roads;
     lastUnits = 0; overlays.places?.setVisible(!!state.places); overlays.places?.invalidate();
-    if (alive()) onControls(Object.keys(featureNames).map(key => ({ key, enabled: !!state[key], available: !!spec!.available[key] && !failed[key], reason: failed[key] })));
+    if (alive()) onControls(Object.keys(featureNames).filter(key => meta.feature_status ? ['present', 'failed'].includes(meta.feature_status[key]?.state) : spec!.available[key] === true).map(key => ({ key,
+      enabled: meta.feature_status?.[key]?.state === 'present' && !(key in spec!.available) ? true : !!state[key],
+      available: meta.feature_status?.[key]?.state !== 'failed' && !failed[key], reason: failed[key] ?? (meta.feature_status?.[key]?.state === 'failed' ? meta.feature_status[key].error ?? '生成失败' : undefined) })));
   }
   refresh();
   overlays.places = await optional('places', () => loadPlaces(meta, read, host, surfaceAt, () => mesh.geometry.boundingBox?.max.z ?? 100));

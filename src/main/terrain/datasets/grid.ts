@@ -1,3 +1,7 @@
+import { readFile } from 'node:fs/promises';
+import { z } from 'zod';
+import { terrainPrintParamsSchema } from '@shared/contracts/terrain';
+import { estimateTerrainPrint } from '@shared/terrain-print';
 import proj4 from 'proj4';
 import { join } from 'node:path';
 import type { Bounds } from '../pipeline/tracks';
@@ -30,6 +34,30 @@ export async function targetGrid(job: string, bounds: Bounds, zone: number, sout
   elevations.forEach((v, i) => bytes.writeFloatLE(v, i * 4));
   await writeBytes(join(job, 'data/elevation.f32'), bytes);
   await writeBytes(join(job, 'data/worldcover.u8'), classes);
-  await writeJson(join(job, 'data/grid.json'), { ...grid, elevations: 'elevation.f32', classes: 'worldcover.u8', bounds_projected: bounds, zone, south, row_order: 'south-to-north', byte_order: 'little-endian', missing_worldcover_cells: missingClasses, sampling: 'vertex-centered inverse UTM; strict bilinear DEM, nearest WorldCover; not GDAL area-weighted reprojection', elevation_range_m: [low, high] });
+  await writeJson(join(job, 'data/grid.json'), { ...grid, elevations: 'elevation.f32', classes: 'worldcover.u8', bounds_projected: bounds, zone, south, row_order: 'south-to-north', byte_order: 'little-endian', missing_worldcover_cells: missingClasses, sampling: 'vertex-centered inverse UTM; strict bilinear DEM, nearest WorldCover; not GDAL area-weighted reprojection', route_minimum_m: Number.isFinite(routeMinimum) ? routeMinimum : null, elevation_range_m: [low, high] });
+  return grid;
+}
+
+// 重建只改变模型坐标，继续使用已采样的 DEM/WorldCover，不再次请求数据源。
+export async function regenerateGrid(job: string, input: unknown): Promise<HeightGrid> {
+  const params = terrainPrintParamsSchema.parse(input);
+  const meta = z.object({ width: z.number().int().min(2), height: z.number().int().min(2),
+    bounds_projected: z.tuple([z.number(), z.number(), z.number(), z.number()]),
+    elevation_range_m: z.tuple([z.number(), z.number()]), route_minimum_m: z.number().nullable().optional(),
+    base: z.number().positive().optional(), scale: z.number().positive().optional(), exaggeration: z.number().positive().optional()
+  }).passthrough().parse(JSON.parse(await readFile(join(job, 'data/grid.json'), 'utf8')));
+  const bytes = await readFile(join(job, 'data/elevation.f32'));
+  const classes = await readFile(join(job, 'data/worldcover.u8'));
+  const count = meta.width * meta.height;
+  if (count > 500_000 || bytes.length !== count * 4 || classes.length !== count) throw new Error('缓存网格尺寸无效');
+  const elevations = Float32Array.from({ length: count }, (_, i) => bytes.readFloatLE(i * 4));
+  const b = meta.bounds_projected;
+  const extent: [number, number] = [b[2] - b[0], b[3] - b[1]];
+  if (!extent.every(v => Number.isFinite(v) && v > 0)) throw new Error('缓存网格范围无效');
+  const estimate = estimateTerrainPrint({ extent, elevationRange: meta.elevation_range_m, routeMinimum: meta.route_minimum_m ?? (meta.base && meta.scale && meta.exaggeration ? meta.elevation_range_m[0] - Math.max(0, meta.base - 4) / (meta.scale * meta.exaggeration) : null), dimensions: [1, 1, 1], volume: 1 }, params);
+  if (params.base !== null && params.base < estimate.minimumBase) throw new Error('底座低于最小安全厚度，请使用自动底座');
+  const grid: HeightGrid = { width: meta.width, height: meta.height, elevations, classes,
+    size: [estimate.x, estimate.y], scale: estimate.scale, base: estimate.base, exaggeration: estimate.exaggeration };
+  await writeJson(join(job, 'data/grid.json'), { ...meta, ...grid, elevations: 'elevation.f32', classes: 'worldcover.u8' });
   return grid;
 }

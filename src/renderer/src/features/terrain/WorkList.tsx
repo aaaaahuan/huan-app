@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react';
+import { WorkDialog } from './WorkDialog';
+import { useEffect, useRef, useState } from 'react';
 import type { TerrainJobList, TerrainJobSummary } from '@shared/contracts/terrain';
 import { Button, IconButton } from '@renderer/components/Button';
 import { IconInput } from '@renderer/components/Input';
@@ -11,15 +12,19 @@ export function workFacts(job: TerrainJobSummary): string {
     : `${statusNames[job.status]} · ${job.stages.filter(stage => stage.status === 'done').length}/${job.stages.length}`;
 }
 
-export function WorkList({ library, loading, error, selectedId, onSelect, onRefresh }: {
+export function WorkList({ library, loading, error, selectedId, onSelect, onRefresh, onDeleted }: {
   library?: TerrainJobList; loading: boolean; error: string; selectedId: string | null;
-  onSelect(id: string): void; onRefresh(): void;
+  onSelect(id: string): void; onRefresh(): void; onDeleted(id: string): void;
 }) {
+  const [dialog, setDialog] = useState<{ job: TerrainJobSummary; mode: 'summary' | 'delete' | 'print' }>();
+  const [menu, setMenu] = useState<string>();
   const [collapsed, setCollapsed] = useState(false);
   const [draft, setDraft] = useState('');
   const [query, setQuery] = useState('');
   const composing = useRef(false);
   const input = useRef<HTMLInputElement>(null);
+  const menuTrigger = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => { if (!dialog) menuTrigger.current?.focus(); }, [dialog]);
   const rows = filteredRows(library?.jobs ?? [], query);
   function clear() { setDraft(''); setQuery(''); composing.current = false; }
   return <aside className={`terrain-sidebar${collapsed ? ' terrain-sidebar--collapsed' : ''}`} aria-label="作品列表">
@@ -46,11 +51,19 @@ export function WorkList({ library, loading, error, selectedId, onSelect, onRefr
           <Button className="terrain-work-card" aria-current={selectedId === job.id ? 'true' : undefined} onClick={() => onSelect(job.id)}>
             <strong>{job.name || job.filename}</strong><span>{job.date || job.id}</span><small>{workFacts(job)}</small>
           </Button>
+          <div className="terrain-work-menu"><Button aria-label={`${job.name} 的作品菜单`} aria-expanded={menu === job.id} onClick={event => { menuTrigger.current = event.currentTarget; setMenu(menu === job.id ? undefined : job.id); }}>⋯</Button>
+            {menu === job.id ? <div className="terrain-work-menu-items" onKeyDown={event => { if (event.key === 'Escape') setMenu(undefined); }}>
+              <Button onClick={() => { setDialog({ job, mode: 'summary' }); setMenu(undefined); }}>查看生成摘要</Button>
+              <Button disabled={['queued', 'running'].includes(job.status)} onClick={() => { setDialog({ job, mode: 'delete' }); setMenu(undefined); }}>删除</Button>
+              <Button onClick={() => { setDialog({ job, mode: 'print' }); setMenu(undefined); }}>打印参数</Button>
+            </div> : null}
+          </div>
         </li>)}</ul>
         {library?.diagnostics.length ? <details className="terrain-diagnostics"><summary>读取诊断（{library.diagnostics.length}）</summary>
           <ul>{library.diagnostics.map(item => <li key={item.id}><strong>{item.id}</strong><p>{item.message}</p></li>)}</ul>
         </details> : null}
       </div>
     </div>
+    {dialog ? <WorkDialog key={`${dialog.job.id}-${dialog.mode}`} {...dialog} onClose={() => setDialog(undefined)} onDeleted={() => { onDeleted(dialog.job.id); setDialog(undefined); }} /> : null}
   </aside>;
 }

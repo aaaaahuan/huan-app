@@ -1,4 +1,6 @@
-import { mkdir, lstat } from 'node:fs/promises';
+import { z } from 'zod';
+import type { TerrainFeatureStatus } from '@shared/contracts/terrain';
+import { readFile, mkdir, lstat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { HeightGrid, PrintableMesh } from '../geometry/terrain';
 import { palette, type SurfaceLayers } from '../geometry/features';
@@ -42,18 +44,46 @@ export async function packagePreview(job: string, grid: HeightGrid, mesh: Printa
   if (available.rivers) await floats('layers/rivers.bin', layers.water);
   if (available.forest) await floats('layers/forest.bin', layers.forest);
   // 道路/聚落/地名为 preview_only；单层失败记警告并跳过，不阻断核心预览与打印资产。
+  const overlayErrors: Record<string, string> = {};
   let settlements: Awaited<ReturnType<typeof preparePlaces>> | undefined;
   let roads: Awaited<ReturnType<typeof prepareRoads>> | undefined;
   if (places) {
     try { settlements = await preparePlaces(places.root, job, places.geographic, places.projected, places.zone, places.south, grid.scale, places.warnings, places.fetch, grid); }
-    catch (error) { places.warnings.push(`聚落/地名预览失败：${error instanceof Error ? error.message : String(error)}`); }
+    catch (error) { overlayErrors.places = `聚落/地名预览失败：${error instanceof Error ? error.message : String(error)}`; places.warnings.push(overlayErrors.places); }
     try { roads = await prepareRoads(places.root, job, places.geographic, places.projected, places.zone, places.south, grid.scale, places.warnings, places.fetch); }
-    catch (error) { places.warnings.push(`道路预览失败：${error instanceof Error ? error.message : String(error)}`); }
+    catch (error) { overlayErrors.roads = `道路预览失败：${error instanceof Error ? error.message : String(error)}`; places.warnings.push(overlayErrors.roads); }
   }
   available.roads = Boolean(roads && Object.keys(roads.groups).length);
   available.settlements = Boolean(settlements?.areas.url);
   available.places = Boolean(settlements?.places.count);
-  await writeJson(join(job, 'web/metadata.json'), { ...metadata, size: grid.size, palette: metadata.palette ?? palette, native_core_only: false,
+  const feature_status: TerrainFeatureStatus = {};
+  const config = z.record(z.string(), z.unknown()).catch({}).parse(
+    z.object({ effective: z.unknown() }).catch({ effective: {} }).parse(metadata.configuration).effective);
+  const sourceSchema = z.object({ available: z.boolean().optional(), error: z.string().optional(), dataset: z.string().optional() }).passthrough();
+  async function source(name: string) {
+    try { return sourceSchema.parse(JSON.parse(await readFile(join(job, `data/${name}_source.json`), 'utf8'))); }
+    catch (error) { if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return undefined; throw error; }
+  }
+  const dem = await source('dem'), osm = await source('osm'), cover = await source('worldcover');
+  const roadSource = await source('osm_roads'), placeSource = await source('osm_settlements');
+  function record(key: string, count: number, sources: (typeof dem)[], failure?: string) {
+    const errors = sources.flatMap(s => s?.available === false ? [s.error ?? '数据获取失败'] : []);
+    const state = z.object({ enabled: z.boolean() }).safeParse(config[key]).data?.enabled === false ? 'skipped' : failure || (!count && errors.length) ? 'failed' : count ? 'present' : 'empty';
+    feature_status[key] = { state,
+      count, source: sources.flatMap(s => s ? [s.dataset ?? '数据源未注明'] : []).join(' + ') || '生成管线',
+      ...(state === 'failed' ? { error: failure ?? errors.join('；') } : {}) };
+  }
+  record('dem', grid.width * grid.height, [dem]);
+  for (const [key, id] of [['rivers', 1], ['forest', 2], ['grass', 5], ['snow', 3]] as const)
+    record(key, layers.classes.filter(c => c === id).length, key === 'rivers' ? [osm] : key === 'grass' ? [cover] : [cover, osm]);
+  record('track', routeFaces.filter(Boolean).length, []);
+  record('houses', hasHouses ? z.object({ placed_points: z.array(z.unknown()) }).parse(metadata.houses).placed_points.length : 0, []);
+  record('photos', 0, []); feature_status.photos = { state: 'skipped', source: '照片附件解析尚未迁移' };
+  record('elevation_scale', scaleMesh ? 1 : 0, []);
+  record('roads', roads?.count ?? 0, [roadSource], overlayErrors.roads);
+  record('places', settlements?.places.count ?? 0, [placeSource], overlayErrors.places);
+  record('settlements', settlements ? Object.values(settlements.areas.cells).reduce((a, b) => a + b, 0) : 0, [placeSource], overlayErrors.places);
+  await writeJson(join(job, 'web/metadata.json'), { ...metadata, feature_status, size: grid.size, palette: metadata.palette ?? palette, native_core_only: false,
     ...(settlements ? { settlements } : {}), ...(roads ? { roads } : {}),
     preview_layers: { grid: [grid.width, grid.height], top_faces: top, available, base: './layers/base_z.bin', classes: './layers/classes.bin', distance: './layers/route_distance.bin', face_route: './layers/face_route.bin', ...(hasHouses ? { route_gap: './layers/route_gap.bin', face_gap: './layers/face_gap.bin' } : {}), ...(available.settlements ? { settlements: settlements?.areas.url } : {}), ...(available.rivers ? { rivers: './layers/rivers.bin' } : {}), ...(available.forest ? { forest: './layers/forest.bin' } : {}), ...(available.places ? { places: settlements?.places.url } : {}) } });
 }

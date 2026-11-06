@@ -23,3 +23,19 @@
 .terrain-upload p, .terrain-progress p { color: #72766d; }
 .terrain-progress { padding: 20px 32px; overflow: auto; }
 .terrain-progress li { padding: 6px; }
+
+.terrain-work-items > li { position: relative; }
+.terrain-work-card.ui-button { padding-right: 38px; }
+.terrain-work-menu { position: absolute; right: 4px; top: 8px; z-index: 2; }
+.terrain-work-menu-items { position: absolute; right: 0; width: 150px; display: grid; padding: 6px; border: 1px solid #d5ddd4; border-radius: 8px; background: #f8faf6; box-shadow: 0 4px 16px #0002; }
+.terrain-modal { width: min(820px, 90vw); max-height: 85vh; overflow: auto; border: 1px solid #cad4c8; border-radius: 12px; padding: 24px; color: #344135; background: #f8faf6; }
+.terrain-modal::backdrop { background: #18231b66; }
+.terrain-modal header { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.terrain-modal table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 12px 0; }
+.terrain-modal th, .terrain-modal td { text-align: left; border-bottom: 1px solid #dbe2d8; padding: 8px; overflow-wrap: anywhere; }
+.terrain-modal label { display: flex; gap: 12px; align-items: center; margin: 16px 0; }
+.terrain-modal input[type=range] { flex: 1; }
+.terrain-print-presets { display: flex; gap: 8px; margin: 12px 0; }
+.terrain-feature-tag { position: relative; }
+.terrain-feature-popover { display: none; position: absolute; top: 100%; left: 0; width: 240px; z-index: 5; padding: 12px; background: #f8faf6; border: 1px solid #cad4c8; border-radius: 8px; color: #586354; }
+.terrain-feature-tag:hover .terrain-feature-popover, .terrain-feature-tag:focus-within .terrain-feature-popover { display: block; }
