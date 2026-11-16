@@ -1,10 +1,11 @@
+import { recordTranslation } from './history';
 import { studyRequestSchema, lessonSchema, gradeSchema, vocabularySchema, type StudyResult, type StudyRequest } from '@shared/contracts/english-study';
 import { createSpeechPlayback } from './speech';
 import { readVocabulary, saveVocabulary, vocabularyKey } from './vocabulary';
 import { clipboard, ipcMain, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import { z } from 'zod';
 import { IPC_CHANNELS } from '@shared/ipc-channels';
-import { translationRequestSchema, lookupRequestSchema, speechRequestSchema, type TranslationResult } from '@shared/contracts/translation';
+import { translationRequestSchema, lookupRequestSchema, speechRequestSchema, translatedContentSchema, type TranslationResult } from '@shared/contracts/translation';
 import type { AgentHandle } from '@main/ai/agent/agent';
 import type { TranslateToolContext } from '@main/ai/agent/translate-agent';
 import { errorText, type createLocalModelRuntime } from '@main/ai/core/local-model';
@@ -13,7 +14,7 @@ import { errorText, type createLocalModelRuntime } from '@main/ai/core/local-mod
 export function registerTranslation(contents: WebContents, assertTrusted: (event: IpcMainInvokeEvent) => void,
   local: ReturnType<typeof createLocalModelRuntime>, agent: AgentHandle<TranslateToolContext>, lookupAgent: AgentHandle<TranslateToolContext>) {
 
-  type Run = { requestId: string; controller: AbortController };
+  type Run = { requestId: string; controller: AbortController; settled?: Promise<void> };
   type Slot = { active?: Run; agent: AgentHandle<TranslateToolContext> };
   const primary: Slot = { agent };
   const lookup: Slot = { agent: lookupAgent };
@@ -22,16 +23,26 @@ export function registerTranslation(contents: WebContents, assertTrusted: (event
 
   async function translate(input: unknown, task?: StudyRequest['task'], reserved?: Run, slot = primary): Promise<TranslationResult> {
     let run: Run | undefined;
+    let query: import('@shared/contracts/translation').LookupRequest | undefined;
+    let outcome: TranslationResult | undefined;
+    let release: (() => void) | undefined;
     try {
       const request = (slot === lookup && !task ? lookupRequestSchema : translationRequestSchema).parse(input);
+      if (!task) query = request;
+      if (slot.active?.controller.signal.aborted) await slot.active.settled;
       if (closed) throw new Error('翻译服务已关闭。');
-      if (slot.active && slot.active !== reserved) throw new Error('已有翻译请求正在处理，请先停止或等待完成。');
+      if (slot.active && !slot.active.controller.signal.aborted && slot.active !== reserved) throw new Error('已有翻译请求正在处理，请先停止或等待完成。');
       run = reserved ?? { requestId: request.requestId, controller: new AbortController() };
+      if (!reserved) run.settled = new Promise<void>(resolve => { release = resolve; });
       slot.active = run;
+      const contextualLookup = slot === lookup && !task;
+      // 上下文只供选中翻译消歧，不改变普通翻译及学习任务的输入格式。
+      const prompt = contextualLookup
+        ? JSON.stringify({ text: request.text, context: query?.source?.context ?? '' }) : request.text;
       const result = await slot.agent.execute({
-        runId: request.requestId, prompt: request.text, toolContext: { direction: request.direction, task }
+        runId: request.requestId, prompt, toolContext: { direction: request.direction, task, contextualLookup }
       }, { signal: run.controller.signal });
-      if (run.controller.signal.aborted) return { status: 'stopped', text: '', metrics: result.metrics };
+      if (run.controller.signal.aborted) { outcome = { status: 'stopped', text: '', metrics: result.metrics }; return outcome; }
       let final = result.messages.at(-1);
       if (final?.role !== 'assistant') final = [...result.messages].reverse().find(message => message.role === 'assistant');
       const text = final?.role === 'assistant'
@@ -40,13 +51,34 @@ export function registerTranslation(contents: WebContents, assertTrusted: (event
         ? 'stopped' : result.status === 'completed' && final?.role === 'assistant' && final.stopReason === 'length'
           ? 'truncated' : result.status === 'completed' && final?.role === 'assistant' && final.stopReason === 'stop' && text.trim()
             ? 'complete' : 'failed';
-      return { status, text, metrics: result.metrics, error: status === 'truncated' ? 'finish_reason=length（引擎未完整生成译文）'
+      outcome = { status, text, metrics: result.metrics, warning: result.record.state !== 'complete' ? 'AI 执行记录不完整。' : undefined, error: status === 'truncated' ? 'finish_reason=length（引擎未完整生成译文）'
         : status === 'failed' ? (final?.role === 'assistant' ? final.errorMessage : undefined) ??
           result.warning ?? result.failure?.code ?? '模型未返回有效译文。' : undefined };
+      if (!task && status === 'complete') {
+        try {
+          const content = translatedContentSchema.parse(JSON.parse(text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')));
+          outcome.text = content.text;
+          outcome.phonetic = content.phonetic;
+        } catch {
+          if (contextualLookup) outcome = { status: 'failed', text: '', metrics: result.metrics, error: '模型未返回完整的译文与音标，请重试或切换模型。' };
+          else outcome.phonetic = '';
+        }
+      } else if (!task) {
+        // 截断的 JSON 不能作为译文展示或被复制。
+        outcome.text = '';
+      }
+      return outcome;
     } catch (error) {
-      if (run?.controller.signal.aborted) return { status: 'stopped', text: '' };
-      return { status: 'failed', text: '', error: errorText(error) };
-    } finally { if (!reserved && run && slot.active === run) slot.active = undefined; }
+      outcome = run?.controller.signal.aborted ? { status: 'stopped', text: '' } : { status: 'failed', text: '', error: errorText(error) };
+      return outcome;
+    } finally {
+      if (!reserved && run && slot.active === run) slot.active = undefined;
+      release?.();
+      if (query) {
+        try { await recordTranslation(query, outcome ?? { status: run?.controller.signal.aborted ? 'stopped' : 'failed', text: '' }); }
+        catch { if (outcome) outcome.warning = '查询记录保存失败，本次查询未完整归档。'; }
+      }
+    }
   }
 
   ipcMain.handle(IPC_CHANNELS.translation.vocabulary, event => { assertTrusted(event); return readVocabulary(); });
@@ -112,5 +144,5 @@ export function registerTranslation(contents: WebContents, assertTrusted: (event
     if (event.isMainFrame && !event.isSameDocument) cancelAll();
   });
   contents.on('render-process-gone', cancelAll);
-  return { hasWork: () => !!primary.active || !!lookup.active || speech.hasWork(), close() { closed = true; cancelAll(); speech.close(); } };
+  return { lookup: (input: unknown) => translate(input, undefined, undefined, lookup), stop(requestId: string) { if (lookup.active?.requestId === requestId) lookup.active.controller.abort('USER_STOP'); }, hasWork: () => !!primary.active || !!lookup.active || speech.hasWork(), close() { closed = true; cancelAll(); speech.close(); } };
 }

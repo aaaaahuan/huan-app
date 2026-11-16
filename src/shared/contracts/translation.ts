@@ -8,6 +8,7 @@ export const translationRequestSchema = z.object({
   text: z.string().refine(value => value.trim().length > 0, '请输入需要翻译的文字。')
 }).strict();
 export const lookupRequestSchema = translationRequestSchema.extend({
+  source: z.object({ module: z.string().max(500), url: z.string().max(4000).optional(), title: z.string().max(500).optional(), context: z.string().max(2000), trigger: z.enum(['double-click', 'manual']) }).strict().optional(),
   text: translationRequestSchema.shape.text.max(2000)
 });
 export type LookupRequest = z.infer<typeof lookupRequestSchema>;
@@ -18,11 +19,16 @@ export interface TranslationStatus {
   phase: 'unloaded' | 'loading' | 'ready' | 'failed';
   error?: string;
 }
+// 译文与英语音标分开传输，复制和交换语言时不会把音标混入正文。
+export const phoneticSchema = z.string().trim().max(24000);
+export const translatedContentSchema = z.object({ text: z.string().trim().min(1), phonetic: phoneticSchema });
 export interface TranslationResult {
   status: 'complete' | 'truncated' | 'stopped' | 'failed';
   text: string;
   error?: string;
   metrics?: ExecutionMetrics;
+  warning?: string;
+  phonetic?: string;
 }
 export interface TranslationAPI extends EnglishStudyAPI {
   getStatus(): Promise<TranslationStatus>;

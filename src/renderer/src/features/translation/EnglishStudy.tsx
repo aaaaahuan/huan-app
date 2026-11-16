@@ -1,3 +1,5 @@
+import type { TranslationResult } from '@shared/contracts/translation';
+import { Phonetic } from './Phonetic';
 import { useEffect, useRef, useState, type MouseEvent, type KeyboardEvent } from 'react';
 import type { StudyGrade, StudyLesson, StudyRequest, StudyResult } from '@shared/contracts/english-study';
 import { Button } from '@renderer/components/Button';
@@ -26,7 +28,7 @@ export function EnglishStudy({ onClose, enabled, modelKey }: { onClose(): void; 
   const run = useRef<{ id: string; cancelled: boolean } | undefined>(undefined);
   const mounted = useRef(true);
   const cache = useRef(new Map<string, StudyResult>());
-  const translations = useRef(new Map<string, string>());
+  const translations = useRef(new Map<string, TranslationResult>());
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -121,8 +123,8 @@ export function EnglishStudy({ onClose, enabled, modelKey }: { onClose(): void; 
       {error ? <p className="translation-error" role="alert">{error}</p> : null}
       {notice ? <p className="translation-notice" role="status">{notice}</p> : null}
       {grade ? <section className="study-feedback" aria-label="评分结果"><div className="study-score">{grade.score}<small> / 100 · 模型参考评分</small></div>
-        <p className="study-hint">语义 {grade.meaning}/60 · 语法 {grade.grammar}/25 · 表达 {grade.expression}/15</p><p>{grade.feedback}</p><div className="study-reading-heading"><h3>推荐表达</h3><SpeechButton speech={speech} owner="corrected" text={grade.corrected} label="推荐表达" /></div><p lang="en">{grade.corrected}</p></section> : null}
-      {revealed && lesson ? <section className="study-feedback" aria-label="参考答案与解析"><div className="study-reading-heading"><h3>推荐答案</h3><SpeechButton speech={speech} owner="reference" text={lesson.reference} label="推荐答案" /></div><p lang="en">{lesson.reference}</p><h3>长句解析</h3><p>{lesson.explanation}</p></section> : null}
+        <p className="study-hint">语义 {grade.meaning}/60 · 语法 {grade.grammar}/25 · 表达 {grade.expression}/15</p><p>{grade.feedback}</p><div className="study-reading-heading"><h3>推荐表达</h3><SpeechButton speech={speech} owner="corrected" text={grade.corrected} label="推荐表达" /></div><p lang="en">{grade.corrected}</p><Phonetic value={grade.phonetic} /></section> : null}
+      {revealed && lesson ? <section className="study-feedback" aria-label="参考答案与解析"><div className="study-reading-heading"><h3>推荐答案</h3><SpeechButton speech={speech} owner="reference" text={lesson.reference} label="推荐答案" /></div><p lang="en">{lesson.reference}</p><Phonetic value={lesson.phonetic} /><h3>长句解析</h3><p>{lesson.explanation}</p></section> : null}
       {metrics ? <ExecutionMetrics metrics={metrics} /> : null}
     </div>
     {selection ? <SelectionBubble key={`${modelKey}:${selection.text}`} selected={selection} enabled={enabled} modelKey={modelKey}

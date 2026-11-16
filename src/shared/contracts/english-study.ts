@@ -13,12 +13,12 @@ export const studyRequestSchema = z.object({
     ctx.addIssue({ code: 'custom', message: '请选择英语单词或短语（最多 8 个词）。', path: ['source'] });
 });
 export type StudyRequest = z.infer<typeof studyRequestSchema>;
-export const lessonSchema = z.object({ reference: text, explanation: text });
+export const lessonSchema = z.object({ reference: text, explanation: text, phonetic: z.string().trim().max(24000).optional() });
 export type StudyLesson = z.infer<typeof lessonSchema>;
 export const gradeSchema = z.object({
   score: z.number().int().min(0).max(100).optional(), meaning: z.number().int().min(0).max(60),
   grammar: z.number().int().min(0).max(25), expression: z.number().int().min(0).max(15),
-  feedback: text, corrected: text
+  feedback: text, corrected: text, phonetic: z.string().trim().max(24000).optional()
 }).transform(value => ({ ...value, score: value.meaning + value.grammar + value.expression }));
 export type StudyGrade = z.infer<typeof gradeSchema>;
 export const vocabularySchema = z.object({

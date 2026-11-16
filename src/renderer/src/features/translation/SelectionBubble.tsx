@@ -1,3 +1,5 @@
+import { Phonetic } from './Phonetic';
+import type { TranslationResult } from '@shared/contracts/translation';
 import { useEffect, useRef, useState } from 'react';
 import { vocabularyWordSchema } from '@shared/contracts/english-study';
 import { Button } from '@renderer/components/Button';
@@ -7,10 +9,11 @@ export type StudySelection = { text: string; x: number; y: number };
 
 export function SelectionBubble({ selected, enabled, modelKey, context, translations, speech, onClose }: {
   selected: StudySelection; enabled: boolean; modelKey: string; context: string;
-  translations: Map<string, string>; speech: EnglishSpeech; onClose(): void;
+  translations: Map<string, TranslationResult>; speech: EnglishSpeech; onClose(): void;
 }) {
   const [busy, setBusy] = useState<'translate' | 'vocabulary'>();
   const [translation, setTranslation] = useState('');
+  const [phonetic, setPhonetic] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const run = useRef<{ id: string; cancelled: boolean } | undefined>(undefined);
@@ -33,18 +36,21 @@ export function SelectionBubble({ selected, enabled, modelKey, context, translat
   }
   async function submit(task: 'translate' | 'vocabulary') {
     if (run.current || !enabled) return;
-    const key = `${modelKey}:${selected.text}`;
+    const lookupContext = context.slice(0, 2000);
+    const key = JSON.stringify([modelKey, selected.text, lookupContext]);
     const cached = task === 'translate' ? translations.get(key) : undefined;
-    if (cached) { setTranslation(cached); setError(''); setNotice(''); return; }
+    if (cached) { setTranslation(cached.text); setPhonetic(cached.phonetic ?? ''); setError(''); setNotice(''); return; }
     const current = { id: crypto.randomUUID(), cancelled: false };
     run.current = current; setBusy(task); setError(''); setNotice('');
     try {
       if (task === 'translate') {
-        const result = await window.huanApp.translation.lookup({ requestId: current.id, direction: 'en-zh', text: selected.text });
+        const result = await window.huanApp.translation.lookup({ requestId: current.id, direction: 'en-zh', text: selected.text,
+          source: { module: 'english-study', context: lookupContext, trigger: 'manual' } });
         if (!mounted.current || current.cancelled) return;
         if (result.status !== 'complete') { setError(result.error ?? '翻译未完成，请重试。'); return; }
         if (translations.size >= 100) translations.clear();
-        translations.set(key, result.text); setTranslation(result.text);
+        translations.set(key, result); setTranslation(result.text); setPhonetic(result.phonetic ?? '');
+        if (result.warning) setNotice(result.warning);
       } else {
         const result = await window.huanApp.translation.study({ requestId: current.id, task: 'vocabulary', source: selected.text, context });
         if (!mounted.current || current.cancelled) return;
@@ -62,6 +68,7 @@ export function SelectionBubble({ selected, enabled, modelKey, context, translat
     {busy ? <div className="study-bubble-status"><span role="status">{busy === 'translate' ? '翻译中' : '正在整理并加入生词本…'}</span><Button onClick={() => void stop()}>停止</Button></div> : null}
     {error ? <p className="translation-error" role="alert">{error}</p> : null}
     {notice ? <p className="translation-notice" role="status">{notice}</p> : null}
+    <Phonetic value={phonetic} />
     {translation ? <div className="study-bubble-result" aria-label="中文译文" role="status">{translation}</div> : null}
   </aside>;
 }

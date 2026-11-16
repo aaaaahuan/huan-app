@@ -1,3 +1,5 @@
+import { Phonetic } from './Phonetic';
+import './selection-translation.css';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { type TranslationDirection, type TranslationResult, type TranslationStatus } from '@shared/contracts/translation';
 import type { ExecutionMetrics as ExecutionMetricsData } from '@shared/contracts/ai-execution';
@@ -88,6 +90,7 @@ export function Translation({ active, selection, modelChanging }: { active: bool
       }
       setResult(answer);
       if (answer.error) setError(answer.error);
+      if (answer.warning) setNotice(answer.warning);
       if (answer.status === 'stopped') setNotice('已停止。');
     } catch (failure) {
       if (mounted.current && request.current === run && !run.cancelled) setError(String(failure));
@@ -147,6 +150,7 @@ export function Translation({ active, selection, modelChanging }: { active: bool
             <textarea id="translation-output" placeholder={busy ? '翻译完成后，译文将显示在这里…' : '译文将显示在这里'} value={result?.text ?? ''} readOnly />
           </div>
         </div>
+        <Phonetic value={result?.phonetic} />
         {lastMetrics ? <ExecutionMetrics metrics={lastMetrics.value} label={lastMetrics.previousDraft ? '上次请求用量' : undefined} /> : null}
         <div className="translation-actions">
           <span className="translation-shortcut"><kbd>⌘ Enter</kbd> 翻译 <span aria-hidden="true">·</span> Enter 换行</span>
