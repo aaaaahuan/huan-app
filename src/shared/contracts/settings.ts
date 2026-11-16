@@ -2,30 +2,40 @@
 import { z } from 'zod';
 import { defaultModelSelection, modelSelectionSchema } from './models';
 
+export const SYSTEM_PAGES = ['reading', 'translation', 'algorithms', 'terrain', 'ideas', 'studio'] as const;
+export type SystemPage = typeof SYSTEM_PAGES[number];
+export const SYSTEM_PAGE_NAMES: Record<SystemPage, string> = { reading: '阅读', translation: '翻译', algorithms: '算法训练', terrain: '地形', ideas: '灵感大脑', studio: '3d工作台' };
+const visibleTabsSchema = z.array(z.enum(SYSTEM_PAGES)).min(1, '至少显示一个顶部 Tab。')
+  .refine(tabs => new Set(tabs).size === tabs.length, '顶部 Tab 不能重复。');
+
 // 顺序同时用于设置展示与跨平台收藏拼接；不改变各来源内部的行顺序。
-export const PLATFORMS = ['x', 'reddit', 'youtube', 'wechat', 'other'] as const;
-export const PLATFORM_NAMES = { x: 'X', reddit: 'Reddit', youtube: 'YouTube', wechat: '微信文章', other: 'Other' };
+export const PLATFORMS = ['x', 'reddit', 'youtube', 'wechat', 'anthropic', 'other'] as const;
+export const PLATFORM_NAMES = { x: 'X', reddit: 'Reddit', youtube: 'YouTube', wechat: '微信文章', anthropic: 'Anthropic', other: 'Other' };
 const sourceSchema = z.object({ enabled: z.boolean(), path: z.string() }).strict();
 export const sessionModeSchema = z.enum(['memory', 'persistent']);
 export const sessionModesSchema = z.object({ x: sessionModeSchema, reddit: sessionModeSchema, youtube: sessionModeSchema,
-  wechat: sessionModeSchema.default('memory'), other: sessionModeSchema.default('memory') }).strict();
+  wechat: sessionModeSchema.default('memory'), anthropic: sessionModeSchema.default('memory'), other: sessionModeSchema.default('memory') }).strict();
 export type SessionModes = z.infer<typeof sessionModesSchema>;
 export type SessionMode = z.infer<typeof sessionModeSchema>;
-export const defaultSessionModes = (): SessionModes => ({ x: 'memory', reddit: 'memory', youtube: 'memory', wechat: 'memory', other: 'memory' });
+export const defaultSessionModes = (): SessionModes => ({ x: 'memory', reddit: 'memory', youtube: 'memory', wechat: 'memory', anthropic: 'memory', other: 'memory' });
 export const settingsSchema = z.object({
   version: z.literal(1),
+  visibleTabs: visibleTabsSchema.default(() => [...SYSTEM_PAGES]),
   sources: z.object({ x: sourceSchema, reddit: sourceSchema, youtube: sourceSchema,
-    wechat: sourceSchema.default({ enabled: false, path: '' }), other: sourceSchema.default({ enabled: false, path: '' }) }).strict(),
+    wechat: sourceSchema.default({ enabled: false, path: '' }), anthropic: sourceSchema.default({ enabled: false, path: '' }), other: sourceSchema.default({ enabled: false, path: '' }) }).strict(),
   // 兼容 A1-A4 的配置；缺少会话设置时沿用内存模式，不自动持久化登录态。
   sessions: sessionModesSchema.default(defaultSessionModes),
   // 丢弃旧代码目录设置；数据目录独立配置，缺省时使用主进程计算的默认路径。
   terrain: z.object({ dataDir: z.string().trim().max(4096).default(''), huanPathRoot: z.unknown().optional() }).strict().transform(({ dataDir }) => ({ dataDir })).default({ dataDir: '' }),
+  studio: z.object({ dataDir: z.string().trim().max(4096).default('') }).strict().default({ dataDir: '' }),
   notesPath: z.string().trim().max(4096).default(''),
   model: modelSelectionSchema.default(defaultModelSelection),
   localModel: z.object({ modelPath: z.string().trim(), serverPath: z.string().trim() })
     .strict().refine(paths => !paths.modelPath.includes('\0') && !paths.serverPath.includes('\0'), '本地模型路径包含无效字符。')
     .default({ modelPath: '', serverPath: '' }),
   ai: z.object({ credentialId: z.uuid().nullable(), consentVersion: z.number().int().min(0).max(3) })
+    .default({ credentialId: null, consentVersion: 0 }),
+  openai: z.object({ credentialId: z.uuid().nullable(), consentVersion: z.number().int().min(0).max(3) })
     .default({ credentialId: null, consentVersion: 0 }),
   subtitles: z.object({ credentialId: z.uuid().nullable(), consentVersion: z.number().int().min(0).max(1) })
     .default({ credentialId: null, consentVersion: 0 })
@@ -34,11 +44,11 @@ export type Settings = z.infer<typeof settingsSchema>;
 export type Platform = typeof PLATFORMS[number];
 // 每次返回新对象，首次启动不猜测用户路径，也不自动启用未配置的来源。
 export function defaultSettings(): Settings {
-  return { version: 1, terrain: { dataDir: '' }, sources: {
+  return { studio: { dataDir: '' }, version: 1, visibleTabs: [...SYSTEM_PAGES], terrain: { dataDir: '' }, sources: {
     x: { enabled: false, path: '' }, reddit: { enabled: false, path: '' },
-    youtube: { enabled: false, path: '' }, wechat: { enabled: false, path: '' }, other: { enabled: false, path: '' }
+    youtube: { enabled: false, path: '' }, wechat: { enabled: false, path: '' }, anthropic: { enabled: false, path: '' }, other: { enabled: false, path: '' }
   }, sessions: defaultSessionModes(), notesPath: '', model: defaultModelSelection(), localModel: { modelPath: '', serverPath: '' },
-  ai: { credentialId: null, consentVersion: 0 },
+  ai: { credentialId: null, consentVersion: 0 }, openai: { credentialId: null, consentVersion: 0 },
   subtitles: { credentialId: null, consentVersion: 0 } };
 }
 // revision 为磁盘内容摘要；null 表示尚无配置文件，不是配置读取失败。
@@ -47,7 +57,7 @@ export type SettingsResult =
   | { ok: false; message: string; fields?: Partial<Record<Platform, string>> };
 export interface SettingsAPI {
   load(): Promise<SettingsResult>;
-  save(settings: Settings, revision: string | null, keyChange?: string | null, subtitleKeyChange?: string | null): Promise<SettingsResult>;
+  save(settings: Settings, revision: string | null, keyChange?: string | null, subtitleKeyChange?: string | null, openaiKeyChange?: string | null): Promise<SettingsResult>;
   chooseDirectory(): Promise<{ ok: true; path: string | null } | { ok: false; message: string }>;
   chooseFile(): Promise<{ ok: true; path: string | null } | { ok: false; message: string }>;
   subtitleUsage(): Promise<SubtitleUsage>;

@@ -31,6 +31,7 @@ export interface BrowserAPI {
   captureContext(bookmarkId: string, pageId: string): Promise<ReaderState>;
   clearContext(bookmarkId: string, pageId: string): Promise<ReaderState>;
   layout(layout: ReaderLayout): Promise<void>;
+  overlay(value: boolean): Promise<void>;
   suspend(value: boolean): Promise<void>;
   onState(listener: (state: ReaderState) => void): () => void;
 }

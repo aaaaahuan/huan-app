@@ -1,9 +1,11 @@
 // 主进程与 preload 共用的通道名称；保持纯常量，避免给沙箱 preload 引入运行时依赖。
 // 请求使用 invoke/handle，browser.state 使用 send/on 推送状态；处理函数仍归属各业务模块。
 export const IPC_CHANNELS = {
+  studio: { list: 'huan-app:studio:list', read: 'huan-app:studio:read', photos: 'huan-app:studio:photos' },
+  ideas: { get: 'huan-app:ideas:get', append: 'huan-app:ideas:append', getDraft: 'huan-app:ideas:get-draft', saveDraft: 'huan-app:ideas:save-draft' },
   terrain: {
     delete: 'huan-app:terrain:delete', getSummary: 'huan-app:terrain:get-summary', getPrintParams: 'huan-app:terrain:get-print-params', savePrintParams: 'huan-app:terrain:save-print-params',
-    readAsset: 'huan-app:terrain:read-asset', autoRoot: 'huan-app:terrain:auto-root',
+    exportModel: 'huan-app:terrain:export-model', readAsset: 'huan-app:terrain:read-asset', autoRoot: 'huan-app:terrain:auto-root',
     listJobs: 'huan-app:terrain:list-jobs', getJob: 'huan-app:terrain:get-job',
     upload: 'huan-app:terrain:upload', regenerate: 'huan-app:terrain:regenerate', retry: 'huan-app:terrain:retry', cancel: 'huan-app:terrain:cancel'
   },
@@ -19,6 +21,7 @@ export const IPC_CHANNELS = {
   subtitles: { get: 'huan-app:subtitles:get', ensure: 'huan-app:subtitles:ensure',
     seek: 'huan-app:subtitles:seek', state: 'huan-app:subtitles:state' },
   ai: {
+    listModels: 'huan-app:ai:list-models',
     getSelection: 'huan-app:ai:get-selection', selectModel: 'huan-app:ai:select-model',
     get: 'huan-app:ai:get', draft: 'huan-app:ai:draft',
     send: 'huan-app:ai:send', stop: 'huan-app:ai:stop',
@@ -47,6 +50,7 @@ export const IPC_CHANNELS = {
     clearContext: 'huan-app:browser:clear-context',
     layout: 'huan-app:browser:layout',
     suspend: 'huan-app:browser:suspend',
+    overlay: 'huan-app:browser:overlay',
     state: 'huan-app:browser:state'
   }
 } as const;

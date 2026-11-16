@@ -1,0 +1,12 @@
+.ui-action-menu-trigger.ui-button { width: 28px; height: 28px; min-height: 0; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--muted); box-shadow: none; }
+.ui-action-menu-trigger.ui-button svg { width: 16px; height: 16px; }
+.ui-action-menu-trigger.ui-button:hover:where(:not(:disabled)), .ui-action-menu-trigger.ui-button[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
+.ui-action-menu-panel { position: fixed; inset: auto; width: 176px; max-width: calc(100vw - 16px); margin: 0; padding: 5px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); color: var(--text); box-shadow: 0 8px 28px #20382b26, 0 2px 6px #20382b0a; overflow: visible; }
+.ui-action-menu-panel::backdrop { background: transparent; }
+.ui-action-menu-item.ui-button { display: flex; width: 100%; justify-content: flex-start; gap: 9px; min-height: 34px; padding: 8px 9px; border: 0; border-radius: 7px; background: transparent; font-size: 12px; text-align: left; }
+.ui-action-menu-item.ui-button svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--muted); }
+.ui-action-menu-item.ui-button:hover:where(:not(:disabled)), .ui-action-menu-item.ui-button:focus-visible { background: var(--accent-soft); color: var(--accent); }
+.ui-action-menu-item.ui-button:hover svg, .ui-action-menu-item.ui-button:focus-visible svg { color: currentColor; }
+.ui-action-menu-item.ui-button.is-destructive, .ui-action-menu-item.ui-button.is-destructive svg { color: var(--danger); }
+.ui-action-menu-item.ui-button.is-destructive:hover:where(:not(:disabled)), .ui-action-menu-item.ui-button.is-destructive:focus-visible { background: #a3473610; }
+.ui-action-menu-separator { height: 1px; background: var(--border); margin: 5px 4px; }

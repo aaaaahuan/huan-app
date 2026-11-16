@@ -17,6 +17,7 @@ export default defineConfig({
         input: {
           index: resolve('src/main/index.ts'),
           'terrain-worker': resolve('src/workers/terrain.ts'),
+          'terrain-export-worker': resolve('src/workers/terrain-export.ts'),
         },
         output: {
           format: 'cjs',

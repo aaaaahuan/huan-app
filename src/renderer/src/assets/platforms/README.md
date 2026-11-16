@@ -10,3 +10,5 @@
 - `youtube.png`：https://www.gstatic.com/marketing-cms/assets/images/98/c6/59f93f6f4ac1a8e63612c5370193/favicon-1.png=s180 ，来自 https://brand.youtube/ 的官方图标。
 
 品牌商标归各平台所有；对外发布时须遵守各平台品牌使用规范，不表示平台授权或合作。
+
+- `anthropic.png`：https://www.anthropic.com/images/icons/apple-touch-icon.png ，来自 Anthropic 官网的应用图标，保留原始素材，以 24px 展示。

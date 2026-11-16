@@ -3,9 +3,10 @@ import x from '@renderer/assets/platforms/x.svg';
 import reddit from '@renderer/assets/platforms/reddit.png';
 import youtube from '@renderer/assets/platforms/youtube.png';
 import wechat from '@renderer/assets/platforms/wechat.svg';
+import anthropic from '@renderer/assets/platforms/anthropic.png';
 import other from '@renderer/assets/platforms/other.svg';
 
-const sources: Record<Platform, string> = { x, reddit, youtube, wechat, other };
+const sources: Record<Platform, string> = { x, reddit, youtube, wechat, anthropic, other };
 
 // 品牌图形保留原始比例和颜色，不受通用线性图标的描边样式影响。
 export function PlatformIcon({ platform }: { platform: Platform }) {

@@ -1,7 +1,11 @@
+import { useNativeOverlay } from './useNativeOverlay';
+import { SelectionTranslation } from '@renderer/features/translation/SelectionTranslation';
+import { Ideas } from '@renderer/features/ideas/Ideas';
+import { Studio } from '@renderer/features/studio/Studio';
 // 应用外壳：协调收藏选择、原页阅读与设置弹窗，不参与远程网页内部逻辑。
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { Bookmark, BookmarkLibrary } from '@shared/contracts/bookmarks';
-import { PLATFORM_NAMES } from '@shared/contracts/settings';
+import { SYSTEM_PAGES, PLATFORM_NAMES } from '@shared/contracts/settings';
 import { SettingsPanel } from '@renderer/features/settings/SettingsPanel';
 import { BookmarkList } from '@renderer/features/bookmarks/BookmarkList';
 import { Reader } from '@renderer/features/reader/Reader';
@@ -10,7 +14,7 @@ import { Button, IconButton } from '@renderer/components/Button';
 import { ReadingAssistant } from '@renderer/features/reading-assistant/ReadingAssistant';
 import { PanelDivider } from '@renderer/components/PanelDivider';
 import { usePanelWidths, type PanelSide } from './usePanelWidths';
-import { Navigation, SHOW_ALGORITHMS, type SystemPage } from './Navigation';
+import { Navigation, type SystemPage } from './Navigation';
 import { Translation } from '@renderer/features/translation/Translation';
 import { Terrain } from '@renderer/features/terrain/Terrain';
 import { AlgorithmTraining } from '@renderer/features/algorithms/AlgorithmTraining';
@@ -21,6 +25,7 @@ import { ModelSwitcher } from './ModelSwitcher';
 import type { ModelSelection } from '@shared/contracts/models';
 
 export function App() {
+  useNativeOverlay();
   const [library, setLibrary] = useState<BookmarkLibrary>();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -29,6 +34,7 @@ export function App() {
   const [modelSaving, setModelSaving] = useState(false);
   const modelPending = useRef(false);
   const modelVersion = useRef(0);
+  const [visibleTabs, setVisibleTabs] = useState<SystemPage[]>([...SYSTEM_PAGES]);
   const [activePage, setActivePage] = useState<SystemPage>('reading');
   const [navigationBusy, setNavigationBusy] = useState(false);
   const navigationPending = useRef(false);
@@ -56,6 +62,25 @@ export function App() {
     }).catch(error => { if (!cancelled && version === modelVersion.current) setFeedback(String(error)); });
     return () => { cancelled = true; };
   }, [revision]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void window.huanApp.settings.load().then(async result => {
+      if (cancelled) return;
+      if (!result.ok) { setFeedback(result.message); return; }
+      const tabs = result.settings.visibleTabs;
+      const first = SYSTEM_PAGES.find(page => tabs.includes(page))!;
+      if (!tabs.includes(activePage)) {
+        try {
+          await window.huanApp.browser.suspend(first !== 'reading' || settingsOpen);
+          if (cancelled) return;
+          setActivePage(first);
+        } catch (error) { if (!cancelled) setFeedback(String(error)); return; }
+      }
+      setVisibleTabs(tabs);
+    }).catch(error => { if (!cancelled) setFeedback(String(error)); });
+    return () => { cancelled = true; };
+  }, [revision, activePage, settingsOpen]);
 
   async function selectModel(selection: ModelSelection) {
     if (modelPending.current) return;
@@ -99,7 +124,7 @@ export function App() {
     void window.huanApp.browser.suspend(activePage !== 'reading').catch(error => setFeedback(String(error)));
   }
   async function navigate(page: SystemPage) {
-    if (!SHOW_ALGORITHMS && page === 'algorithms') page = 'reading';
+    if (!visibleTabs.includes(page)) return;
     if (page === activePage || navigationPending.current) return;
     navigationPending.current = true; setNavigationBusy(true); setFeedback('');
     try {
@@ -140,11 +165,12 @@ export function App() {
     }
   }
   return <div className="workspace-shell">
+    <SelectionTranslation scope={`${activePage}:${selectedId}:${settingsOpen}:${JSON.stringify(modelSelection)}`} enabled={!!modelSelection && !modelSaving && !settingsOpen} />
     <div className="titlebar">
       <span className="navigation-brand">huan</span>
-      <Navigation active={activePage} busy={navigationBusy || settingsOpen} onChange={page => void navigate(page)} />
+      <Navigation visibleTabs={visibleTabs} active={activePage} busy={navigationBusy || settingsOpen} onChange={page => void navigate(page)} />
       <div className="titlebar-actions">
-        <ModelSwitcher selection={modelSelection} disabled={modelSaving || settingsOpen} onChange={selection => void selectModel(selection)} />
+        <ModelSwitcher settingsRevision={revision} selection={modelSelection} disabled={modelSaving || settingsOpen} onChange={selection => void selectModel(selection)} />
         {activePage === 'reading' ? <Button className="focus-toggle" aria-label={focusLayout ? '恢复阅读布局' : '进入专注阅读'}
           aria-pressed={!!focusLayout} disabled={settingsOpen || navigationBusy} onClick={toggleFocus}>
           {focusLayout ? '恢复布局' : '专注'}</Button> : null}
@@ -186,9 +212,11 @@ export function App() {
           failed={!!(error || failures.length || library?.warning)} onConfigure={() => void openSettings()} />
       </Reader>
     </div>
+    <Ideas active={activePage === 'ideas'} />
+    <Studio active={activePage === 'studio'} />
     <Translation active={activePage === 'translation'} selection={modelSelection} modelChanging={modelSaving} />
     <Terrain active={activePage === 'terrain'} settingsRevision={revision} onOpenSettings={() => { setSettingsTab('terrain'); void openSettings('terrain'); }} />
-    {SHOW_ALGORITHMS && <AlgorithmTraining active={activePage === 'algorithms'} blocked={settingsOpen || navigationBusy} />}
+    <AlgorithmTraining active={activePage === 'algorithms'} blocked={settingsOpen || navigationBusy} />
     </div>
     </div>
     {settingsOpen ? <SettingsPanel initialTab={settingsTab} onClose={closeSettings} onSaved={() => {

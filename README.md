@@ -1,6 +1,8 @@
 # huan-app
 
-独立 macOS 桌面应用，顶部导航切换阅读、翻译和算法训练，右上角打开全局设置，通过紧凑菜单选择在线或离线 AI。工作台统一灰绿底色、白色阅读表面与深绿操作色。基础阅读与 AI 独立；已实现本地收藏、原页容器、分平台会话策略、Readability 页面缓存、Pi SDK 工具式伴读、YouTube 字幕阅读、中英互译，以及 Obsidian 算法清单。聊天和翻译共用模型选择：在线 DeepSeek Flash，离线 Qwen3.5-4B。字幕获取使用官方 REST API，自动检测原语言并在提交前预检费用。
+顶部「3d工作台」从本机 `3d-model` 目录读取模型收藏，支持模型文件切换、旋转缩放以及同级 `pic` 实物图展开与放大。实现与格式说明见 [3d工作台](src/renderer/src/features/studio/README.md)。
+
+独立 macOS 桌面应用，顶部导航切换阅读、翻译和算法训练，右上角打开全局设置，通过紧凑菜单选择在线或离线 AI。工作台统一灰绿底色、白色阅读表面与深绿操作色。基础阅读与 AI 独立；已实现本地收藏、原页容器、分平台会话策略、Readability 页面缓存、Pi SDK 工具式伴读、YouTube 字幕阅读、中英互译，以及 Obsidian 算法清单。聊天和翻译共用模型选择：在线 DeepSeek Flash / OpenAI GPT-5.4 / GPT-5.4 mini，离线 Qwen3.5-4B。字幕获取使用官方 REST API，自动检测原语言并在提交前预检费用。
 
 ## 开发与验证
 
@@ -77,13 +79,13 @@ Review：打开右上角设置，为平台选择符合收藏表格格式（兼�
 
 ## 模型选择
 
-顶部以一个模型菜单提供「在线 · DeepSeek Flash / 离线 · Qwen3.5-4B」，不增加模型或供应商。默认在线，选择通过既有设置原子保存，重启后保留；旧配置缺少 `model` 字段时沿用默认值，不改变凭据或收藏配置。离线聊天和翻译不需要 DeepSeek Key，没有静默云端回退。
+顶部以一个模型菜单提供「在线 · DeepSeek Flash / OpenAI GPT-5.4 / GPT-5.4 mini / 离线 · Qwen3.5-4B」。默认在线，选择通过既有设置原子保存，重启后保留；旧配置缺少 `model` 字段时沿用默认值，不改变凭据或收藏配置。离线聊天和翻译不需要 DeepSeek Key，没有静默云端回退。
 
 伴读由一个 reading AgentHandle 管理当前 Session；翻译和 Key 测试各使用独立的 isolated AgentHandle，每次执行创建独立 Session。主进程每次提交读取并冻结 Provider、模型及凭据；切换只影响下一次提交，不中断在途生成、不清历史或草稿。保存选择期间暂不能发起新请求，仍可停止在途请求。每轮聊天显示实际模型。离线历史首次继续交给在线模型时需原生确认，可取消或新开对话避免发送旧内容。
 
 这里的“离线”只控制 AI 推理，不是全应用断网开关：原页浏览、视频字幕获取及字幕用量查询保持原有网络行为。本地已有正文、字幕和已授权笔记可用于离线问答，不能离线获取尚未缓存的网络内容。
 
-Provider 适配在 `src/main/ai/core/providers.ts`，候选模型在 `src/shared/contracts/models.ts`。主进程的 AIService 通过 PiAdapter 装配 Pi AgentHarness；在线 DeepSeek 与本地 Qwen 均使用 Pi AI 的 OpenAI Chat Completions 适配器。聊天和翻译共用一个驻留 llama-server，本地服务的单 slot 串行处理请求。未来增加同供应商模型需更新候选列表；增加供应商还需明确接入凭据、端点和 Provider。
+Provider 适配在 `src/main/ai/core/providers.ts`，候选模型在 `src/shared/contracts/models.ts`。主进程的 AIService 通过 PiAdapter 装配 Pi AgentHarness；在线 DeepSeek 与本地 Qwen 使用 Pi AI 的 OpenAI Chat Completions 适配器；OpenAI 使用 Pi AI 的 Responses 适配器，固定 https://api.openai.com/v1/responses，关闭服务端存储（store: false）。聊天和翻译共用一个驻留 llama-server，本地服务的单 slot 串行处理请求。未来增加同供应商模型需更新候选列表；增加供应商还需明确接入凭据、端点和 Provider。
 
 ## 算法训练
 
@@ -197,7 +199,7 @@ Pi Agent Core / Pi AI / Pi Coding Agent 固定为 0.87.1，运行于主进程；
 
 ## AI 网页搜索与抓取
 
-在线伴读按回合向 Pi AgentHarness 注册 `web_search` 和 `web_fetch`，复用本轮在线模型的 DeepSeek API Key。设置好在线模型后可直接提问“搜索 DeepSeek 最新公告并给出来源”或“读取这个公开网页并总结：https://example.com”。工具名单、调用及结果沿用现有对话和 Run 记录，抓取成功的页面显示来源。离线伴读、翻译和 Key 测试保持原有工具范围。
+DeepSeek 在线伴读按回合向 Pi AgentHarness 注册 `web_search` 和 `web_fetch`，复用本轮在线模型的 DeepSeek API Key。设置好在线模型后可直接提问“搜索 DeepSeek 最新公告并给出来源”或“读取这个公开网页并总结：https://example.com”。工具名单、调用及结果沿用现有对话和 Run 记录，抓取成功的页面显示来源。离线伴读、翻译和 Key 测试保持原有工具范围。
 
 `web_search` 使用 `POST https://api.deepseek.com/v1/tools/search`，默认返回 5 条（可指定 1–50 条），支持可选正文和原始问题；搜索词及原始问题遵循服务端 128 Unicode 字符限制。`web_fetch` 使用同域 `/v1/tools/fetch`，读取单个 HTTP(S) URL 的 Markdown 正文，不携带本机浏览器 Cookie。当前文章与字幕仍优先读取已授权的本地快照。凭据仅保留在主进程闭包，不进入模型上下文和工具记录。
 
@@ -246,10 +248,64 @@ Pi Agent Core / Pi AI / Pi Coding Agent 固定为 0.87.1，运行于主进程；
 
 ### 原生地形工作台
 
-顶部「地形」使用 React 作品列表和 Three.js 原生预览，不启动 Python、server.py 或 iframe，也不要求 HUAN_PATH_ROOT。旧 completed 作品直接读取保存的 web 网格与图层，支持水、林、草、雪、道路、房屋、海拔刻度、地名遮挡和居民区显示切换。缺失的可选图层显示不可用，加载失败显示原因。原生 DEM 核心作品从 STL 显示简单网格，并提供 STL / 3MF 下载；不补造缺失图层。照片浏览和房屋判断编辑尚未迁移。
+顶部「地形」使用 React 作品列表和 Three.js 原生预览，不启动 Python、server.py 或 iframe，也不要求 HUAN_PATH_ROOT。旧 completed 作品直接读取保存的 web 网格与图层，支持轨迹路径、水、林、草、雪、道路、房屋、海拔刻度、地名遮挡和居民区显示切换。「轨迹路径」标签默认开启，点击后同时隐藏路径颜色与凸起，再点恢复；兼容已保存图层的旧作品。下载 STL / 3MF 会遵循轨迹路径开关：关闭时移除路径凸起与路径材质，保留房屋和刻度；重新开启仍下载原始完整模型，其余图层开关仅影响预览。无路径导出在线程中生成并校验封闭性，不改写作品原始文件；下载名带「无路径」后缀。缺失的可选图层显示不可用，加载失败显示原因。原生 DEM 核心作品从 STL 显示简单网格，并提供 STL / 3MF 下载；不补造缺失图层。照片浏览和房屋判断编辑尚未迁移。
 
 设置 → 地形中的「地形数据目录」对应 `terrain.dataDir`。留空时开发态使用仓库内 `terrain-data/`，安装版使用 `~/.huan-app/terrain-data/`；保存设置时校验绝对路径并创建 jobs/tracks。切换目录会重新挂载工作台，丢弃旧选择与迟到的响应。列表与资源读取本身不创建或修改作品。
 
 原生上传生成 DEM、底座、抬升路线与 WorldCover 林区浮雕、草地/冰雪材质，导出面分类多材质 3MF，并保存新作品的原生 Viewer 网格及可切换地表图层。参数目前固定为参考 features.json 默认值；OSM 水系/林区/冰川、房屋和刻度尚未迁移。upload/retry 仍等待构建终态；raster、CPU/WASM 与导出已隔离到任务 worker，主进程保留同 job 互斥。后台有界队列、快速返回、取消、目录切换中止与退出恢复尚未实现。旧作品重试会归档原状态并转入原生重建队列。缺失的轨迹海拔不参与底座和刻度计算；完全无海拔时关闭轨迹来源的刻度。只读资源通过受信任主 frame IPC、完成状态校验、realpath 边界及文件类型白名单读取，不执行保存作品中的 HTML/JS。
 
 验证使用 /tmp Electron harness 的临时作品库；运行 `pnpm typecheck`、改动文件 eslint 与 `pnpm build`。实现与阶段限制见 [原生地形架构](docs/native-terrain-architecture.md)。
+
+## 统一网页登录目录
+
+huan-app 的持久网页会话统一保存到 `~/.local/share/huan/browser-sessions/electron/Partitions/`。启动时原样迁移旧 `~/.huan-app/Partitions/`，并保留兼容符号链接；新旧目录同时有不同数据时停止迁移，避免覆盖。会话“仅本次/保存登录”设置保持原含义。
+
+同一根目录的 `states/grok.json` 保存订阅监控 Playwright 登录态，`playwright/bookmarks/` 保存收藏同步 profile。Electron 与 Playwright 分目录使用各自格式，浏览器进程不并发打开同一 profile。数据仅在本机，目录 0700、便携登录态 0600；不进入源码或 Git。当前已迁移 5 个既有会话目录，旧安装通过兼容链接继续使用原数据。
+
+## 灵感大脑
+
+顶部 Tab 新增灵感记录，光纤大脑仅含左右半脑。两端共用 Obsidian `project/huan-project/huan-idea/灵感.md`，每条只有灵感原文与秒级时间戳。文件安全、构建与 iCloud 边界见 [模块说明](src/renderer/src/features/ideas/README.md)。构建新增本机 Swift helper 编译步骤，打包应用不依赖终端 Swift。
+
+作品列表的「…」使用小尺寸、无边框的操作入口，悬停时显示浅底色。操作菜单为浏览器顶层轻量 popover，覆盖相邻作品按钮，点击外部、焦点离开、窗口失焦、滚动或 Esc 时关闭；支持方向键选择，关闭详情弹窗后返回原入口。删除操作仍进入原有确认弹窗。
+
+### OpenAI API 配置
+
+在设置 → AI 伴读的 OpenAI 卡片填写自己的 API Key，保存后在顶部模型菜单选择 OpenAI GPT-5.4 或 GPT-5.4 mini。OpenAI 与 DeepSeek 的凭据独立加密保存，均支持显隐、清除和连接测试；OpenAI 连接测试使用 GPT-5.4 mini。旧配置自动补充空 OpenAI 设置。伴读、翻译与英语学习继续共用 pi-agent；OpenAI 可使用已有页面、字幕与笔记工具，DeepSeek 专属网页搜索/抓取工具仅提供给 DeepSeek。首次向 OpenAI 附带阅读材料单独确认。
+
+OpenAI 模型请求使用 Electron 网络栈，沿用 macOS 系统代理；本地 Qwen 仍直连随机回环端口。OpenAI 连接测试不需要额外配置代理地址。
+
+### 服务商与模型级联菜单
+
+顶部模型菜单采用两级选择：一级为 OpenAI、DeepSeek、离线模型，二级为对应模型。在线列表用已保存的 Key 查询固定官方 Models 接口，显示账号可见且当前 pi-ai 0.87.1 目录支持的对话模型（排除实时音频模型）；图片、语音、嵌入和未接入的模型不会列入伴读菜单。列表可手动刷新，保存设置后自动重新查询；无 Key、网络失败或权限错误会显示提示。模型列表可见不保证具有全部推理权限，实际请求仍可能返回服务商权限或额度错误。
+
+完整候选目录维护在 src/shared/contracts/model-catalog.ts，与当前 pi-ai 版本同步；主进程负责凭据与列表请求，renderer 只获得模型 ID 和展示名称。旧模型选择原样兼容；切换供应商预览不会立即修改已保存模型，选择二级模型后才保存。支持鼠标悬停、点击及键盘方向键、Enter、Escape。
+
+### 选中翻译
+
+应用内可阅读文本及收藏原始网页支持选中翻译：双击英文自动译为中文，拖选后显示横向小操作条，点击「翻译」展开结果。支持停止、重试、Esc 关闭；切页或更换选区后不会展示过期结果。编辑框保持原有编辑行为，只读译文可选中翻译；英语学习弹窗沿用原有收词浮层。单次选区最多 2,000 字符。英文判断采用本地启发式规则，不是完整语言识别器。原始网页当前覆盖主文档，不覆盖 iframe 内部或浏览器 PDF 查看器。
+
+复用当前选中模型及翻译模块的 `lookup` 能力，原页通过隔离世界展示浮层，不暴露主进程 IPC。新的选中翻译每次实际请求均归档，无内存缓存绕过统计。普通翻译请求也写入查询历史；英语学习旧浮层已有的缓存命中不新增查询记录。
+
+查询历史保存在 `~/.huan-app/translation/queries.jsonl`，每行包含时间、请求 ID、原文、规范化文本、方向、译文、状态和用量；选中翻译另有模块、上下文、触发方式，网页另有标题与 URL。模型身份可按请求 ID 关联 `~/.huan-app/ai/runs/` 执行记录。记录仅在本机积累，包含原文，不自动写入生词本；后续可据此聚合重复查询和待复习词。落盘失败时新浮层显示归档警告。当前未提供定期盘点界面或自动任务。
+
+本轮验收：`pnpm check`；使用独立验收数据目录启动 Electron，真实模型验证原页双击 `Bitter → 苦的`、拖选短语及长段翻译、停止后提示、Esc/切页关闭；应用内只读英文译文双击 `lovely → 可爱的`、拖选操作条；双击中文标题不触发翻译。核对查询历史成功与 stopped 记录及上下文。未新增测试依赖。
+
+弹层与原始网页层级：应用统一监听 `popover` / `dialog` 的展示生命周期，在主进程确认隐藏原生网页后展示弹层，关闭全部弹层后恢复网页。弹层阻挡与切页、设置暂停分别维护，防止关闭菜单时错误显示原页。已在桌面打包版验证原页打开时的 OpenAI 长模型列表完整展示、Esc 关闭后原页恢复。
+
+翻译音标：普通翻译、应用内选中翻译、原始网页选中翻译及英语学习选词浮层统一展示美式 IPA。英译中标注英文原文，中译英标注英文译文；仅单词与短语（最多 8 词）显示，完整句子和段落不附整段音标，可选中其中的词查看。音标由当前模型生成，不确定时标记“待核实”。普通翻译模型响应现在使用 `{ text, phonetic }` JSON，主进程校验后分字段返回；复制与交换语言仍只使用译文正文，截断或非法 JSON 不作为译文展示。英语学习生成结果支持独立音标字段，原有生词本字段保持兼容。查询日志新增可选 `phonetic` 字段，旧日志无需迁移。
+
+音标验收：`pnpm check` 通过；桌面包真实模型验证 beautiful、Good morning、应用内 morning、英语学习 challenging、原页 Bitter 均展示译文及 IPA；长句不显示整句 IPA；查询日志对应记录保留音标。桌面版已同步更新，旧包保留备份。
+
+选中翻译语境：lookup 现在将 `{ text, context }` 发送给模型，用上下文判断选区的词义、词性及实际读音；只返回选区的简洁释义和音标。普通翻译与学习任务保持原有输入格式。英语学习旧选词浮层补传最多 2,000 字符的上下文，缓存键包含模型、选区与上下文，避免同词异义复用。上下文采集仍沿用现有父元素文本及长度限制，尚未实现选区前后取句。
+
+语境验收：`pnpm check` 通过；桌面真实模型验证 bank 在河流语境为“河岸”、开户语境为“银行”；read 在 yesterday 语境为 /rɛd/、every day 语境为 /riːd/；普通翻译 Hello 返回“你好”与音标。桌面应用已更新，旧版已备份。语境判断仍由当前模型完成，提示词不能保证所有多义词和读音均正确。
+
+顶部导航可在「设置 → 顶部导航」选择显示的页面，至少保留一个。保存后立即生效并保存在本机；隐藏当前页面时切换到第一个可见页面。旧配置默认显示全部页面。
+
+伴读收藏新增 Anthropic 来源分类，设置、筛选、缓存及独立网页会话均支持。来源仍通过 Markdown 索引配置；本机已启用 Obsidian `raw/likes/anthropic.md`，将 Other 中两篇来自 anthropic.com / claude.com 的官方文章原行迁入，保留已读状态。旧配置缺少该分类时默认禁用且使用内存会话。`pnpm check` 通过；桌面版确认显示两篇 Anthropic 收藏和 Anthropic 筛选选项。分类图标使用 Anthropic 官网的官方 A\ 标识，素材随应用打包。
+
+### 二次 review 配置说明
+
+3d 工作台的模型目录在设置「地形与模型」中选择，留空使用应用数据目录下的 `3d-model`。模型及 Blender 转换结果单文件上限为 150 MB，单次实物图片总量上限为 150 MB。
+普通翻译未返回约定 JSON 时保留模型原文、音标留空；上下文查词仍要求结构完整。
+灵感原生组件按源码修改时间增量构建；开发模式缺少 Swift/Xcode 命令行工具时提示并跳过，正式构建仍要求工具齐全。

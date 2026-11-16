@@ -18,6 +18,7 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
   let selection = 0;
   let navigationEpoch = 0;
   let suspended = false;
+  let overlayOpen = false;
   let captureController: AbortController | undefined;
   let cancelPageExtraction: (() => void) | undefined;
   let layout: ReaderLayout = { x: 0, y: 0, width: 0, height: 0, visible: false };
@@ -39,7 +40,7 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
     const bottom = Math.min(height, Math.round(layout.y + layout.height));
     const bounds = { x, y, width: Math.max(0, right - x), height: Math.max(0, bottom - y) };
     view.setBounds(bounds);
-    view.setVisible(!suspended && layout.visible && window.isVisible() && bounds.width > 0 && bounds.height > 0
+    view.setVisible(!suspended && !overlayOpen && layout.visible && window.isVisible() && bounds.width > 0 && bounds.height > 0
       && state.phase !== 'empty' && state.phase !== 'error');
   }
 
@@ -170,7 +171,7 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
     contents.on('did-start-navigation', (event) => {
       if (!active() || !event.isMainFrame) return;
       // Other 可能用 hash 路由切换文章，不能将所有片段导航当作正文不变的锚点。
-      if (item.platform !== 'other' && event.isSameDocument && event.url.split('#')[0] === navigationUrl.split('#')[0]) return;
+      if (item.platform !== 'other' && item.platform !== 'anthropic' && event.isSameDocument && event.url.split('#')[0] === navigationUrl.split('#')[0]) return;
       navigationEpoch++;
       cancelCapture();
       cancelExtraction();
@@ -338,12 +339,14 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
   window.on('closed', () => { selection++; disposeView(); pages.clear(); });
   window.webContents.on('render-process-gone', () => { selection++; disposeView(); });
   window.webContents.on('did-start-navigation', (event) => {
-    if (event.isMainFrame && !event.isSameDocument) { selection++; disposeView(); suspended = false; }
+    if (event.isMainFrame && !event.isSameDocument) { selection++; disposeView(); suspended = false; overlayOpen = false; }
   });
 
   return {
     get: () => state, select, action, captureContext, clearContext,
-    isSuspended: () => suspended,
+    isSuspended: () => suspended || overlayOpen,
+    // 弹层阻挡与页面暂停独立，关闭菜单不能覆盖设置或切页的隐藏状态。
+    overlay(value: boolean) { overlayOpen = value; applyLayout(); },
     observeContents(listener: (contents: WebContents | undefined) => void) {
       observers.add(listener); listener(view?.webContents);
       return () => { observers.delete(listener); };

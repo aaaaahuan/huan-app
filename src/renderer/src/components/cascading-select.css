@@ -1,0 +1,13 @@
+.ui-cascading-select { min-width: 0; }
+.ui-cascading-trigger.ui-button { width: 100%; height: 32px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 10px; background: #ffffff90; font-size: 12px; }
+.ui-cascading-trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-cascading-trigger svg { width: 14px; height: 14px; flex-shrink: 0; }
+.ui-cascading-panel { position: fixed; margin: 0; padding: 6px; width: min(430px, calc(100vw - 16px)); border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); box-shadow: 0 12px 36px #17332324; }
+.ui-cascading-columns { display: grid; grid-template-columns: 112px minmax(0, 1fr); }
+.ui-cascading-groups { padding-right: 6px; border-right: 1px solid var(--border); }
+.ui-cascading-models { max-height: min(390px, calc(100vh - 155px)); min-height: 125px; overflow-y: auto; padding-left: 6px; }
+.ui-cascading-item.ui-button { width: 100%; display: flex; justify-content: space-between; gap: 12px; border: 0; background: transparent; text-align: left; font-size: 12px; padding: 8px 10px; }
+.ui-cascading-item.ui-button:hover, .ui-cascading-item.ui-button[aria-expanded=true], .ui-cascading-item.ui-button[aria-checked=true] { background: var(--accent-soft); color: var(--accent); }
+.ui-cascading-models p { color: var(--muted); font-size: 12px; padding: 4px 10px; line-height: 1.6; }
+.ui-cascading-footer { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--border); margin-top: 6px; padding: 5px 4px 0; color: var(--muted); font-size: 11px; }
+.ui-cascading-footer .ui-button { font-size: 11px; }

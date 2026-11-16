@@ -29,6 +29,9 @@ export function registerBrowser(window: BrowserWindow, host: ReturnType<typeof c
       return response === 1 ? host.clearSession(platform) : { ok: true, cancelled: true };
     });
   });
+  ipcMain.handle(IPC_CHANNELS.browser.overlay, (event, value: unknown) => {
+    assertTrusted(event); host.overlay(z.boolean().parse(value));
+  });
   ipcMain.handle(IPC_CHANNELS.browser.suspend, (event, value: unknown) => {
     assertTrusted(event);
     host.suspend(z.boolean().parse(value));

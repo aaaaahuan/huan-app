@@ -1,6 +1,6 @@
 import type { SVGProps } from 'react';
 
-export type IconName = 'search' | 'chevron' | 'settings' | 'collapse' | 'expand' | 'back' | 'forward' | 'book' | 'bookmarks' | 'plus' | 'eye' | 'eye-off' | 'translate' | 'swap' | 'copy' | 'close' | 'refresh' | 'external';
+export type IconName = 'more' | 'file-text' | 'sliders' | 'trash' | 'search' | 'chevron' | 'settings' | 'collapse' | 'expand' | 'back' | 'forward' | 'book' | 'bookmarks' | 'plus' | 'eye' | 'eye-off' | 'translate' | 'swap' | 'copy' | 'close' | 'refresh' | 'external';
 
 // 图形集中维护；业务组件只选择语义名称，不重复拼装 SVG。
 export function Icon({ name, ...props }: SVGProps<SVGSVGElement> & { name: IconName }) {
@@ -15,6 +15,10 @@ export function Icon({ name, ...props }: SVGProps<SVGSVGElement> & { name: IconN
     <path d="M49 22v22l6-4 6 4V22M39 54h19M39 61h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
   </svg>;
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+    {name === 'more' ? <><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" /></> : null}
+    {name === 'file-text' ? <><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z" /><path d="M14 3v6h6M8 13h8M8 17h6" /></> : null}
+    {name === 'sliders' ? <><path d="M4 7h6m4 0h6M4 17h10m4 0h2" /><circle cx="12" cy="7" r="2" /><circle cx="16" cy="17" r="2" /></> : null}
+    {name === 'trash' ? <><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6" /></> : null}
     {name === 'search' ? <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></> : null}
     {name === 'chevron' ? <path d="m7 10 5 5 5-5" /> : null}
     {name === 'plus' ? <path d="M12 5v14M5 12h14" /> : null}

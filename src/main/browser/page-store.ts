@@ -46,7 +46,7 @@ export function createPageStore() {
           const value = url.searchParams.get(key);
           if (value) query.set(key, value);
         }
-      } else if (platform === 'other') {
+      } else if ((platform === 'other' || platform === 'anthropic')) {
         // 兼容常见 query 定位文章；不把任意跟踪参数或授权字段带入 AI 目录。
         for (const key of ['id', 'p', 'page_id', 'post_id', 'article_id', 'story_id', 'lang']) {
           const value = url.searchParams.get(key);
