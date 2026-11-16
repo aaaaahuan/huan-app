@@ -19,9 +19,10 @@ export function createModelTargetResolver(input: {
     }
     const model = ONLINE_MODELS.find(item => item.id === selection.onlineModel);
     if (!model) throw new Error('在线模型未接入。');
-    if (!result.settings.ai.credentialId)
+    const config = model.provider === 'openai' ? result.settings.openai : result.settings.ai;
+    if (!config.credentialId)
       throw new Error('请先配置在线模型 API Key，或切换为离线模式。');
-    const apiKey = await input.settings.getKey(result.settings.ai.credentialId);
+    const apiKey = await input.settings.getKey(config.credentialId, model.provider);
     signal.throwIfAborted();
     return { provider: model.provider, modelId: model.id, apiKey };
   };

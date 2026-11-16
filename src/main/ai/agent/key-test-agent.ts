@@ -1,7 +1,8 @@
+import type { ModelTarget } from '@shared/contracts/models';
 import type { AgentConfig } from './agent';
 
 export function createKeyTestAgentConfig(
-  keyForRun: (runId: string) => string | undefined
+  keyForRun: (runId: string) => ModelTarget | undefined
 ): AgentConfig<Record<string, never>> {
   return {
     key: 'key-test',
@@ -12,9 +13,9 @@ export function createKeyTestAgentConfig(
     maxOutputTokens: 8,
     resolveModelTarget: async ({ runId, signal }) => {
       signal.throwIfAborted();
-      const apiKey = keyForRun(runId);
-      if (!apiKey) throw new Error('KEY_TEST_CREDENTIAL_MISSING');
-      return { provider: 'deepseek', modelId: 'deepseek-flash', apiKey };
+      const target = keyForRun(runId);
+      if (!target) throw new Error('KEY_TEST_CREDENTIAL_MISSING');
+      return target;
     }
   };
 }

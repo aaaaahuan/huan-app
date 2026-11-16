@@ -13,7 +13,7 @@ export function registerSettings(window: BrowserWindow, store: ReturnType<typeof
     assertTrusted(event);
     return store.load();
   });
-  ipcMain.handle(IPC_CHANNELS.settings.save, async (event, input: unknown, revision: unknown, keyChange: unknown, subtitleKeyChange: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.settings.save, async (event, input: unknown, revision: unknown, keyChange: unknown, subtitleKeyChange: unknown, openaiKeyChange: unknown) => {
     assertTrusted(event);
     const parsed = settingsSchema.safeParse(input);
     if (parsed.success) {
@@ -31,16 +31,16 @@ export function registerSettings(window: BrowserWindow, store: ReturnType<typeof
     }
     if (parsed.success && parsed.data.notesPath && current.ok && parsed.data.notesPath !== current.settings.notesPath) {
       const answer = await dialog.showMessageBox(window, { type: 'question', buttons: ['取消', '允许访问'], defaultId: 0, cancelId: 0,
-        message: '允许 AI 访问此笔记目录？', detail: `${parsed.data.notesPath}\n\nAI 可读取目录内 Markdown；离线模式仅在本机处理，在线模式会发送到所选模型服务商（当前为 DeepSeek）。每次写入或修改仍需单独确认。不开启命令执行，不允许访问目录外文件。` });
+        message: '允许 AI 访问此笔记目录？', detail: `${parsed.data.notesPath}\n\nAI 可读取目录内 Markdown；离线模式仅在本机处理，在线模式会发送到所选模型服务商（DeepSeek 或 OpenAI）。每次写入或修改仍需单独确认。不开启命令执行，不允许访问目录外文件。` });
       if (answer.response !== 1) return { ok: false, message: '未授权笔记目录，设置未保存。' };
     }
     if (typeof subtitleKeyChange === 'string') {
       const answer = await dialog.showMessageBox(window, { type: 'question', buttons: ['取消', '允许保存'], defaultId: 0, cancelId: 0,
         message: '保存 Transcript Guru Key 并允许获取字幕？',
-        detail: 'Key 将加密保存在本机。获取会把当前 YouTube 视频 URL 发送给 Transcript Guru，服务可能计次或留存。使用原语言自动检测，提交前查询费用预估；收费、ASR 或翻译路径不会自动提交。预估不是服务端费用锁定，实际费用仍以官方记录为准。此授权不包含向 DeepSeek 发送字幕。' });
+        detail: 'Key 将加密保存在本机。获取会把当前 YouTube 视频 URL 发送给 Transcript Guru，服务可能计次或留存。使用原语言自动检测，提交前查询费用预估；收费、ASR 或翻译路径不会自动提交。预估不是服务端费用锁定，实际费用仍以官方记录为准。此授权不包含向所选在线模型服务商 发送字幕。' });
       if (answer.response !== 1) return { ok: false, message: '未授权字幕服务，设置未保存。' };
     }
-    const result = await store.save(input, revision, keyChange, subtitleKeyChange);
+    const result = await store.save(input, revision, keyChange, subtitleKeyChange, undefined, openaiKeyChange);
     // 等待受影响来源处理完再返回，使界面重新查询时拿到本次保存对应的列表。
     if (result.ok) await onSaved(result.settings);
     return result;
@@ -55,12 +55,15 @@ export function registerSettings(window: BrowserWindow, store: ReturnType<typeof
     const parsed = z.uuid().safeParse(input);
     if (!parsed.success) return { ok: false, message: 'AI 凭据无效，请重新打开设置。' };
     try {
-      const key = await store.getKey(parsed.data);
+      const before = await store.load();
+      if (!before.ok) return before;
+      const provider = before.settings.openai.credentialId === parsed.data ? 'openai' : 'deepseek';
+      const key = await store.getKey(parsed.data, provider);
       const current = await store.load();
-      if (!current.ok || current.settings.ai.credentialId !== parsed.data)
+      if (!current.ok || (provider === 'openai' ? current.settings.openai : current.settings.ai).credentialId !== parsed.data)
         return { ok: false, message: 'AI 凭据已变更，请重新打开设置。' };
       return { ok: true, credentialId: parsed.data, key };
-    } catch (error) { return { ok: false, message: `无法读取 DeepSeek Key：${error instanceof Error ? error.message : String(error)}` }; }
+    } catch (error) { return { ok: false, message: `无法读取 AI Key：${error instanceof Error ? error.message : String(error)}` }; }
   });
   ipcMain.handle(IPC_CHANNELS.settings.revealSubtitleKey, async (event, input: unknown): Promise<SavedKeyResult> => {
     assertTrusted(event);

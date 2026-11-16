@@ -38,7 +38,7 @@ export function registerReading(window: BrowserWindow, host: ReturnType<typeof c
   }, async signal => {
     const answer = await dialog.showMessageBox(window, { type: 'question', signal, buttons: ['取消', '允许发送'], defaultId: 0, cancelId: 0,
       message: '允许向在线模型发送此对话的离线历史？',
-      detail: '继续此对话会把已有提问、回答和工具读取的正文、字幕或笔记内容发送给 DeepSeek，可能计费和留存。取消不会清空历史；也可新开对话避免发送旧内容。' });
+      detail: '继续此对话会把已有提问、回答和工具读取的正文、字幕或笔记内容发送给所选在线模型服务商，可能计费和留存。取消不会清空历史；也可新开对话避免发送旧内容。' });
     signal.throwIfAborted();
     return answer.response === 1;
   });
@@ -52,16 +52,17 @@ export function registerReading(window: BrowserWindow, host: ReturnType<typeof c
     if (model.mode === 'offline') return snapshot;
     const result = await settings.load();
     if (!result.ok) throw new Error(result.message);
-    let consent = result.settings.ai.consentVersion;
+    const provider = model.provider === 'openai' ? 'openai' : 'deepseek';
+    let consent = (provider === 'openai' ? result.settings.openai : result.settings.ai).consentVersion;
     const required = snapshot.subtitles ? 3 : 2;
     if (consent < required) {
       const answer = await dialog.showMessageBox(window, { type: 'question', signal, buttons: ['不附带新材料', '允许附带'],
-        defaultId: 0, cancelId: 0, message: '允许向 DeepSeek 发送阅读材料？',
-        detail: '将向 DeepSeek 提供本轮页面目录、视频信息及提问时播放位置，并允许 AI 按需读取已有页面正文和完整字幕。可能计费和留存；拒绝时保留此前已授权的文章材料，普通聊天继续。不会自动获取字幕或发送音频。' });
+        defaultId: 0, cancelId: 0, message: '允许向所选在线模型服务商 发送阅读材料？',
+        detail: '将向所选在线模型服务商 提供本轮页面目录、视频信息及提问时播放位置，并允许 AI 按需读取已有页面正文和完整字幕。可能计费和留存；拒绝时保留此前已授权的文章材料，普通聊天继续。不会自动获取字幕或发送音频。' });
       signal.throwIfAborted();
       await recordApprovalDecision({ invocationId: randomUUID(),
         decision: answer.response === 1 ? 'approved' : 'declined', scope: 'preflight' });
-      if (answer.response === 1) { await settings.allowMaterials(required); consent = Math.max(consent, required); }
+      if (answer.response === 1) { await settings.allowMaterials(required, provider); consent = Math.max(consent, required); }
     }
     signal.throwIfAborted();
     const filtered: PageContext = { pages: consent >= 2 ? snapshot.pages : [],

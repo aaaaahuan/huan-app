@@ -3,17 +3,23 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { IPC_CHANNELS } from '@shared/ipc-channels';
 import type { AIResult } from '@shared/contracts/ai';
+import { listAvailableModels } from './model-catalog';
 import { modelSelectionSchema } from '@shared/contracts/models';
 import type { createSettingsStore } from '@main/settings/store';
 import type { AgentHandle } from '@main/ai/agent/agent';
 
 export function registerModelControls(window: BrowserWindow, settings: ReturnType<typeof createSettingsStore>,
   assertTrusted: (event: IpcMainInvokeEvent) => void,
-  keyTestAgent: AgentHandle<Record<string, never>>, keyTestKeys: Map<string, string>) {
+  keyTestAgent: AgentHandle<Record<string, never>>, keyTestKeys: Map<string, import('@shared/contracts/models').ModelTarget>) {
   async function result<T>(operation: () => T | Promise<T>): Promise<AIResult<T>> {
     try { return { ok: true, value: await operation() }; }
     catch (error) { return { ok: false, message: error instanceof Error ? error.message : '操作失败，请重试。' }; }
   }
+
+  ipcMain.handle(IPC_CHANNELS.ai.listModels, event => {
+    assertTrusted(event);
+    return result(() => listAvailableModels(settings));
+  });
 
   ipcMain.handle(IPC_CHANNELS.ai.getSelection, event => {
     assertTrusted(event);
@@ -37,19 +43,21 @@ export function registerModelControls(window: BrowserWindow, settings: ReturnTyp
 
   let testing = false;
   
-  ipcMain.handle(IPC_CHANNELS.ai.testKey, (event, input: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.ai.testKey, (event, input: unknown, providerInput: unknown) => {
     assertTrusted(event);
     return result(async () => {
+      const provider = z.enum(['deepseek', 'openai']).default('deepseek').parse(providerInput);
+      const name = provider === 'openai' ? 'OpenAI' : 'DeepSeek';
       if (testing) throw new Error('连接测试正在进行。');
       const supplied = z.string().parse(input).trim();
       testing = true;
       try {
         const answer = await dialog.showMessageBox(window, { type: 'question', buttons: ['取消', '测试连接'], defaultId: 0,
-          cancelId: 0, message: '测试 DeepSeek 连接？', detail: '会发送一条不含页面内容的短请求，可能产生少量费用。' });
+          cancelId: 0, message: `测试 ${name} 连接？`, detail: '会发送一条不含页面内容的短请求，可能产生少量费用。' });
         if (answer.response !== 1) return '已取消测试。';
-        const key = supplied || await settings.getKey();
+        const key = supplied || await settings.getKey(undefined, provider);
         const runId = randomUUID();
-        keyTestKeys.set(runId, key);
+        keyTestKeys.set(runId, { provider, modelId: provider === 'openai' ? 'gpt-5.4-mini' : 'deepseek-flash', apiKey: key });
         try {
           const execution = await keyTestAgent.execute({
             runId, prompt: 'Reply OK.', toolContext: {}
@@ -57,7 +65,7 @@ export function registerModelControls(window: BrowserWindow, settings: ReturnTyp
           if (execution.status === 'completed') return '连接成功。测试没有保存未保存的 API Key。';
           const final = execution.messages.filter(message => message.role === 'assistant').at(-1);
           const detail = final?.errorMessage || execution.warning || execution.failure?.code || execution.status;
-          throw new Error([execution.failure?.httpStatus ? `DeepSeek HTTP ${execution.failure.httpStatus}` : 'DeepSeek 连接失败',
+          throw new Error([execution.failure?.httpStatus ? `${name} HTTP ${execution.failure.httpStatus}` : `${name} 连接失败`,
             detail].join('：'));
         } finally {
           keyTestKeys.delete(runId);

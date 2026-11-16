@@ -1,3 +1,4 @@
+import { net } from 'electron';
 import { request } from 'node:http';
 import { Readable } from 'node:stream';
 import type { JsonValue } from '@earendil-works/pi-agent-core';
@@ -23,6 +24,7 @@ function requestBody(value: unknown): Record<string, unknown> {
 }
 
 const RECORDED_FIELDS = [
+  'input', 'instructions', 'max_output_tokens', 'reasoning', 'store',
   'model', 'messages', 'tools', 'tool_choice', 'stream', 'stream_options',
   'temperature', 'max_tokens', 'max_completion_tokens', 'thinking',
   'parallel_tool_calls', 'cache_prompt', 'chat_template_kwargs'
@@ -52,6 +54,10 @@ function preparePayload(
       ...(temperature === undefined ? {} : { temperature })
     };
   }
+  if (target.provider === 'openai') return {
+    ...body, model: target.modelId, store: false,
+    ...(maxOutputTokens === undefined ? {} : { max_output_tokens: Math.max(16, maxOutputTokens) })
+  };
   return {
     ...body, model: target.modelId, thinking: { type: 'disabled' },
     ...(maxOutputTokens === undefined ? {} : { max_tokens: maxOutputTokens }),
@@ -112,7 +118,7 @@ function localModel(target: Extract<ModelTarget, { provider: 'Qwen-3.5-4B-local'
 }
 
 function failureFromError(error: unknown): ExecutionFailure {
-  if (error instanceof DOMException && error.name === 'TimeoutError')
+  if (error instanceof Error && (error.name === 'TimeoutError' || error.message === 'Request timed out.'))
     return { kind: 'timeout', code: 'TIMEOUT' };
   if (error instanceof Error && error.name === 'AbortError')
     return { kind: 'unknown', code: 'ABORTED' };
@@ -125,19 +131,24 @@ export async function createHarnessModels(
 ): Promise<HarnessModels> {
   const { createModels, createProvider, createAssistantMessageEventStream } = await import('@earendil-works/pi-ai');
   const { openAICompletionsApi } = await import('@earendil-works/pi-ai/api/openai-completions.lazy');
-  let selectedModel: Model<'openai-completions'> | undefined;
+  let selectedModel: Model<Api> | undefined;
   if (target.provider === 'deepseek') {
     const { deepseekProvider } = await import('@earendil-works/pi-ai/providers/deepseek');
     selectedModel = deepseekProvider().getModels().find(item => item.id === target.modelId);
+  } else if (target.provider === 'openai') {
+    const { openaiProvider } = await import('@earendil-works/pi-ai/providers/openai');
+    selectedModel = openaiProvider().getModels().find(item => item.id === target.modelId);
   } else {
     selectedModel = localModel(target);
   }
-  if (!selectedModel || selectedModel.api !== 'openai-completions')
+  if (!selectedModel)
     throw new Error('MODEL_UNAVAILABLE');
 
-  const endpoint = selectedModel.baseUrl.replace(/\/$/, '') + '/chat/completions';
+  const endpoint = selectedModel.baseUrl.replace(/\/$/, '') + (target.provider === 'openai' ? '/responses' : '/chat/completions');
   let lastFailure: ExecutionFailure | undefined;
-  const sdk = openAICompletionsApi();
+  const sdk = target.provider === 'openai'
+    ? (await import('@earendil-works/pi-ai/api/openai-responses.lazy')).openAIResponsesApi()
+    : openAICompletionsApi();
   const identity: ModelIdentity = {
     mode: target.provider === 'Qwen-3.5-4B-local' ? 'offline' : 'online',
     provider: target.provider, modelId: target.modelId
@@ -156,7 +167,10 @@ export async function createHarnessModels(
           timing.started();
           const response = target.provider === 'Qwen-3.5-4B-local'
             ? await localResponse(url, init, frozenSignal)
-            : await fetch(input, { ...init, redirect: 'error' });
+            : target.provider === 'openai'
+              // Electron 网络栈沿用系统代理，避免 Node fetch 直连 OpenAI 超时。
+              ? await net.fetch(input instanceof URL ? input.href : input, { ...init, redirect: 'error', credentials: 'omit' })
+              : await fetch(input, { ...init, redirect: 'error' });
           timing.headers(response.status);
           if (!response.ok)
             lastFailure = { kind: 'http', code: 'HTTP_ERROR', httpStatus: response.status };
@@ -242,7 +256,7 @@ export async function createHarnessModels(
     models: [selectedModel],
     auth: {
       apiKey: {
-        name: target.provider === 'deepseek' ? 'DeepSeek API key' : 'Local runtime',
+        name: target.provider === 'deepseek' ? 'DeepSeek API key' : target.provider === 'openai' ? 'OpenAI API key' : 'Local runtime',
         resolve: async () => ({ auth: { apiKey: target.apiKey } })
       }
     },

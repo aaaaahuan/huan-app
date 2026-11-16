@@ -31,7 +31,7 @@ export function createSettingsStore(directory: string) {
   }
   
   async function save(input: unknown, revision: unknown, keyChange?: unknown, subtitleKeyChange?: unknown,
-    materialConsentVersion?: 2 | 3): Promise<SettingsResult> {
+    materialConsentVersion?: 2 | 3, openaiKeyChange?: unknown, consentProvider: 'deepseek' | 'openai' = 'deepseek'): Promise<SettingsResult> {
     // IPC 参数在运行时并不可信，不能只依靠 TypeScript 类型声明。
     if (saving) return { ok: false, message: '正在保存设置，请稍后重试。' };
     const parsed = settingsSchema.safeParse(input);
@@ -44,7 +44,11 @@ export function createSettingsStore(directory: string) {
     if (subtitleKeyChange !== undefined && subtitleKeyChange !== null &&
       (typeof subtitleKeyChange !== 'string' || !/^[\x21-\x7e]+$/.test(subtitleKeyChange)))
       return { ok: false, message: 'Transcript Guru Key 格式不正确，请检查是否包含空格或换行。' };
+    if (openaiKeyChange !== undefined && openaiKeyChange !== null &&
+      (typeof openaiKeyChange !== 'string' || !/^[\x21-\x7e]+$/.test(openaiKeyChange)))
+      return { ok: false, message: 'OpenAI API Key 格式不正确。' };
     saving = true;
+    let createdOpenAIKey: string | undefined;
     let createdKey: string | undefined;
     let createdSubtitleKey: string | undefined;
     let committed = false;
@@ -74,16 +78,21 @@ export function createSettingsStore(directory: string) {
           await access(parsed.data.notesPath, constants.R_OK | constants.W_OK);
         } catch (error) { return { ok: false, message: error instanceof Error ? error.message : String(error) }; }
       }
+      if (parsed.data.studio.dataDir && (!isAbsolute(parsed.data.studio.dataDir) || parsed.data.studio.dataDir.includes('\0')))
+        return { ok: false, message: '模型目录必须是有效的绝对路径。' };
       const current = await load();
       // 这是乐观冲突检查，不是对任意外部编辑器加文件锁。
       if (!current.ok) return current;
       if (current.revision !== revision) return { ok: false, message: '设置文件已被其他操作修改。请取消当前编辑并重新打开设置，避免覆盖新配置。' };
       await mkdir(directory, { recursive: true, mode: 0o700 });
       // 凭据先写新文件，再原子切换引用；UI 不能指定其他密钥或伪造授权记录。
+      if (typeof openaiKeyChange === 'string') createdOpenAIKey = await credentials.write(openaiKeyChange);
+      parsed.data.openai = { credentialId: openaiKeyChange === null ? null : createdOpenAIKey ?? current.settings.openai.credentialId,
+        consentVersion: Math.max(current.settings.openai.consentVersion, consentProvider === 'openai' ? materialConsentVersion ?? 0 : 0) };
       if (typeof keyChange === 'string') createdKey = await credentials.write(keyChange);
       if (typeof subtitleKeyChange === 'string') createdSubtitleKey = await credentials.write(subtitleKeyChange);
       parsed.data.ai = { credentialId: keyChange === null ? null : createdKey ?? current.settings.ai.credentialId,
-        consentVersion: Math.max(current.settings.ai.consentVersion, materialConsentVersion ?? 0) };
+        consentVersion: Math.max(current.settings.ai.consentVersion, consentProvider === 'deepseek' ? materialConsentVersion ?? 0 : 0) };
       parsed.data.subtitles = { credentialId: subtitleKeyChange === null ? null : createdSubtitleKey ?? current.settings.subtitles.credentialId,
         consentVersion: subtitleKeyChange === null ? 0 : createdSubtitleKey ? 1 : current.settings.subtitles.consentVersion };
       const text = JSON.stringify(parsed.data, null, 2) + '\n';
@@ -93,6 +102,8 @@ export function createSettingsStore(directory: string) {
       // 临时文件完全写入并 sync 后才替换正式文件，写入失败不会发布半份配置。
       await rename(temporary, path);
       committed = true;
+      const oldOpenAIKey = current.settings.openai.credentialId;
+      if (oldOpenAIKey && oldOpenAIKey !== parsed.data.openai.credentialId) await credentials.remove(oldOpenAIKey);
       const oldKey = current.settings.ai.credentialId;
       if (oldKey && oldKey !== parsed.data.ai.credentialId) await credentials.remove(oldKey);
       const oldSubtitleKey = current.settings.subtitles.credentialId;
@@ -103,17 +114,19 @@ export function createSettingsStore(directory: string) {
       return { ok: false, message: `保存失败：${error instanceof Error ? error.message : String(error)}` };
     } finally {
       await unlink(temporary).catch(() => undefined);
+      if (createdOpenAIKey && !committed) await credentials.remove(createdOpenAIKey);
       if (createdKey && !committed) await credentials.remove(createdKey);
       if (createdSubtitleKey && !committed) await credentials.remove(createdSubtitleKey);
       saving = false;
     }
   }
   return { load, save,
-    async getKey(credentialId?: string) {
+    async getKey(credentialId?: string, provider: 'deepseek' | 'openai' = 'deepseek') {
       const result = await load();
       if (!result.ok) throw new Error(result.message);
-      if (credentialId !== undefined && result.settings.ai.credentialId !== credentialId) throw new Error('AI 凭据已变更。');
-      return credentials.read(result.settings.ai.credentialId);
+      const config = provider === 'openai' ? result.settings.openai : result.settings.ai;
+      if (credentialId !== undefined && config.credentialId !== credentialId) throw new Error('AI 凭据已变更。');
+      return credentials.read(config.credentialId);
     },
     async getSubtitleKey(credentialId: string) {
       const result = await load();
@@ -121,10 +134,10 @@ export function createSettingsStore(directory: string) {
       if (result.settings.subtitles.credentialId !== credentialId) throw new Error('字幕凭据已变更。');
       return credentials.read(credentialId);
     },
-    async allowMaterials(requiredVersion: 2 | 3) {
+    async allowMaterials(requiredVersion: 2 | 3, provider: 'deepseek' | 'openai' = 'deepseek') {
       const result = await load();
       if (!result.ok) throw new Error(result.message);
-      const saved = await save(result.settings, result.revision, undefined, undefined, requiredVersion);
+      const saved = await save(result.settings, result.revision, undefined, undefined, requiredVersion, undefined, provider);
       if (!saved.ok) throw new Error(saved.message);
     }
   };

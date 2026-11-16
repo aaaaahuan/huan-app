@@ -17,7 +17,7 @@ export function createCredentials(directory: string) {
       return id;
     },
     async read(id: string | null) {
-      if (!id) throw new Error('请先在设置中填写 DeepSeek API Key。');
+      if (!id) throw new Error('请先在设置中填写对应模型的 API Key。');
       try { return safeStorage.decryptString(await readFile(path(id))); }
       catch (error) { throw new Error(`无法解密 API Key：${error instanceof Error ? error.message : String(error)}`, { cause: error }); }
     },

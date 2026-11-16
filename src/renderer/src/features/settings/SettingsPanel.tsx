@@ -1,12 +1,13 @@
 // 设置编辑器：草稿与已保存值分离，只有点击保存才请求主进程持久化。
 import { useEffect, useRef, useState } from 'react';
-import { PLATFORMS, PLATFORM_NAMES, type Platform, type SessionModes, type SessionMode, type Settings, type SettingsResult } from '@shared/contracts/settings';
+import { SYSTEM_PAGES, SYSTEM_PAGE_NAMES, PLATFORMS, PLATFORM_NAMES, type Platform, type SessionModes, type SessionMode, type Settings, type SettingsResult } from '@shared/contracts/settings';
 import { Button, IconButton } from '@renderer/components/Button';
 import { Tabs } from '@renderer/components/Tabs';
 import { SourceCard } from './SourceCard';
 import { SessionCard } from './SessionCard';
 import { AICard } from './AICard';
 import { SubtitleCard } from './SubtitleCard';
+import { Input } from '@renderer/components/Input';
 import { TerrainCard } from './TerrainCard';
 import './settings.css';
 
@@ -24,13 +25,15 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
   const [message, setMessage] = useState('');
   const [fields, setFields] = useState<Partial<Record<Platform, string>>>({});
   const [confirmClose, setConfirmClose] = useState(false);
-  const [tab, setTab] = useState<'sources' | 'sessions' | 'ai' | 'subtitles' | 'terrain'>(initialTab);
+  const [tab, setTab] = useState<'navigation' | 'sources' | 'sessions' | 'ai' | 'subtitles' | 'terrain'>(initialTab);
   const [keyChange, setKeyChange] = useState<string | null>();
+  const [openaiKeyChange, setOpenAIKeyChange] = useState<string | null>();
+  const [openaiMessage, setOpenAIMessage] = useState('');
   const [subtitleKeyChange, setSubtitleKeyChange] = useState<string | null>();
   const [aiMessage, setAIMessage] = useState('');
   const [activeModes, setActiveModes] = useState<SessionModes>();
   const [sessionMessage, setSessionMessage] = useState('');
-  const dirty = keyChange !== undefined || subtitleKeyChange !== undefined || (!!draft && JSON.stringify(draft) !== baseline);
+  const dirty = openaiKeyChange !== undefined || keyChange !== undefined || subtitleKeyChange !== undefined || (!!draft && JSON.stringify(draft) !== baseline);
 
   function accept(result: SettingsResult) {
     if (!result.ok) { setMessage(result.message); return; }
@@ -93,12 +96,12 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
     } catch (error) { setMessage(String(error)); }
     finally { setBusy(false); }
   }
-  async function chooseTerrain() {
+  async function chooseTerrain(target: 'terrain' | 'studio' = 'terrain') {
     setBusy(true);
     try {
       const result = await window.huanApp.settings.chooseDirectory();
       if (!result.ok) setMessage(result.message);
-      else if (result.path !== null) setDraft(previous => previous ? { ...previous, terrain: { dataDir: result.path ?? '' } } : previous);
+      else if (result.path !== null) setDraft(previous => previous ? { ...previous, [target]: { dataDir: result.path ?? '' } } : previous);
     } catch { setMessage('无法选择目录，请重试。'); }
     finally { setBusy(false); }
   }
@@ -108,26 +111,27 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
     setMessage('');
     setFields({});
     try {
-      const result = await window.huanApp.settings.save(draft, revision, keyChange, subtitleKeyChange);
+      const result = await window.huanApp.settings.save(draft, revision, keyChange, subtitleKeyChange, openaiKeyChange);
       // 保存失败不关闭面板，也不重置草稿，方便修正后重试。
       if (!result.ok) {
         setMessage(result.message); setFields(result.fields ?? {});
         if (result.fields) setTab('sources');
         return;
       }
-      setKeyChange(undefined); setSubtitleKeyChange(undefined); onSaved();
+      setKeyChange(undefined); setSubtitleKeyChange(undefined); setOpenAIKeyChange(undefined); onSaved();
     } catch (error) { setMessage(`未能确认保存结果，输入已保留：${String(error)}`); }
     finally { setBusy(false); }
   }
   function updateMode(platform: Platform, mode: SessionMode) {
     setDraft((previous) => previous ? { ...previous, sessions: { ...previous.sessions, [platform]: mode } } : previous);
   }
-  async function testKey() {
-    setBusy(true); setAIMessage('正在测试…');
+  async function testKey(provider: 'deepseek' | 'openai' = 'deepseek') {
+    const feedback = provider === 'openai' ? setOpenAIMessage : setAIMessage;
+    setBusy(true); feedback('正在测试…');
     try {
-      const result = await window.huanApp.ai.testKey(keyChange ?? '');
-      setAIMessage(result.ok ? result.value : result.message);
-    } catch (error) { setAIMessage(String(error)); }
+      const result = await window.huanApp.ai.testKey((provider === 'openai' ? openaiKeyChange : keyChange) ?? '', provider);
+      feedback(result.ok ? result.value : result.message);
+    } catch (error) { feedback(String(error)); }
     finally { setBusy(false); }
   }
   async function clearSession(platform: Platform) {
@@ -152,10 +156,24 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
       <form className="settings-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
         <div className="settings-layout">
         <div className="settings-navigation">
-        <Tabs<'sources' | 'sessions' | 'ai' | 'subtitles' | 'terrain'> className="settings-tabs" label="设置分类" orientation="vertical" value={tab} onChange={setTab} disabled={busy || confirmClose}
-          options={[{ value: 'sources', label: '收藏来源' }, { value: 'sessions', label: '登录与隐私' }, { value: 'ai', label: 'AI 伴读' }, { value: 'subtitles', label: '字幕服务' }, { value: 'terrain', label: '地形' }]} />
+        <Tabs<'navigation' | 'sources' | 'sessions' | 'ai' | 'subtitles' | 'terrain'> className="settings-tabs" label="设置分类" orientation="vertical" value={tab} onChange={setTab} disabled={busy || confirmClose}
+          options={[{ value: 'navigation', label: '顶部导航' }, { value: 'sources', label: '收藏来源' }, { value: 'sessions', label: '登录与隐私' }, { value: 'ai', label: 'AI 伴读' }, { value: 'subtitles', label: '字幕服务' }, { value: 'terrain', label: '地形与模型' }]} />
         </div>
         <div className="settings-body">
+          <div id="navigation-panel" role="tabpanel" aria-labelledby="navigation-tab" hidden={tab !== 'navigation'}>
+            <p className="settings-description">选择顶部要展示的 Tab，保存后立即生效。至少保留一个。</p>
+            {draft ? <fieldset className="settings-sources" disabled={busy || confirmClose}>
+              <legend className="settings-note">显示的页面</legend>
+              {SYSTEM_PAGES.map(page => <label key={page} className="source-card source-toggle">
+                <input type="checkbox" checked={draft.visibleTabs.includes(page)}
+                  disabled={draft.visibleTabs.length === 1 && draft.visibleTabs.includes(page)}
+                  onChange={event => { const checked = event.target.checked; setDraft(previous => previous ? {
+                    ...previous, visibleTabs: SYSTEM_PAGES.filter(value => value === page ? checked : previous.visibleTabs.includes(value))
+                  } : previous); }} />
+                {SYSTEM_PAGE_NAMES[page]}
+              </label>)}
+            </fieldset> : <p>正在读取设置…</p>}
+          </div>
           <div id="sources-panel" role="tabpanel" aria-labelledby="sources-tab" hidden={tab !== 'sources'}>
           <p className="settings-description">选择 Obsidian 中各平台的 Markdown 文件。仅手动标记已读/未读时写回“是否已读”列，打开帖子不会改动笔记。</p>
           <p className="settings-note">启动时读取一次；保存后只重读发生变更的来源。帖子按采集日期从新到旧展示，不定时刷新。</p>
@@ -175,11 +193,14 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
                 onClear={() => void clearSession(platform)} />)}
             </fieldset> : <p>请先在收藏来源页加载设置。</p>}
             {dirty ? <p className="settings-note">有未保存修改，请先保存或取消，再清除会话。</p> : null}
-            <p className="settings-note">会话数据仅存本机 ~/.huan-app，不上传、不读取密码。清除会话同时移除 Cookie、网站存储及缓存，不影响笔记和收藏。</p>
+            <p className="settings-note">huan-app 网页会话统一存于本机 ~/.local/share/huan/browser-sessions/electron，不上传、不读取密码。清除会话同时移除 Cookie、网站存储及缓存，不影响笔记和收藏。</p>
             {sessionMessage ? <p className="session-feedback" role="status">{sessionMessage}</p> : null}
           </div>
           <div role="tabpanel" id="ai-panel" aria-labelledby="ai-tab" hidden={tab !== 'ai'}>
             {draft ? <fieldset className="settings-sources" disabled={busy || confirmClose}>
+              <AICard provider="openai" credentialId={draft.openai.credentialId} value={openaiKeyChange} active={tab === 'ai'} onChange={setOpenAIKeyChange}
+                notesPath={draft.notesPath} onNotesPathChange={() => undefined} localModel={draft.localModel} onLocalModelChange={() => undefined}
+                onTest={() => void testKey('openai')} message={openaiMessage} />
               <AICard credentialId={draft.ai.credentialId} value={keyChange} active={tab === 'ai'} onChange={setKeyChange}
                 notesPath={draft.notesPath} onNotesPathChange={notesPath => setDraft({ ...draft, notesPath })}
                 localModel={draft.localModel} onLocalModelChange={change => setDraft(previous => previous ? {
@@ -198,6 +219,16 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
               <TerrainCard value={draft.terrain.dataDir} autoRoot={autoRoot}
                 onChange={dataDir => { setDraft({ ...draft, terrain: { dataDir } }); setMessage(''); }}
                 onChoose={() => void chooseTerrain()} />
+              <section className="source-card">
+                <h3>3d 工作台</h3>
+                <label htmlFor="studio-root">模型目录</label>
+                <div className="source-path-row">
+                  <Input id="studio-root" value={draft.studio.dataDir} maxLength={4096}
+                    onChange={event => setDraft({ ...draft, studio: { dataDir: event.target.value } })} />
+                  <Button onClick={() => void chooseTerrain('studio')}>选择目录</Button>
+                </div>
+                <p className="settings-note">留空使用应用数据目录下的 3d-model；保存后重新进入工作台加载。</p>
+              </section>
             </fieldset> : <p>正在读取设置…</p>}
           </div>
           {message ? <p role="alert" className="settings-error">{message}</p> : null}

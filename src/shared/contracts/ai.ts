@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { PageSource } from './page-context';
-import type { ModelSelection } from './models';
+import type { ModelGroup, ModelSelection } from './models';
 import type { ExecutionMetrics } from './ai-execution';
 
 export const AI_MODEL_NAME = 'DeepSeek Flash';
@@ -29,6 +29,7 @@ export interface ConversationState extends Owner {
   lastMetrics?: ExecutionMetrics;
 }
 export interface AIAPI {
+  listModels(): Promise<AIResult<ModelGroup[]>>;
   getSelection(): Promise<AIResult<ModelSelection>>;
   selectModel(selection: ModelSelection): Promise<AIResult<ModelSelection>>;
   get(key: string): Promise<AIResult<ConversationState>>;
@@ -36,6 +37,6 @@ export interface AIAPI {
   send(input: SendInput): Promise<AIResult>;
   stop(owner: Owner): Promise<AIResult>;
   restart(owner: Owner): Promise<AIResult<ConversationState>>;
-  testKey(key: string): Promise<AIResult<string>>;
+  testKey(key: string, provider?: 'deepseek' | 'openai'): Promise<AIResult<string>>;
   onState(listener: (state: ConversationState) => void): () => void;
 }

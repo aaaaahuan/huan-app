@@ -6,7 +6,14 @@ import type { HuanAppAPI } from '@shared/contracts/app';
 
 // 通道名固定在这里；页面不能自行指定任意 IPC 通道或直接调用文件系统。
 const api: HuanAppAPI = {
+  ideas: Object.freeze({ getDraft: () => ipcRenderer.invoke(IPC_CHANNELS.ideas.getDraft), saveDraft: (draft: Parameters<HuanAppAPI['ideas']['saveDraft']>[0]) => ipcRenderer.invoke(IPC_CHANNELS.ideas.saveDraft, draft), get: () => ipcRenderer.invoke(IPC_CHANNELS.ideas.get), append: (input: Parameters<HuanAppAPI['ideas']['append']>[0]) => ipcRenderer.invoke(IPC_CHANNELS.ideas.append, input) }),
+  studio: Object.freeze({
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.studio.list),
+    read: (input: Parameters<HuanAppAPI['studio']['read']>[0]) => ipcRenderer.invoke(IPC_CHANNELS.studio.read, input),
+    photos: (input: Parameters<HuanAppAPI['studio']['photos']>[0]) => ipcRenderer.invoke(IPC_CHANNELS.studio.photos, input)
+  }),
   terrain: Object.freeze({
+    exportModel: (input: Parameters<HuanAppAPI['terrain']['exportModel']>[0]) => ipcRenderer.invoke(IPC_CHANNELS.terrain.exportModel, input),
     delete: (input: TerrainJobRequest) => ipcRenderer.invoke(IPC_CHANNELS.terrain.delete, input),
     getSummary: (input: TerrainJobRequest) => ipcRenderer.invoke(IPC_CHANNELS.terrain.getSummary, input),
     getPrintParams: (input: TerrainJobRequest) => ipcRenderer.invoke(IPC_CHANNELS.terrain.getPrintParams, input),
@@ -59,7 +66,7 @@ const api: HuanAppAPI = {
   // 设置服务
   settings: Object.freeze({
     load: () => ipcRenderer.invoke(IPC_CHANNELS.settings.load),
-    save: (settings, revision, keyChange, subtitleKeyChange) => ipcRenderer.invoke(IPC_CHANNELS.settings.save, settings, revision, keyChange, subtitleKeyChange),
+    save: (settings, revision, keyChange, subtitleKeyChange, openaiKeyChange) => ipcRenderer.invoke(IPC_CHANNELS.settings.save, settings, revision, keyChange, subtitleKeyChange, openaiKeyChange),
     subtitleUsage: () => ipcRenderer.invoke(IPC_CHANNELS.settings.subtitleUsage),
     revealAIKey: credentialId => ipcRenderer.invoke(IPC_CHANNELS.settings.revealAIKey, credentialId),
     revealSubtitleKey: credentialId => ipcRenderer.invoke(IPC_CHANNELS.settings.revealSubtitleKey, credentialId),
@@ -86,6 +93,7 @@ const api: HuanAppAPI = {
 
   // AI对话 服务
   ai: Object.freeze({
+    listModels: () => ipcRenderer.invoke(IPC_CHANNELS.ai.listModels),
     getSelection: () => ipcRenderer.invoke(IPC_CHANNELS.ai.getSelection),
     selectModel: selection => ipcRenderer.invoke(IPC_CHANNELS.ai.selectModel, selection),
     get: (id) => ipcRenderer.invoke(IPC_CHANNELS.ai.get, id),
@@ -93,7 +101,7 @@ const api: HuanAppAPI = {
     send: (input) => ipcRenderer.invoke(IPC_CHANNELS.ai.send, input),
     stop: (owner) => ipcRenderer.invoke(IPC_CHANNELS.ai.stop, owner),
     restart: (owner) => ipcRenderer.invoke(IPC_CHANNELS.ai.restart, owner),
-    testKey: (key) => ipcRenderer.invoke(IPC_CHANNELS.ai.testKey, key),
+    testKey: (key, provider) => ipcRenderer.invoke(IPC_CHANNELS.ai.testKey, key, provider),
     onState: (listener) => {
       const handler = (_event: Electron.IpcRendererEvent, state: Parameters<typeof listener>[0]) => listener(state);
       ipcRenderer.on(IPC_CHANNELS.ai.state, handler);
@@ -109,6 +117,7 @@ const api: HuanAppAPI = {
     captureContext: (id, pageId) => ipcRenderer.invoke(IPC_CHANNELS.browser.captureContext, id, pageId),
     clearContext: (id, pageId) => ipcRenderer.invoke(IPC_CHANNELS.browser.clearContext, id, pageId),
     layout: (layout) => ipcRenderer.invoke(IPC_CHANNELS.browser.layout, layout),
+    overlay: value => ipcRenderer.invoke(IPC_CHANNELS.browser.overlay, value),
     suspend: (value) => ipcRenderer.invoke(IPC_CHANNELS.browser.suspend, value),
     onState: (listener) => {
       // 不把 Electron 事件对象交给 UI；卸载时只移除本次订阅。

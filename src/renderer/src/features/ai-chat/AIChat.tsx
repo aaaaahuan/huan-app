@@ -6,7 +6,7 @@ import { Button } from '@renderer/components/Button';
 import { ExecutionMetrics } from '@renderer/components/ExecutionMetrics';
 import { Icon } from '@renderer/components/Icon';
 import './ai-chat.css';
-import type { ModelSelection } from '@shared/contracts/models';
+import { onlineProvider, type ModelSelection } from '@shared/contracts/models';
 
 const phases = { idle: '本轮对话', preparing: '正在准备…', generating: '正在回答…', stopping: '正在停止…', blocked: '等待停止确认' };
 const pageStatuses = { empty: '未选择页面，可直接聊天', loading: '当前页面正文提取中', ready: '当前页面已缓存，AI 可按需读取',
@@ -68,7 +68,7 @@ export function AIChat({ settingsRevision, collapsed, tabbed, selection, modelCh
     setConfigured(false);
     void window.huanApp.settings.load().then(result => {
       if (!cancelled) {
-        setConfigured(!!selection && result.ok && !!result.settings.ai.credentialId);
+        setConfigured(!!selection && result.ok && !!(onlineProvider(selection.onlineModel) === 'openai' ? result.settings.openai : result.settings.ai).credentialId);
         if (!result.ok) setError(result.message);
       }
     }).catch(error => { if (!cancelled) { setConfigured(false); setError(String(error)); } });
@@ -150,7 +150,7 @@ export function AIChat({ settingsRevision, collapsed, tabbed, selection, modelCh
       <h2>准备开始伴读</h2>
       <p>在线模式需要配置 API Key，也可切换离线使用。</p>
       {error ? <p className="ai-error" role="alert">{error}</p> : null}
-      <Button onClick={onConfigure}>配置 DeepSeek</Button>
+      <Button onClick={onConfigure}>配置 API Key</Button>
     </div>
   </section>;
 
@@ -175,7 +175,7 @@ export function AIChat({ settingsRevision, collapsed, tabbed, selection, modelCh
       </article>)}
     </div>
     <div className="ai-composer">
-      {!configured ? <Button onClick={onConfigure}>配置 DeepSeek</Button> : null}
+      {!configured ? <Button onClick={onConfigure}>配置 API Key</Button> : null}
       {confirmRestart ? <div className="ai-notice"><p>清空当前对话和草稿并新开对话？页面缓存与 API Key 不受影响。</p>
         <div className="ai-notice-actions"><Button onClick={() => setConfirmRestart(false)}>取消</Button><Button variant="primary" onClick={() => void restart()}>确认新开对话</Button></div></div> : null}
       <p className="ai-context-status" role="status">{youtubeVideoId(page?.url ?? '')
