@@ -10,3 +10,5 @@ release/
 
 # 生成的地形作品留在本机，不入库；原始轨迹见 terrain-data/tracks/
 terrain-data/jobs/
+terrain-data/cache/
+work/
