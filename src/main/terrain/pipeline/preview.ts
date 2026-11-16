@@ -17,7 +17,7 @@ export async function packagePreview(job: string, grid: HeightGrid, mesh: Printa
     if (!(await lstat(join(job, path))).isDirectory()) throw new Error('预览目录不能是符号链接');
   }
   const top = 2 * (grid.width - 1) * (grid.height - 1);
-  const available = { forest: layers.classes.includes(2), grass: layers.classes.includes(5), snow: layers.classes.includes(3), rivers: layers.classes.includes(1), houses: hasHouses, elevation_scale: !!scaleMesh, roads: false, places: false, settlements: false };
+  const available = { track: false, forest: layers.classes.includes(2), grass: layers.classes.includes(5), snow: layers.classes.includes(3), rivers: layers.classes.includes(1), houses: hasHouses, elevation_scale: !!scaleMesh, roads: false, places: false, settlements: false };
   async function floats(path: string, values: Float32Array | Uint32Array) {
     const bytes = Buffer.alloc(values.length * 4);
     values.forEach((v, i) => { if (values instanceof Float32Array) bytes.writeFloatLE(v, i * 4); else bytes.writeUInt32LE(v, i * 4); });
@@ -39,6 +39,7 @@ export async function packagePreview(job: string, grid: HeightGrid, mesh: Printa
     const y = ids.reduce((sum, id) => sum + mesh.vertices[id * 3 + 1], 0) / 3;
     routeFaces[face] = Number(layers.distanceAt(x, y) < .72);
   }
+  available.track = routeFaces.some(Boolean);
   await writeBytes(join(job, 'web/layers/face_route.bin'), routeFaces);
   if (scaleMesh) { await floats('layers/elevation_scale_vertices.bin', scaleMesh.vertices); await floats('layers/elevation_scale_faces.bin', scaleMesh.triangles); }
   if (available.rivers) await floats('layers/rivers.bin', layers.water);

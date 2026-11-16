@@ -1,31 +1,26 @@
+import { composePreview } from '@shared/terrain-surface';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { Metadata, ReadAsset } from './assets';
 import { loadPlaces } from './places';
 
-export const featureNames: Record<string, string> = { dem: 'DEM', track: '徒步线', photos: '照片', rivers: '河流/湖泊', forest: '林区', grass: '草地', snow: '冰雪', roads: '道路', houses: '房屋', elevation_scale: '海拔刻度', places: '地名', settlements: '居民区' };
-export interface FeatureControl { key: string; enabled: boolean; available: boolean; reason?: string }
-interface Layers { base: Float32Array; classes: Uint8Array; distance: Float32Array; forest?: Float32Array; rivers?: Float32Array; houses?: Float32Array; routeGap?: Uint8Array }
-export function composePreview(layers: Layers, state: Record<string, boolean>) {
-  const { base, classes, distance, forest, rivers, houses, routeGap } = layers;
-  const z = new Float32Array(base.length), preClass = new Uint8Array(base.length);
-  for (let i = 0; i < base.length; i++) {
-    let surface = base[i], id = 0;
-    if (state.forest) { surface += forest?.[i] || 0; if (classes[i] === 2) id = 2; }
-    if (state.rivers && classes[i] === 1) { surface = base[i] + (rivers?.[i] || 0); id = 1; }
-    if (state.grass && classes[i] === 5) id = 5;
-    if (state.snow && classes[i] === 3) id = 3;
-    if (state.houses && (houses?.[i] ?? 0) > 0) { surface = Math.max(surface, houses![i]); id = 6; }
-    const weight = state.houses && routeGap?.[i] ? 0 : Math.max(0, Math.min(1, (.85 - distance[i]) / .13));
-    z[i] = surface + weight * (Math.max(base[i], surface) - surface + .8); preClass[i] = id;
-  }
-  return { z, preClass };
+export const featureNames: Record<string, string> = { dem: 'DEM', track: '轨迹路径', photos: '照片', rivers: '河流/湖泊', forest: '林区', grass: '草地', snow: '冰雪', roads: '道路', houses: '房屋', elevation_scale: '海拔刻度', places: '地名', settlements: '居民区' };
+
+export function previewFeatureKeys(meta: Metadata) {
+  return Object.keys(featureNames).filter(key => {
+    const status = meta.feature_status?.[key]?.state;
+    if (key === 'track' && meta.preview_layers && !status) return meta.preview_layers.available.track !== false;
+    return meta.feature_status ? ['present', 'failed'].includes(status ?? '') : meta.preview_layers?.available[key] === true;
+  });
 }
+
+export interface FeatureControl { key: string; enabled: boolean; available: boolean; reason?: string }
 export async function loadFeatures(meta: Metadata, read: ReadAsset, geo: THREE.BufferGeometry, mesh: THREE.Mesh, scene: THREE.Scene, host: HTMLElement, onControls: (controls: FeatureControl[]) => void, alive: () => boolean) {
   const spec = meta.preview_layers, size = meta.size;
   if (!spec || !size || !geo.index) throw new Error('缺少预览高度场');
   const [nx, ny] = spec.grid, count = nx * ny;
-  const state = { ...spec.available }, failed: Record<string, string> = {};
+  // 旧作品未在 available 中登记 track，但已保存路线高度与面掩码，可直接切换。
+  const state: Record<string, boolean> = { ...spec.available, track: spec.available.track ?? true }, failed: Record<string, string> = {};
   const f32 = async (path: string, length?: number) => {
     const arr = new Float32Array(await read(path));
     if ((length !== undefined && arr.length !== length) || arr.some(n => !Number.isFinite(n))) throw new Error('浮点图层尺寸或数值无效');
@@ -90,7 +85,7 @@ export async function loadFeatures(meta: Metadata, read: ReadAsset, geo: THREE.B
     positions.needsUpdate = true; geo.computeVertexNormals();
     const next = geo.toNonIndexed(), rgb = new Float32Array(indices.length * 3);
     for (let i = 0; i < indices.length / 3; i++) {
-      const id = i < spec!.top_faces ? (faceRoute[i] && !(state.houses && faceGap?.[i]) ? 4 : preClass[samples[i]]) : 0;
+      const id = i < spec!.top_faces ? (state.track && faceRoute[i] && !(state.houses && faceGap?.[i]) ? 4 : preClass[samples[i]]) : 0;
       let color = palette.get(id) ?? new THREE.Color('#C6CBB5');
       if (state.settlements && settlements && i < spec!.top_faces && ![1, 4, 6].includes(id)) color = settlementPalette.get(settlements[samples[i]]) ?? color;
       for (let j = 0; j < 3; j++) color.toArray(rgb, i * 9 + j * 3);
@@ -99,8 +94,8 @@ export async function loadFeatures(meta: Metadata, read: ReadAsset, geo: THREE.B
     for (const pin of pins.children) pin.position.z = surfaceAt(pin.position.x, pin.position.y) - (meta.houses?.sink_mm ?? .4);
     pins.visible = !!state.houses; scale.visible = !!state.elevation_scale; roads.visible = !!state.roads;
     lastUnits = 0; overlays.places?.setVisible(!!state.places); overlays.places?.invalidate();
-    if (alive()) onControls(Object.keys(featureNames).filter(key => meta.feature_status ? ['present', 'failed'].includes(meta.feature_status[key]?.state) : spec!.available[key] === true).map(key => ({ key,
-      enabled: meta.feature_status?.[key]?.state === 'present' && !(key in spec!.available) ? true : !!state[key],
+    if (alive()) onControls(previewFeatureKeys(meta).map(key => ({ key,
+      enabled: key === 'track' ? !!state.track : meta.feature_status?.[key]?.state === 'present' && !(key in spec!.available) ? true : !!state[key],
       available: meta.feature_status?.[key]?.state !== 'failed' && !failed[key], reason: failed[key] ?? (meta.feature_status?.[key]?.state === 'failed' ? meta.feature_status[key].error ?? '生成失败' : undefined) })));
   }
   refresh();
@@ -108,7 +103,7 @@ export async function loadFeatures(meta: Metadata, read: ReadAsset, geo: THREE.B
   refresh();
   if (!alive()) overlays.places?.dispose();
   return {
-    toggle(key: string) { if (spec.available[key] && !failed[key]) { state[key] = !state[key]; refresh(); } },
+    toggle(key: string) { if ((key === 'track' || spec.available[key]) && !failed[key]) { state[key] = !state[key]; refresh(); } },
     dispose() {
       overlays.places?.dispose();
       const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>();

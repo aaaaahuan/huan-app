@@ -26,8 +26,7 @@
 
 .terrain-work-items > li { position: relative; }
 .terrain-work-card.ui-button { padding-right: 38px; }
-.terrain-work-menu { position: absolute; right: 4px; top: 8px; z-index: 2; }
-.terrain-work-menu-items { position: absolute; right: 0; width: 150px; display: grid; padding: 6px; border: 1px solid #d5ddd4; border-radius: 8px; background: #f8faf6; box-shadow: 0 4px 16px #0002; }
+.terrain-work-menu { position: absolute; right: 7px; top: 7px; }
 .terrain-modal { width: min(820px, 90vw); max-height: 85vh; overflow: auto; border: 1px solid #cad4c8; border-radius: 12px; padding: 24px; color: #344135; background: #f8faf6; }
 .terrain-modal::backdrop { background: #18231b66; }
 .terrain-modal header { display: flex; align-items: center; justify-content: space-between; gap: 20px; }

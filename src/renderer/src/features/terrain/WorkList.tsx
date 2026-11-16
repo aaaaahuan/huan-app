@@ -1,3 +1,4 @@
+import { ActionMenu } from '@renderer/components/ActionMenu';
 import { WorkDialog } from './WorkDialog';
 import { useEffect, useRef, useState } from 'react';
 import type { TerrainJobList, TerrainJobSummary } from '@shared/contracts/terrain';
@@ -17,7 +18,6 @@ export function WorkList({ library, loading, error, selectedId, onSelect, onRefr
   onSelect(id: string): void; onRefresh(): void; onDeleted(id: string): void;
 }) {
   const [dialog, setDialog] = useState<{ job: TerrainJobSummary; mode: 'summary' | 'delete' | 'print' }>();
-  const [menu, setMenu] = useState<string>();
   const [collapsed, setCollapsed] = useState(false);
   const [draft, setDraft] = useState('');
   const [query, setQuery] = useState('');
@@ -51,13 +51,15 @@ export function WorkList({ library, loading, error, selectedId, onSelect, onRefr
           <Button className="terrain-work-card" aria-current={selectedId === job.id ? 'true' : undefined} onClick={() => onSelect(job.id)}>
             <strong>{job.name || job.filename}</strong><span>{job.date || job.id}</span><small>{workFacts(job)}</small>
           </Button>
-          <div className="terrain-work-menu"><Button aria-label={`${job.name} 的作品菜单`} aria-expanded={menu === job.id} onClick={event => { menuTrigger.current = event.currentTarget; setMenu(menu === job.id ? undefined : job.id); }}>⋯</Button>
-            {menu === job.id ? <div className="terrain-work-menu-items" onKeyDown={event => { if (event.key === 'Escape') setMenu(undefined); }}>
-              <Button onClick={() => { setDialog({ job, mode: 'summary' }); setMenu(undefined); }}>查看生成摘要</Button>
-              <Button disabled={['queued', 'running'].includes(job.status)} onClick={() => { setDialog({ job, mode: 'delete' }); setMenu(undefined); }}>删除</Button>
-              <Button onClick={() => { setDialog({ job, mode: 'print' }); setMenu(undefined); }}>打印参数</Button>
-            </div> : null}
-          </div>
+          <div className="terrain-work-menu"><ActionMenu label={`${job.name} 的作品菜单`} items={[
+            { id: 'summary', label: '查看生成摘要', icon: 'file-text' },
+            { id: 'print', label: '打印参数', icon: 'sliders' },
+            { id: 'delete', label: '删除', icon: 'trash', destructive: true, disabled: ['queued', 'running'].includes(job.status), reason: ['queued', 'running'].includes(job.status) ? '生成中的作品暂不能删除' : undefined }
+          ]} onAction={(action, trigger) => {
+            if (action === 'summary' || action === 'print' || action === 'delete') {
+              menuTrigger.current = trigger; setDialog({ job, mode: action });
+            }
+          }} /></div>
         </li>)}</ul>
         {library?.diagnostics.length ? <details className="terrain-diagnostics"><summary>读取诊断（{library.diagnostics.length}）</summary>
           <ul>{library.diagnostics.map(item => <li key={item.id}><strong>{item.id}</strong><p>{item.message}</p></li>)}</ul>

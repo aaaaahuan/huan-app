@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export type TerrainAssetResult = { ok: true; content: Uint8Array } | { ok: false; message: string };
-export interface TerrainAPI { regenerate(input: TerrainJobRequest): Promise<TerrainWriteResult>; delete(input: TerrainJobRequest): Promise<TerrainActionResult>; getSummary(input: TerrainJobRequest): Promise<TerrainDetailResult>; getPrintParams(input: TerrainJobRequest): Promise<TerrainPrintResult>; savePrintParams(input: TerrainJobRequest & { params: TerrainPrintParams }): Promise<TerrainActionResult>; readAsset(input: {id: string; area: 'web' | 'models'; path: string}): Promise<TerrainAssetResult>; autoRoot(): Promise<string>; listJobs(): Promise<TerrainListResult>; getJob(input: TerrainJobRequest): Promise<TerrainGetResult>; upload(input: TerrainUpload): Promise<TerrainWriteResult>; cancel(input: TerrainJobRequest): Promise<TerrainWriteResult>; retry(input: TerrainJobRequest): Promise<TerrainWriteResult> }
+export interface TerrainAPI { exportModel(input: TerrainExportModel): Promise<TerrainAssetResult>; regenerate(input: TerrainJobRequest): Promise<TerrainWriteResult>; delete(input: TerrainJobRequest): Promise<TerrainActionResult>; getSummary(input: TerrainJobRequest): Promise<TerrainDetailResult>; getPrintParams(input: TerrainJobRequest): Promise<TerrainPrintResult>; savePrintParams(input: TerrainJobRequest & { params: TerrainPrintParams }): Promise<TerrainActionResult>; readAsset(input: {id: string; area: 'web' | 'models'; path: string}): Promise<TerrainAssetResult>; autoRoot(): Promise<string>; listJobs(): Promise<TerrainListResult>; getJob(input: TerrainJobRequest): Promise<TerrainGetResult>; upload(input: TerrainUpload): Promise<TerrainWriteResult>; cancel(input: TerrainJobRequest): Promise<TerrainWriteResult>; retry(input: TerrainJobRequest): Promise<TerrainWriteResult> }
 
 export const terrainJobIdSchema = z.string().regex(/^\d{8}-\d{6}-[a-f0-9]{10}$/);
 export const terrainStageKeySchema = z.enum(['parse', 'dem', 'terrain', 'features', 'photos', 'scale', 'export', 'preview']);
@@ -55,7 +55,7 @@ export const terrainUploadSchema = z.object({
     '文件不能为空，最大 150 MB'),
   defer: z.boolean().optional()
 }).strict();
-export const terrainExportModelSchema = terrainJobRequestSchema.extend({ format: z.enum(['stl', '3mf']) });
+export const terrainExportModelSchema = terrainJobRequestSchema.extend({ format: z.enum(['stl', '3mf']), track: z.boolean() }).strict();
 export type TerrainJobRequest = z.infer<typeof terrainJobRequestSchema>;
 export type TerrainUpload = z.infer<typeof terrainUploadSchema>;
 export type TerrainExportModel = z.infer<typeof terrainExportModelSchema>;

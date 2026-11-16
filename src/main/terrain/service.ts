@@ -9,6 +9,8 @@ import { terrainAssetRequestSchema, terrainJobRequestSchema, terrainUploadSchema
 import { createJob, retryJob, cancelJob, stopJobs, recoverJobs, assertJobProgress } from './pipeline';
 import { getJob, listJobs } from './library';
 import { defaultTerrainDataDir, resolveTerrainDataDir } from './root';
+import { terrainExportModelSchema, type TerrainAssetResult } from '@shared/contracts/terrain';
+import { exportModelWorker } from './export-worker';
 
 export function registerTerrain(assertTrusted: (event: IpcMainInvokeEvent) => void, loadDataDir: () => Promise<string>) {
   // 首次访问按当前目录恢复中断的原生任务；目录切换与写操作共用串行生命周期。
@@ -83,6 +85,14 @@ export function registerTerrain(assertTrusted: (event: IpcMainInvokeEvent) => vo
     assertTrusted(event);
     try { return { ok: true, job: await withRoot(root => retryJob(root, terrainJobRequestSchema.parse(input).id)) }; }
     catch (error) { return { ok: false, message: `重试失败：${error instanceof Error ? error.message : String(error)}` }; }
+  });
+  ipcMain.handle(IPC_CHANNELS.terrain.exportModel, async (event, input: unknown): Promise<TerrainAssetResult> => {
+    assertTrusted(event);
+    try {
+      const request = terrainExportModelSchema.parse(input);
+      // 导出持有作品目录生命周期，避免过程中切换目录或删除同一作品。
+      return { ok: true, content: await withRoot(root => exportModelWorker(root, request)) };
+    } catch (error) { return { ok: false, message: error instanceof Error ? error.message : '模型导出失败' }; }
   });
   ipcMain.handle(IPC_CHANNELS.terrain.readAsset, async (event, input: unknown) => {
     assertTrusted(event);

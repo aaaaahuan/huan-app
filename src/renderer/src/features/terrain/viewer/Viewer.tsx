@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { Button } from '@renderer/components/Button';
 import { assetReader, metadataSchema } from './assets';
-import { featureNames, loadFeatures, type FeatureControl } from './features';
+import { featureNames, previewFeatureKeys, loadFeatures, type FeatureControl } from './features';
 import './viewer.css';
 
 function disposeScene(scene: THREE.Scene) {
@@ -21,9 +21,12 @@ export function Viewer({ id, active, onRetry, retrying }: { id: string; active: 
   const host = useRef<HTMLDivElement>(null), toggle = useRef<(key: string) => void>(() => {}), reset = useRef<() => void>(() => {});
   const [controls, setControls] = useState<FeatureControl[]>([]), [status, setStatus] = useState('正在载入地形…'), [error, setError] = useState('');
   const [legend, setLegend] = useState<{ id: number; name: string; hex: string }[]>([]);
+  const [downloading, setDownloading] = useState<'stl' | '3mf' | null>(null), [ready, setReady] = useState(false);
+  const downloadRequest = useRef<symbol | null>(null);
   useEffect(() => {
     const element = host.current;
     if (!element) return;
+    setReady(false); setDownloading(null); setError(''); setControls([]); setLegend([]); setStatus('正在载入地形…');
     let alive = true, frame = 0;
     let renderer: THREE.WebGLRenderer | undefined, orbit: OrbitControls | undefined, observer: ResizeObserver | undefined;
     let features: Awaited<ReturnType<typeof loadFeatures>> | undefined, source: THREE.BufferGeometry | undefined;
@@ -33,7 +36,7 @@ export function Viewer({ id, active, onRetry, retrying }: { id: string; active: 
       const meta = metadataSchema.parse(JSON.parse(new TextDecoder().decode(await read('metadata.json'))));
       if (!alive) return;
       setLegend(meta.palette);
-      setControls(Object.keys(featureNames).filter(key => meta.feature_status ? ['present', 'failed'].includes(meta.feature_status[key]?.state) : meta.preview_layers?.available[key] === true).map(key => ({
+      setControls(previewFeatureKeys(meta).map(key => ({
         key, enabled: meta.feature_status ? meta.feature_status[key]?.state === 'present' : true,
         available: meta.feature_status?.[key]?.state !== 'failed', reason: meta.feature_status?.[key]?.state === 'failed' ? meta.feature_status[key].error ?? '生成失败' : undefined
       })));
@@ -55,7 +58,7 @@ export function Viewer({ id, active, onRetry, retrying }: { id: string; active: 
         for (let i = 0; i < ids.length; i++) for (let j = 0; j < 3; j++) (palette.get(ids[i]) ?? new THREE.Color('#C6CBB5')).toArray(colors, i * 9 + j * 3);
         mesh.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3)); material.color.set('white'); material.vertexColors = true;
         if (meta.preview_layers) features = await loadFeatures(meta, read, source, mesh, scene, element, setControls, () => alive);
-        if (alive) setStatus(meta.preview_layers ? '原生预览 · 图层开关仅影响显示' : '原生网格 · 未保存可切换图层');
+        if (alive) setStatus(meta.preview_layers ? '下载随轨迹路径开关变化 · 其余图层仅影响预览' : '原生网格 · 未保存可切换图层');
       }
       if (!alive) { features?.dispose(); source?.dispose(); disposeScene(scene); return; }
       mesh.geometry.computeBoundingBox(); const box = mesh.geometry.boundingBox!, center = box.getCenter(new THREE.Vector3());
@@ -68,24 +71,33 @@ export function Viewer({ id, active, onRetry, retrying }: { id: string; active: 
       pause.current = () => cancelAnimationFrame(frame);
       animate.current = () => { cancelAnimationFrame(frame); render(); };
       animate.current();
+      setReady(true);
     })().catch(e => { if (alive) { setError(e instanceof Error ? e.message : '预览加载失败'); setStatus(''); } else { features?.dispose(); source?.dispose(); disposeScene(scene); } });
-    return () => { alive = false; animate.current = () => {}; pause.current = () => {}; cancelAnimationFrame(frame); observer?.disconnect(); orbit?.dispose(); features?.dispose(); source?.dispose(); disposeScene(scene); renderer?.dispose(); renderer?.domElement.remove(); toggle.current = () => {}; reset.current = () => {}; };
+    return () => { alive = false; downloadRequest.current = null; animate.current = () => {}; pause.current = () => {}; cancelAnimationFrame(frame); observer?.disconnect(); orbit?.dispose(); features?.dispose(); source?.dispose(); disposeScene(scene); renderer?.dispose(); renderer?.domElement.remove(); toggle.current = () => {}; reset.current = () => {}; };
   }, [id]);
   async function download(format: 'stl' | '3mf') {
+    if (downloadRequest.current || !ready) return;
+    const request = Symbol(); downloadRequest.current = request;
+    const track = controls.find(c => c.key === 'track')?.enabled ?? true;
+    setDownloading(format); setError('');
     try {
-      const content = await assetReader(id)(`terrain.${format}`, 'models');
+      const result = await window.huanApp.terrain.exportModel({ id, format, track });
+      if (downloadRequest.current !== request) return;
+      if (!result.ok) throw new Error(result.message);
+      const content = new Uint8Array(result.content).buffer;
       const url = URL.createObjectURL(new Blob([content], { type: 'application/octet-stream' }));
-      const link = document.createElement('a'); link.href = url; link.download = `${id}.${format}`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (e) { setError(e instanceof Error ? e.message : '下载失败'); }
+      const link = document.createElement('a'); link.href = url; link.download = `${id}${track ? '' : '-无路径'}.${format}`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (e) { if (downloadRequest.current === request) setError(e instanceof Error ? e.message : '下载失败'); }
+    finally { if (downloadRequest.current === request) { downloadRequest.current = null; setDownloading(null); } }
   }
   return <div className="terrain-native-viewer" data-job={id}>
-    <div className="terrain-viewer-actions"><Button onClick={() => reset.current()}>重置视角</Button><Button onClick={() => void download('stl')}>下载 STL</Button><Button onClick={() => void download('3mf')}>下载 3MF</Button></div>
+    <div className="terrain-viewer-actions"><Button onClick={() => reset.current()}>重置视角</Button><Button disabled={!ready || !!downloading} onClick={() => void download('stl')}>{downloading === 'stl' ? '正在导出…' : '下载 STL'}</Button><Button disabled={!ready || !!downloading} onClick={() => void download('3mf')}>{downloading === '3mf' ? '正在导出…' : '下载 3MF'}</Button></div>
     <div className="terrain-feature-controls" aria-label="预览图层">{controls.map(c => <span className="terrain-feature-tag" key={c.key} tabIndex={c.reason ? 0 : undefined}>
-      <Button disabled={!c.available} aria-pressed={c.enabled} title={c.reason} onClick={() => toggle.current(c.key)}>{featureNames[c.key]}{c.reason ? '（失败）' : ''}</Button>
+      <Button disabled={!c.available || !!downloading} aria-pressed={c.enabled} title={c.reason} onClick={() => toggle.current(c.key)}>{featureNames[c.key]}{c.reason ? '（失败）' : ''}</Button>
       {c.reason ? <span className="terrain-feature-popover">{c.reason}<p>重试会重跑整单，复用 DEM 缓存，需要几分钟。</p><Button disabled={retrying} onClick={onRetry}>重试</Button></span> : null}
     </span>)}</div>
     <div className="terrain-legend" aria-label="地表类别图例">{legend.filter(p => {
-      const key: Record<number, string> = { 1: 'rivers', 2: 'forest', 3: 'snow', 5: 'grass', 6: 'houses', 7: 'houses', 8: 'elevation_scale' };
+      const key: Record<number, string> = { 1: 'rivers', 2: 'forest', 3: 'snow', 4: 'track', 5: 'grass', 6: 'houses', 7: 'houses', 8: 'elevation_scale' };
       return !key[p.id] || !controls.length || controls.some(c => c.key === key[p.id] && c.enabled);
     }).map(p => <span key={p.id}><i style={{ background: p.hex }} />{p.name.split(' / ').at(-1)}</span>)}</div>
     <p role={error ? 'alert' : 'status'}>{error || status}</p>
