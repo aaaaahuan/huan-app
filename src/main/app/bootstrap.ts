@@ -1,3 +1,6 @@
+import { attachRemoteSelection } from '@main/translation/remote-selection';
+import { registerStudio } from '@main/studio';
+import { registerIdeas } from '@main/ideas';
 // 桌面应用的组装层：管理窗口、可信页面、IPC 和 macOS 生命周期。
 import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, session, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron';
 import { mkdir, readFile } from 'node:fs/promises';
@@ -10,6 +13,7 @@ import { createBookmarkLibrary } from '@main/bookmarks/library';
 import { createPageHost } from '@main/browser/page-host';
 import { registerBrowser } from '@main/browser/ipc';
 import { createPlatformSessions } from '@main/browser/sessions';
+import { prepareBrowserSessionDirectory } from '@main/browser/session-paths';
 import { defaultSessionModes, defaultSettings } from '@shared/contracts/settings';
 import { registerReading } from '@main/ai/agent/reading-ipc';
 import { registerModelControls } from '@main/ai/core/model-controls-ipc';
@@ -38,8 +42,9 @@ protocol.registerSchemesAsPrivileged([
 ]);
 app.setName('huan-app');
 // 用户数据独立于安装包保存，相关的数据存放到.huan-app下面
-app.setPath('userData', join(app.getPath('home'), '.huan-app'));
-app.setPath('sessionData', app.getPath('userData'));
+const reviewUserData = !app.isPackaged ? process.env.HUAN_APP_REVIEW_USER_DATA : undefined;
+app.setPath('userData', reviewUserData || join(app.getPath('home'), '.huan-app'));
+
 let window: BrowserWindow | undefined;
 let quitting = false;
 
@@ -47,6 +52,8 @@ let quitting = false;
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
+  // 在创建任何 Session 前迁移；第二个实例不会触碰运行中的数据库。
+  app.setPath('sessionData', reviewUserData ? join(reviewUserData, 'browser-session') : prepareBrowserSessionDirectory(app.getPath('home'), app.getPath('userData')));
   app.on('second-instance', () => {
     if (window && !window.isDestroyed()) { window.show(); window.focus(); }
   });
@@ -77,7 +84,7 @@ if (!app.requestSingleInstanceLock()) {
         return new Response(content, { headers: {
           'Content-Type': mime[extname(path)] ?? 'application/octet-stream',
           'X-Content-Type-Options': 'nosniff',
-          'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'none'; base-uri 'none'; frame-src 'none'; object-src 'none'"
+          'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'none'; base-uri 'none'; frame-src 'none'; object-src 'none'"
         } });
       } catch { return new Response(null, { status: 404 }); }
     });
@@ -114,6 +121,8 @@ if (!app.requestSingleInstanceLock()) {
       if (!contents.isDestroyed()) contents.send(IPC_CHANNELS.algorithms.notesChanged);
     });
     registerAlgorithms(algorithms, algorithmNotes, assertTrusted);
+    registerStudio(assertTrusted, settings);
+    const ideas = registerIdeas(!app.isPackaged && process.env.HUAN_IDEA_TEST_DIRECTORY || join(algorithmVault, 'project/huan-project/huan-idea'), assertTrusted);
     const bookmarks = createBookmarkLibrary(app.getPath('userData'), settings.load);
     const initialSettings = await settings.load();
     // 配置损坏时只使用内存会话，不猜测用户是否同意保存登录态。
@@ -150,7 +159,7 @@ if (!app.requestSingleInstanceLock()) {
     const aiService = createAIService({
       piAdapter, records, resolveModelTarget: createModelTargetResolver({ settings, localModel })
     });
-    const keyTestKeys = new Map<string, string>();
+    const keyTestKeys = new Map<string, import('@shared/contracts/models').ModelTarget>();
 
     // 创建不同模块专用的agent
     const readingAgent = aiService.createAgent(createReadingAgentConfig());
@@ -161,6 +170,11 @@ if (!app.requestSingleInstanceLock()) {
     registerModelControls(window, settings, assertTrusted, keyTestAgent, keyTestKeys);
     const reading = registerReading(window, pageHost, settings, assertTrusted, subtitles.snapshot, readingAgent);
     const translation = registerTranslation(contents, assertTrusted, localModel, translateAgent, lookupAgent);
+    let detachSelection: (() => void) | undefined;
+    pageHost.observeContents(remote => {
+      detachSelection?.();
+      detachSelection = remote ? attachRemoteSelection(remote, translation, () => !pageHost.isSuspended() && window!.isVisible()) : undefined;
+    });
     registerSettings(window, settings, assertTrusted, async value => {
       await terrain.configure(value.terrain.dataDir);
       await subtitles.configure(value);
@@ -177,6 +191,7 @@ if (!app.requestSingleInstanceLock()) {
     app.on('will-quit', event => {
       event.preventDefault();
       finalizingQuit ??= (async () => {
+        await ideas.flush().catch(error => console.error('Idea writes flush failed', error));
         await terrain.close().catch(error => console.error('Terrain shutdown failed', error));
         try { translation.close(); }
         catch (error) { console.error('Translation shutdown failed', error); }

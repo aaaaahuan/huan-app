@@ -1,7 +1,7 @@
 {
   "name": "huan-app",
   "productName": "huan-app",
-  "version": "2.2.0",
+  "version": "2.2.3",
   "private": true,
   "description": "Independent modular macOS desktop application",
   "author": "huan",
@@ -11,9 +11,9 @@
     "node": ">=24.16.0 <25"
   },
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "node scripts/build-idea-native.mjs --dev && electron-vite dev",
     "preview": "electron-vite preview",
-    "build": "electron-vite build",
+    "build": "node scripts/build-idea-native.mjs && electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "lint": "eslint .",
     "check": "pnpm typecheck && pnpm lint && pnpm build",
