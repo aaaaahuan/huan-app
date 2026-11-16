@@ -12,3 +12,5 @@
 品牌商标归各平台所有；对外发布时须遵守各平台品牌使用规范，不表示平台授权或合作。
 
 - `anthropic.png`：https://www.anthropic.com/images/icons/apple-touch-icon.png ，来自 Anthropic 官网的应用图标，保留原始素材，以 24px 展示。
+
+- `zhihu.png`：https://static.zhihu.com/heifetz/favicon.ico ，知乎官方站点图标，转换为 PNG 随应用打包。
