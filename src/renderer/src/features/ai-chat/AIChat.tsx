@@ -5,6 +5,7 @@ import { youtubeVideoId } from '@shared/contracts/subtitles';
 import { Button } from '@renderer/components/Button';
 import { ExecutionMetrics } from '@renderer/components/ExecutionMetrics';
 import { Icon } from '@renderer/components/Icon';
+import { MarkdownPreview } from '@renderer/components/MarkdownPreview';
 import './ai-chat.css';
 import { onlineProvider, type ModelSelection } from '@shared/contracts/models';
 
@@ -167,7 +168,12 @@ export function AIChat({ settingsRevision, collapsed, tabbed, selection, modelCh
         <p className="ai-question"><span className="visually-hidden">你的提问：</span>{entry.question}</p>
         {entry.contextNotice ? <p className="ai-hint">{entry.contextNotice}</p> : null}
         {entry.toolError ? <p className="ai-error" role="alert">{entry.toolError}</p> : null}
-        <div className={`ai-answer${!entry.answer && entry.status === 'generating' ? ' ai-answer--waiting' : ''}`}>{entry.answer || (entry.status === 'generating' ? '正在等待回复…' : '')}</div>
+        <div className={`ai-answer${!entry.answer && entry.status === 'generating' ? ' ai-answer--waiting' : ''}`}>{entry.answer ?
+          <MarkdownPreview content={entry.answer} onOpenLink={url => {
+            void window.huanApp.algorithms.openNoteLink(url).then(result => {
+              if (!result.ok) setError(result.message);
+            }, failure => setError(String(failure)));
+          }} /> : (entry.status === 'generating' ? '正在等待回复…' : '')}</div>
         {statuses[entry.status] ? <p className="ai-turn-status" role="status">{statuses[entry.status]}</p> : null}
         {entry.error ? <p className="ai-error" role="alert">{entry.error}</p> : null}
         {entry.metrics ? <ExecutionMetrics metrics={entry.metrics} className="ai-turn-metrics" /> : null}
