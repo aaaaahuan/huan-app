@@ -21,7 +21,7 @@ export interface TranslationStatus {
 }
 // 译文与英语音标分开传输，复制和交换语言时不会把音标混入正文。
 export const phoneticSchema = z.string().trim().max(24000);
-export const translatedContentSchema = z.object({ text: z.string().trim().min(1), phonetic: phoneticSchema });
+export const translatedContentSchema = z.object({ text: z.string().trim().min(1), phonetic: phoneticSchema, contextualText: z.string().trim().min(1).optional() });
 export interface TranslationResult {
   status: 'complete' | 'truncated' | 'stopped' | 'failed';
   text: string;
@@ -29,6 +29,7 @@ export interface TranslationResult {
   metrics?: ExecutionMetrics;
   warning?: string;
   phonetic?: string;
+  contextualText?: string;
 }
 export interface TranslationAPI extends EnglishStudyAPI {
   getStatus(): Promise<TranslationStatus>;

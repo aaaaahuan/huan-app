@@ -59,9 +59,9 @@ export function registerTranslation(contents: WebContents, assertTrusted: (event
           const content = translatedContentSchema.parse(JSON.parse(text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')));
           outcome.text = content.text;
           outcome.phonetic = content.phonetic;
+          outcome.contextualText = content.contextualText;
         } catch {
-          if (contextualLookup) outcome = { status: 'failed', text: '', metrics: result.metrics, error: '模型未返回完整的译文与音标，请重试或切换模型。' };
-          else outcome.phonetic = '';
+          outcome.phonetic = '';
         }
       } else if (!task) {
         // 截断的 JSON 不能作为译文展示或被复制。
