@@ -346,7 +346,14 @@ export function createPageHost(window: BrowserWindow, getLibrary: () => Promise<
     get: () => state, select, action, captureContext, clearContext,
     isSuspended: () => suspended || overlayOpen,
     // 弹层阻挡与页面暂停独立，关闭菜单不能覆盖设置或切页的隐藏状态。
-    overlay(value: boolean) { overlayOpen = value; applyLayout(); },
+    async overlay(value: boolean) {
+      const target = view;
+      // 隐藏前捕获最后一帧，交给可信 UI 在弹层下方展示。
+      const snapshot = value && !overlayOpen && target
+        ? { image: (await target.webContents.capturePage()).toDataURL(), bounds: target.getBounds() } : undefined;
+      overlayOpen = value; applyLayout();
+      return target === view ? snapshot : undefined;
+    },
     observeContents(listener: (contents: WebContents | undefined) => void) {
       observers.add(listener); listener(view?.webContents);
       return () => { observers.delete(listener); };

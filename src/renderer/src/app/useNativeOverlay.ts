@@ -5,9 +5,25 @@ export function useNativeOverlay() {
   useEffect(() => {
     const opened = new Set<HTMLElement>();
     let disposed = false;
+    const placeholder = document.createElement('img');
+    placeholder.alt = '网页快照';
+    placeholder.style.cssText = 'position:fixed;pointer-events:none;z-index:1';
+    let pending = Promise.resolve();
     function sync() {
       for (const element of opened) if (!element.isConnected) opened.delete(element);
-      return window.huanApp.browser.overlay(opened.size > 0);
+      const open = !disposed && opened.size > 0;
+      pending = pending.catch(() => undefined).then(async () => {
+        const snapshot = await window.huanApp.browser.overlay(open);
+        if (disposed || !open) { placeholder.remove(); return; }
+        if (snapshot) {
+          placeholder.src = snapshot.image;
+          const { x, y, width, height } = snapshot.bounds;
+          Object.assign(placeholder.style, { left: `${x}px`, top: `${y}px`, width: `${width}px`, height: `${height}px` });
+          await placeholder.decode();
+          if (!disposed) document.body.append(placeholder);
+        }
+      });
+      return pending;
     }
     function beforeToggle(event: Event) {
       const element = event.target;
@@ -41,7 +57,8 @@ export function useNativeOverlay() {
       disposed = true; observer.disconnect();
       document.removeEventListener('beforetoggle', beforeToggle, true);
       document.removeEventListener('toggle', toggle, true);
-      void window.huanApp.browser.overlay(false).catch(error => console.error('无法恢复网页视图', error));
+      placeholder.remove();
+      void sync().catch(error => console.error('无法恢复网页视图', error));
     };
   }, []);
 }
