@@ -8,7 +8,15 @@ export function createPlatformSessions(modes: SessionModes) {
     `${mode === 'persistent' ? 'persist:' : ''}huan-app-reader-${platform}`;
   return {
     modes: () => ({ ...activeModes }),
-    get: (platform: Platform) => session.fromPartition(partition(platform, activeModes[platform])),
+    get(platform: Platform) {
+      const target = session.fromPartition(partition(platform, activeModes[platform]));
+      if (platform === 'zhihu') {
+        // 在创建网页前统一请求与页面 UA，避免知乎将桌面阅读器识别成客户端。
+        // 保留真实 Chromium / 系统版本，不固定或冒用其他浏览器版本。
+        target.setUserAgent(target.getUserAgent().replace(/ (?:Electron|huan-app)\/[^\s]+/g, ''));
+      }
+      return target;
+    },
     async clear(platform: Platform) {
       // 同时清除历史持久分区和本轮内存分区，防止切回保存模式时恢复旧账号。
       for (const mode of ['memory', 'persistent'] as const) {
