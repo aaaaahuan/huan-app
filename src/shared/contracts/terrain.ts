@@ -1,7 +1,8 @@
 import { z } from 'zod';
 
 export type TerrainAssetResult = { ok: true; content: Uint8Array } | { ok: false; message: string };
-export interface TerrainAPI { exportModel(input: TerrainExportModel): Promise<TerrainAssetResult>; regenerate(input: TerrainJobRequest): Promise<TerrainWriteResult>; delete(input: TerrainJobRequest): Promise<TerrainActionResult>; getSummary(input: TerrainJobRequest): Promise<TerrainDetailResult>; getPrintParams(input: TerrainJobRequest): Promise<TerrainPrintResult>; savePrintParams(input: TerrainJobRequest & { params: TerrainPrintParams }): Promise<TerrainActionResult>; readAsset(input: {id: string; area: 'web' | 'models'; path: string}): Promise<TerrainAssetResult>; autoRoot(): Promise<string>; listJobs(): Promise<TerrainListResult>; getJob(input: TerrainJobRequest): Promise<TerrainGetResult>; upload(input: TerrainUpload): Promise<TerrainWriteResult>; cancel(input: TerrainJobRequest): Promise<TerrainWriteResult>; retry(input: TerrainJobRequest): Promise<TerrainWriteResult> }
+export type TerrainModelSelectionResult = { ok: true; path: string | null } | { ok: false; message: string };
+export interface TerrainAPI { chooseModel(): Promise<TerrainModelSelectionResult>; exportModel(input: TerrainExportModel): Promise<TerrainAssetResult>; regenerate(input: TerrainJobRequest): Promise<TerrainWriteResult>; delete(input: TerrainJobRequest): Promise<TerrainActionResult>; getSummary(input: TerrainJobRequest): Promise<TerrainDetailResult>; getPrintParams(input: TerrainJobRequest): Promise<TerrainPrintResult>; savePrintParams(input: TerrainJobRequest & { params: TerrainPrintParams }): Promise<TerrainActionResult>; readAsset(input: {id: string; area: 'web' | 'models'; path: string}): Promise<TerrainAssetResult>; autoRoot(): Promise<string>; listJobs(): Promise<TerrainListResult>; getJob(input: TerrainJobRequest): Promise<TerrainGetResult>; upload(input: TerrainUpload): Promise<TerrainWriteResult>; cancel(input: TerrainJobRequest): Promise<TerrainWriteResult>; retry(input: TerrainJobRequest): Promise<TerrainWriteResult> }
 
 export const terrainJobIdSchema = z.string().regex(/^\d{8}-\d{6}-[a-f0-9]{10}$/);
 export const terrainStageKeySchema = z.enum(['parse', 'dem', 'terrain', 'features', 'photos', 'scale', 'export', 'preview']);
@@ -41,6 +42,7 @@ export const terrainJobSummarySchema = terrainJobStatusSchema.extend({
   photo_count: z.number().int().nonnegative(),
   house_count: z.number().int().nonnegative(),
   uncertain_houses: z.number().int().nonnegative(),
+  model_revision: z.string().optional(), model_path: z.string().optional(), track_path: z.string().optional(), model_format: z.enum(['stl', '3mf']).optional(),
   house_method: z.string().nullable().optional()
 });
 export type TerrainStage = z.infer<typeof terrainStageSchema>;
@@ -53,6 +55,9 @@ export const terrainUploadSchema = z.object({
   filename: z.string().min(1).regex(/\.(kml|kmz)$/i),
   content: z.instanceof(Uint8Array).refine(value => value.byteLength > 0 && value.byteLength <= 150_000_000,
     '文件不能为空，最大 150 MB'),
+  name: z.string().trim().min(1).max(200).optional(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => { const date = new Date(value+'T00:00:00Z'); return !Number.isNaN(date.getTime()) && date.toISOString().slice(0,10) === value; }, '日期无效').optional(),
+  modelPath: z.string().max(4096).optional(),
   defer: z.boolean().optional()
 }).strict();
 export const terrainExportModelSchema = terrainJobRequestSchema.extend({ format: z.enum(['stl', '3mf']), track: z.boolean() }).strict();
@@ -68,7 +73,7 @@ export const terrainMetadataSchema = z.object({
 }).passthrough();
 export const terrainPhotoHousesSchema = z.object({
   method: z.string().nullable().optional(),
-  points: z.array(z.object({ has_house: z.union([z.boolean(), z.literal('uncertain')]).optional() }).passthrough()).optional()
+  points: z.array(z.object({ has_house: z.union([z.boolean(), z.literal('uncertain')]).optional(), reviewed_original: z.string().optional() }).passthrough()).optional()
 }).passthrough();
 export interface TerrainJobList {
   jobs: TerrainJobSummary[];

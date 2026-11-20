@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { ThreeMFLoader } from 'three/addons/loaders/3MFLoader.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { Button } from '@renderer/components/Button';
 import { assetReader, metadataSchema } from './assets';
@@ -22,11 +23,12 @@ export function Viewer({ id, active, onRetry, retrying }: { id: string; active: 
   const [controls, setControls] = useState<FeatureControl[]>([]), [status, setStatus] = useState('正在载入地形…'), [error, setError] = useState('');
   const [legend, setLegend] = useState<{ id: number; name: string; hex: string }[]>([]);
   const [downloading, setDownloading] = useState<'stl' | '3mf' | null>(null), [ready, setReady] = useState(false);
+  const [linkedFormat, setLinkedFormat] = useState<'stl' | '3mf' | null>(null);
   const downloadRequest = useRef<symbol | null>(null);
   useEffect(() => {
     const element = host.current;
     if (!element) return;
-    setReady(false); setDownloading(null); setError(''); setControls([]); setLegend([]); setStatus('正在载入地形…');
+    setReady(false); setLinkedFormat(null); setDownloading(null); setError(''); setControls([]); setLegend([]); setStatus('正在载入地形…');
     let alive = true, frame = 0;
     let renderer: THREE.WebGLRenderer | undefined, orbit: OrbitControls | undefined, observer: ResizeObserver | undefined;
     let features: Awaited<ReturnType<typeof loadFeatures>> | undefined, source: THREE.BufferGeometry | undefined;
@@ -46,7 +48,16 @@ export function Viewer({ id, active, onRetry, retrying }: { id: string; active: 
       const material = new THREE.MeshStandardMaterial({ color: '#C6CBB5', roughness: .85 });
       const mesh = new THREE.Mesh(new THREE.BufferGeometry(), material); scene.add(mesh);
       scene.add(new THREE.HemisphereLight(0xffffff, 0x737c69, 2.4)); const sun = new THREE.DirectionalLight(0xfff1dc, 3.3); sun.position.set(-100, -100, 280); scene.add(sun);
-      if (meta.native_core_only) {
+      let linkedObject: THREE.Object3D | undefined;
+      if (meta.linked_model) {
+        setLinkedFormat(meta.linked_model);
+        if (meta.linked_model === '3mf') {
+          linkedObject = new ThreeMFLoader().parse(await read('terrain.3mf', 'models'));
+          if (!alive) { const discarded = new THREE.Scene(); discarded.add(linkedObject); disposeScene(discarded); return; }
+          scene.add(linkedObject); mesh.visible = false;
+        } else { mesh.geometry.dispose(); mesh.geometry = new STLLoader().parse(await read('terrain.stl','models')); }
+        if (alive) setStatus('已加载关联模型 · 可拖动旋转，下载保留原文件');
+      } else if (meta.native_core_only) {
         mesh.geometry.dispose(); mesh.geometry = new STLLoader().parse(await read('terrain.stl', 'models'));
         if (alive) setStatus('DEM 核心 · 路线、地表、房屋与刻度尚未构建');
       } else {
@@ -61,9 +72,10 @@ export function Viewer({ id, active, onRetry, retrying }: { id: string; active: 
         if (alive) setStatus(meta.preview_layers ? '下载随轨迹路径开关变化 · 其余图层仅影响预览' : '原生网格 · 未保存可切换图层');
       }
       if (!alive) { features?.dispose(); source?.dispose(); disposeScene(scene); return; }
-      mesh.geometry.computeBoundingBox(); const box = mesh.geometry.boundingBox!, center = box.getCenter(new THREE.Vector3());
+      mesh.geometry.computeBoundingBox(); const box = linkedObject ? new THREE.Box3().setFromObject(linkedObject) : mesh.geometry.boundingBox!, center = box.getCenter(new THREE.Vector3());
+      if (box.isEmpty() || !Number.isFinite(box.min.z)) throw new Error('关联模型没有可显示的几何');
       orbit = new OrbitControls(camera, renderer.domElement); orbit.target.copy(center); orbit.enableDamping = true; orbit.listenToKeyEvents(renderer.domElement); orbit.minDistance = 15; orbit.maxDistance = 1000; orbit.maxPolarAngle = Math.PI * .495;
-      const resetView = () => { const factor = Math.max(1, .95 / camera.aspect) * 1.15; camera.position.set(center.x + 190 * factor, center.y - 245 * factor, center.z + 240 * factor); orbit?.target.copy(center); orbit?.update(); };
+      const resetView = () => { const factor = Math.max(1, .95 / camera.aspect) * 1.15 * (meta.linked_model ? Math.max(...box.getSize(new THREE.Vector3()).toArray()) / 180 : 1); camera.position.set(center.x + 190 * factor, center.y - 245 * factor, center.z + 240 * factor); orbit?.target.copy(center); orbit?.update(); };
       reset.current = resetView; toggle.current = key => features?.toggle(key);
       const resize = () => { if (!renderer) return; const w = Math.max(1, element.clientWidth), h = Math.max(1, element.clientHeight); camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h); };
       observer = new ResizeObserver(resize); observer.observe(element); resize(); resetView();
@@ -91,7 +103,7 @@ export function Viewer({ id, active, onRetry, retrying }: { id: string; active: 
     finally { if (downloadRequest.current === request) { downloadRequest.current = null; setDownloading(null); } }
   }
   return <div className="terrain-native-viewer" data-job={id}>
-    <div className="terrain-viewer-actions"><Button onClick={() => reset.current()}>重置视角</Button><Button disabled={!ready || !!downloading} onClick={() => void download('stl')}>{downloading === 'stl' ? '正在导出…' : '下载 STL'}</Button><Button disabled={!ready || !!downloading} onClick={() => void download('3mf')}>{downloading === '3mf' ? '正在导出…' : '下载 3MF'}</Button></div>
+    <div className="terrain-viewer-actions"><Button onClick={() => reset.current()}>重置视角</Button><Button disabled={!ready || !!downloading || linkedFormat === '3mf'} onClick={() => void download('stl')}>{downloading === 'stl' ? '正在导出…' : '下载 STL'}</Button><Button disabled={!ready || !!downloading || linkedFormat === 'stl'} onClick={() => void download('3mf')}>{downloading === '3mf' ? '正在导出…' : '下载 3MF'}</Button></div>
     <div className="terrain-feature-controls" aria-label="预览图层">{controls.map(c => <span className="terrain-feature-tag" key={c.key} tabIndex={c.reason ? 0 : undefined}>
       <Button disabled={!c.available || !!downloading} aria-pressed={c.enabled} title={c.reason} onClick={() => toggle.current(c.key)}>{featureNames[c.key]}{c.reason ? '（失败）' : ''}</Button>
       {c.reason ? <span className="terrain-feature-popover">{c.reason}<p>重试会重跑整单，复用 DEM 缓存，需要几分钟。</p><Button disabled={retrying} onClick={onRetry}>重试</Button></span> : null}

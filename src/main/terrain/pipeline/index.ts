@@ -8,7 +8,8 @@ import { directory, pendingStages, Progress, writeJson } from './state';
 import { PIPELINE_PENDING } from './tracks';
 import { runTerrainWorker } from './worker';
 
-interface Task { root: string; job: string; state: TerrainJobStatus; controller: AbortController; done?: Promise<void> }
+type OnComplete = (root: string, id: string) => Promise<void>;
+interface Task { onComplete?: OnComplete; root: string; job: string; state: TerrainJobStatus; controller: AbortController; done?: Promise<void> }
 const active = new Map<string, Task>();
 const queue: Task[] = [];
 const preparing = new Set<string>();
@@ -19,7 +20,10 @@ function pump() {
     const task = queue.shift()!;
     running++;
     task.done = runTerrainWorker(task.root, task.job, task.state, task.controller.signal)
-      .then(() => undefined).catch(error => {
+      .then(async result => { if (result.status === 'completed' && task.onComplete) {
+        try { await task.onComplete(task.root, result.id); }
+        catch (error) { await new Progress(task.job, result).fail(`模型已生成，但写入 Obsidian 失败：${error instanceof Error ? error.message : String(error)}`); throw error; }
+      } }).catch(error => {
         const failure = error instanceof Error ? error : new Error(String(error));
         failures.set(task.job, failure); throw failure;
       })
@@ -27,8 +31,8 @@ function pump() {
     void task.done.catch(error => { console.error('地形任务状态保存失败', error); });
   }
 }
-function enqueue(root: string, job: string, state: TerrainJobStatus) {
-  const task = { root, job, state, controller: new AbortController() };
+function enqueue(root: string, job: string, state: TerrainJobStatus, onComplete?: OnComplete) {
+  const task = { root, job, state, onComplete, controller: new AbortController() };
   failures.delete(job); active.set(job, task); queue.push(task); pump();
 }
 // 后台落盘失败不能仅记日志而让 getJob 永远显示 running。
@@ -98,7 +102,7 @@ export async function createJob(root: string, input: TerrainUpload): Promise<Ter
     return state;
   } catch (error) { await rm(job, { recursive: true, force: true }); throw error; }
 }
-export async function retryJob(root: string, id: string, regenerate = false): Promise<TerrainJobStatus> {
+export async function retryJob(root: string, id: string, regenerate = false, onComplete?: OnComplete): Promise<TerrainJobStatus> {
   await directory(join(root, 'jobs'));
   const job = await resolveJobPath(root, id);
   if (active.has(job) || preparing.has(job)) throw new Error('任务尚在运行');
@@ -123,7 +127,15 @@ export async function retryJob(root: string, id: string, regenerate = false): Pr
     await writeJson(join(attempts, `${Date.now()}-${randomBytes(5).toString('hex')}.json`), old);
     const state = reset({ ...old, origin: 'native' });
     await writeJson(join(job, 'status.json'), state);
-    enqueue(root, job, state);
+    enqueue(root, job, state, onComplete);
     return state;
   } finally { preparing.delete(job); }
+}
+
+export async function startPreparedJob(root: string, id: string, onComplete?: OnComplete) {
+  const job = await resolveJobPath(root, id);
+  if (active.has(job)) return;
+  const state = await readJobStatus(root, id);
+  if (state.status !== 'queued') throw new Error('任务不是待建模状态');
+  enqueue(root, job, state, onComplete);
 }

@@ -79,10 +79,10 @@ export function WorkDialog({ job, mode, onClose, onDeleted }: { job: TerrainJobS
     {loading ? <p role="status">正在读取…</p> : null}
     {error ? <p role="alert">{error}</p> : null}
     {notice ? <p role="status">{notice}</p> : null}
-    {mode === 'delete' ? <><p>将永久删除「{job.name}」的整个作品目录，此操作不可恢复。缓存和原始 tracks 文件会保留。</p>
+    {mode === 'delete' ? <><p>将从 Obsidian 作品清单中移除「{job.name}」。原始轨迹、关联模型和本地缓存会保留，不删除外部模型文件。</p>
       <Button variant="primary" disabled={busy || ['queued', 'running'].includes(job.status)} onClick={() => void act(async () => {
         const result = await window.huanApp.terrain.delete({ id: job.id }); if (!result.ok) throw new Error(result.message); onDeleted();
-      })}>{busy ? '正在删除…' : '永久删除'}</Button></> : null}
+      })}>{busy ? '正在删除…' : '移除作品记录'}</Button></> : null}
     {summary ? <>
       <h3>数据完整度</h3><table><thead><tr><th>要素</th><th>状态</th><th>来源</th><th>数量</th><th>错误</th></tr></thead>
         <tbody>{Object.entries(summary.features).map(([key, value]) => <tr key={key}><td>{featureNames[key] ?? key}</td><td>{states[value.state]}</td><td>{value.source ?? '—'}</td><td>{value.count ?? '—'}</td><td>{value.error ?? '—'}</td></tr>)}</tbody></table>

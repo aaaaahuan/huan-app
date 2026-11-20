@@ -21,7 +21,7 @@ export async function getJob(dataRoot: string, id: string) {
     ...status,
     name: status.name || meta?.route_info?.name || status.filename,
     date: meta?.route_info?.date ?? '',
-    photo_count: meta?.photos?.total ?? 0,
+    photo_count: meta?.photos?.total ?? houses?.points?.filter(point => point.reviewed_original).length ?? 0,
     house_count: meta?.houses?.placed_points?.length ?? 0,
     uncertain_houses: houses?.points?.filter(point => point.has_house === 'uncertain').length ?? 0,
     ...(houses && Object.keys(houses).length > 0 ? { house_method: houses.method ?? null } : {})

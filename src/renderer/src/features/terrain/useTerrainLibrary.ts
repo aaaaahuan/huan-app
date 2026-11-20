@@ -14,8 +14,9 @@ export function useTerrainLibrary(active: boolean) {
     if (!active) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
-    async function refresh() {
-      setLoading(true);
+    async function refresh(showLoading = false) {
+      // 自动刷新只更新数据，保留列表和刷新按钮的当前显示。
+      if (showLoading) setLoading(true);
       try {
         const result = await window.huanApp.terrain.listJobs();
         if (cancelled) return;
@@ -23,10 +24,13 @@ export function useTerrainLibrary(active: boolean) {
         else setError(result.message);
       } catch { if (!cancelled) setError('无法读取作品库，请重试。'); }
       finally {
-        if (!cancelled) { setLoading(false); timer = setTimeout(() => void refresh(), 5000); }
+        if (!cancelled) {
+          if (showLoading) setLoading(false);
+          timer = setTimeout(() => void refresh(), 5000);
+        }
       }
     }
-    void refresh();
+    void refresh(true);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [active, revision]);
 

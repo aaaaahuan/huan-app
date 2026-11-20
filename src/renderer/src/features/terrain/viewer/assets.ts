@@ -4,6 +4,7 @@ import { z } from 'zod';
 const style = z.object({ color: z.string(), label: z.string().optional() });
 export const metadataSchema = z.object({
   feature_status: terrainFeatureStatusSchema.optional(),
+  linked_model: z.enum(['stl', '3mf']).optional(),
   native_core_only: z.boolean().optional(),
   size: z.tuple([z.number().positive(), z.number().positive()]).optional(),
   palette: z.array(z.object({ id: z.number(), name: z.string(), hex: z.string() })).default([]),

@@ -16,11 +16,13 @@
 .terrain-diagnostics { margin-top: 16px; font-size: 12px; }
 .terrain-diagnostics summary { cursor: pointer; }
 .terrain-preview { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1; }
-.terrain-selection { padding: 10px 16px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
-
-.terrain-toolbar { padding: 10px 16px; border-bottom: 1px solid var(--border-color, #e8e5df); }
-.terrain-upload { margin: 32px; padding: 48px 24px; border: 2px dashed #d9d8ce; border-radius: 12px; text-align: center; }
-.terrain-upload p, .terrain-progress p { color: #72766d; }
+.terrain-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.terrain-toolbar .ui-button { flex: none; }
+.terrain-toolbar svg, .terrain-model-option summary svg { width: 16px; height: 16px; flex: none; }
+.terrain-selection { min-width: 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.terrain-selection h2 { margin: 0; font-size: 16px; color: var(--text); }
+.terrain-selection p { margin: 4px 0 0; font-size: 12px; }
+.terrain-progress p { color: var(--muted); }
 .terrain-progress { padding: 20px 32px; overflow: auto; }
 .terrain-progress li { padding: 6px; }
 
@@ -38,3 +40,23 @@
 .terrain-feature-tag { position: relative; }
 .terrain-feature-popover { display: none; position: absolute; top: 100%; left: 0; width: 240px; z-index: 5; padding: 12px; background: #f8faf6; border: 1px solid #cad4c8; border-radius: 8px; color: #586354; }
 .terrain-feature-tag:hover .terrain-feature-popover, .terrain-feature-tag:focus-within .terrain-feature-popover { display: block; }
+.terrain-create { overflow: auto; padding: clamp(16px, 4vw, 48px); }
+.terrain-upload { display: grid; gap: 20px; width: min(100%, 560px); margin-inline: auto; padding: clamp(16px, 3vw, 28px); border: 1px solid var(--border); border-radius: 16px; background: var(--surface); }
+.terrain-upload h2 { margin: 0; font-size: 18px; }
+.terrain-track-picker.ui-button { display: flex; justify-content: flex-start; gap: 12px; width: 100%; min-width: 0; height: auto; padding: 16px; border: 1px dashed var(--border); border-radius: 10px; background: var(--surface-muted); text-align: left; }
+.terrain-track-picker.ui-button:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent); }
+.terrain-track-picker svg { width: 22px; height: 22px; flex: none; color: var(--accent); }
+.terrain-track-picker span { display: grid; min-width: 0; gap: 4px; }
+.terrain-track-picker strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.terrain-track-picker small, .terrain-model-option small { color: var(--muted); font-size: 12px; font-weight: 400; }
+.terrain-track-picker small { white-space: normal; }
+.terrain-create-fields { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 12px; }
+.terrain-create-fields label { display: grid; min-width: 0; gap: 6px; font-size: 13px; font-weight: 500; }
+.terrain-create-fields input, .terrain-model-field input { width: 100%; min-width: 0; }
+.terrain-model-option summary { display: flex; align-items: center; gap: 6px; width: fit-content; cursor: pointer; font-size: 13px; }
+.terrain-model-option summary::-webkit-details-marker { display: none; }
+.terrain-model-option:not([open]) summary svg { transform: rotate(-90deg); }
+.terrain-model-field { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; margin-top: 10px; }
+.terrain-form-error { color: var(--danger); margin: 0; font-size: 13px; }
+.terrain-create-footer { display: flex; justify-content: flex-end; padding-top: 16px; border-top: 1px solid var(--border); }
+@media (max-width: 640px) { .terrain-create-fields { grid-template-columns: minmax(0, 1fr); } }

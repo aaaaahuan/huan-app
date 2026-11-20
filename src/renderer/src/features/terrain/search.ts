@@ -14,8 +14,5 @@ export function matchScore(text: string, query: string): number {
 
 export function filteredRows(rows: TerrainJobSummary[], query: string): TerrainJobSummary[] {
   if (!normalize(query)) return rows;
-  return rows.map((row, index) => {
-    const scores = [row.name, row.filename].map(text => matchScore(text, query)).filter(score => score >= 0);
-    return { row, index, score: scores.length ? Math.min(...scores) : -1 };
-  }).filter(item => item.score >= 0).sort((a, b) => a.score - b.score || a.index - b.index).map(item => item.row);
+  return rows.filter(row => matchScore(row.name, query) >= 0 || matchScore(row.filename, query) >= 0);
 }

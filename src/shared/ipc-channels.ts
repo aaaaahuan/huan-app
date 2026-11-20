@@ -4,6 +4,7 @@ export const IPC_CHANNELS = {
   studio: { list: 'huan-app:studio:list', read: 'huan-app:studio:read', photos: 'huan-app:studio:photos' },
   ideas: { get: 'huan-app:ideas:get', append: 'huan-app:ideas:append', getDraft: 'huan-app:ideas:get-draft', saveDraft: 'huan-app:ideas:save-draft' },
   terrain: {
+    chooseModel: 'huan-app:terrain:choose-model',
     delete: 'huan-app:terrain:delete', getSummary: 'huan-app:terrain:get-summary', getPrintParams: 'huan-app:terrain:get-print-params', savePrintParams: 'huan-app:terrain:save-print-params',
     exportModel: 'huan-app:terrain:export-model', readAsset: 'huan-app:terrain:read-asset', autoRoot: 'huan-app:terrain:auto-root',
     listJobs: 'huan-app:terrain:list-jobs', getJob: 'huan-app:terrain:get-job',

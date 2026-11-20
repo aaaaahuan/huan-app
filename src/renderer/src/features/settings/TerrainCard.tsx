@@ -6,7 +6,7 @@ export function TerrainCard({ value, autoRoot, onChange, onChoose }: {
 }) {
   return <section className="source-card">
     <h3>原生地形</h3>
-    <label className="source-path-label" htmlFor="terrain-root">地形数据目录</label>
+    <label className="source-path-label" htmlFor="terrain-root">地形建模缓存目录</label>
     <div className="source-path-row">
       <Input id="terrain-root" value={value} maxLength={4096} placeholder={autoRoot || '请选择数据目录'}
         onChange={event => onChange(event.target.value)} />
@@ -14,6 +14,6 @@ export function TerrainCard({ value, autoRoot, onChange, onChoose }: {
     </div>
     <p className="settings-note">留空使用默认目录：{autoRoot}</p>
     <p className="settings-note">保存后使用：{value.trim() || autoRoot}</p>
-    <p className="settings-note">jobs/ 和 tracks/ 保存在此目录内。更换目录会中止当前任务并重新加载作品列表。</p>
+    <p className="settings-note">这里只保存构建与预览缓存。作品列表始终读取 Obsidian 的 huan-path/轨迹作品记录.md；更换缓存目录不会增加或删除作品。</p>
   </section>;
 }

@@ -227,7 +227,7 @@ export function SettingsPanel({ onClose, onSaved, initialTab = 'sources' }: {
                     onChange={event => setDraft({ ...draft, studio: { dataDir: event.target.value } })} />
                   <Button onClick={() => void chooseTerrain('studio')}>选择目录</Button>
                 </div>
-                <p className="settings-note">留空使用应用数据目录下的 3d-model；保存后重新进入工作台加载。</p>
+                <p className="settings-note">留空使用 huan-model/models/3d-model；保存后重新进入工作台加载。</p>
               </section>
             </fieldset> : <p>正在读取设置…</p>}
           </div>

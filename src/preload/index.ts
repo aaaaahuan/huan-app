@@ -13,6 +13,7 @@ const api: HuanAppAPI = {
     photos: (input: Parameters<HuanAppAPI['studio']['photos']>[0]) => ipcRenderer.invoke(IPC_CHANNELS.studio.photos, input)
   }),
   terrain: Object.freeze({
+    chooseModel: () => ipcRenderer.invoke(IPC_CHANNELS.terrain.chooseModel),
     exportModel: (input: Parameters<HuanAppAPI['terrain']['exportModel']>[0]) => ipcRenderer.invoke(IPC_CHANNELS.terrain.exportModel, input),
     delete: (input: TerrainJobRequest) => ipcRenderer.invoke(IPC_CHANNELS.terrain.delete, input),
     getSummary: (input: TerrainJobRequest) => ipcRenderer.invoke(IPC_CHANNELS.terrain.getSummary, input),

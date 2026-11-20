@@ -5,6 +5,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
+import { studioModelDirectory } from '@main/model-library';
 import { IPC_CHANNELS } from '@shared/ipc-channels';
 import type { StudioProject } from '@shared/contracts/studio';
 
@@ -20,7 +21,7 @@ export function registerStudio(assertTrusted: (event: IpcMainInvokeEvent) => voi
   async function modelRoot() {
     const result = await settings.load();
     if (!result.ok) throw new Error(result.message);
-    return result.settings.studio.dataDir || join(app.getPath('userData'), '3d-model');
+    return result.settings.studio.dataDir || studioModelDirectory();
   }
   ipcMain.handle(IPC_CHANNELS.studio.list, async event => {
     assertTrusted(event);

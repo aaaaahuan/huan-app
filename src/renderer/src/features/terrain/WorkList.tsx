@@ -26,6 +26,7 @@ export function WorkList({ library, loading, error, selectedId, onSelect, onRefr
   const menuTrigger = useRef<HTMLButtonElement | null>(null);
   useEffect(() => { if (!dialog) menuTrigger.current?.focus(); }, [dialog]);
   const rows = filteredRows(library?.jobs ?? [], query);
+  const initialLoading = loading && !library;
   function clear() { setDraft(''); setQuery(''); composing.current = false; }
   return <aside className={`terrain-sidebar${collapsed ? ' terrain-sidebar--collapsed' : ''}`} aria-label="作品列表">
     <header className="terrain-list-header">
@@ -43,10 +44,9 @@ export function WorkList({ library, loading, error, selectedId, onSelect, onRefr
         {draft ? <IconButton icon="close" label="清除搜索" onClick={() => { clear(); input.current?.focus(); }} /> : null}
         <IconButton icon="refresh" label="刷新作品列表" onClick={onRefresh} disabled={loading} />
       </div>
-      <div className="terrain-list-scroll" aria-busy={loading}>
-        {loading ? <p role="status">正在读取作品库…</p> : null}
-        {error ? <div role="alert"><p>{error}</p><Button onClick={onRefresh}>重试读取</Button></div> : null}
-        {!loading && !error && !rows.length ? <p role="status">{library?.jobs.length ? `没有名称匹配「${query.trim()}」的作品` : '第一段旅程，从上传轨迹开始。'}</p> : null}
+      <div className="terrain-list-scroll" aria-busy={initialLoading}>
+        {initialLoading ? <p role="status">正在读取作品库…</p> : null}
+        {library && !error && !rows.length ? <p role="status">{library.jobs.length ? `没有名称匹配「${query.trim()}」的作品` : '第一段旅程，从上传轨迹开始。'}</p> : null}
         <ul className="terrain-work-items">{rows.map(job => <li key={job.id}>
           <Button className="terrain-work-card" aria-current={selectedId === job.id ? 'true' : undefined} onClick={() => onSelect(job.id)}>
             <strong>{job.name || job.filename}</strong><span>{job.date || job.id}</span><small>{workFacts(job)}</small>
@@ -61,6 +61,7 @@ export function WorkList({ library, loading, error, selectedId, onSelect, onRefr
             }
           }} /></div>
         </li>)}</ul>
+        {error && !initialLoading ? <div role="alert"><p>{error}</p><Button onClick={onRefresh} disabled={loading}>重试读取</Button></div> : null}
         {library?.diagnostics.length ? <details className="terrain-diagnostics"><summary>读取诊断（{library.diagnostics.length}）</summary>
           <ul>{library.diagnostics.map(item => <li key={item.id}><strong>{item.id}</strong><p>{item.message}</p></li>)}</ul>
         </details> : null}
